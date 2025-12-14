@@ -36,6 +36,17 @@ export interface Petition {
   filed?: boolean; // Indicates if the petition has been filed in court
 }
 
+export interface Deadline {
+  id: string;
+  user_id: string;
+  title: string;
+  description?: string;
+  due_date: string; // ISO Date string
+  alert_days_before: number; // How many days before to send email
+  status: 'pending' | 'completed';
+  created_at: string;
+}
+
 // Advanced Form Types
 export interface PetitionParty {
   name: string;

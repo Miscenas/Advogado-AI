@@ -1,0 +1,233 @@
+import React, { useEffect, useState } from 'react';
+import { supabase } from '../services/supabaseClient';
+import { Deadline } from '../types';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { Calendar, Plus, Clock, CheckCircle2, AlertTriangle, Trash2, Bell, BellRing } from 'lucide-react';
+
+interface DeadlineManagerProps {
+  userId: string;
+}
+
+export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
+  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  
+  // Form State
+  const [newTitle, setNewTitle] = useState('');
+  const [newDate, setNewDate] = useState('');
+  const [alertDays, setAlertDays] = useState(1);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetchDeadlines();
+  }, [userId]);
+
+  const fetchDeadlines = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('deadlines')
+        .select('*')
+        .eq('user_id', userId)
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+      setDeadlines((data as Deadline[]) || []);
+    } catch (error) {
+      console.error('Error fetching deadlines:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDeadline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('deadlines')
+        .insert([{
+          user_id: userId,
+          title: newTitle,
+          due_date: newDate,
+          alert_days_before: alertDays,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setDeadlines(prev => [...prev, data as Deadline].sort((a,b) => a.due_date.localeCompare(b.due_date)));
+      setShowAddForm(false);
+      setNewTitle('');
+      setNewDate('');
+      setAlertDays(1);
+    } catch (error) {
+      console.error('Error creating deadline:', error);
+      alert('Erro ao salvar prazo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este prazo?')) return;
+    try {
+        await supabase.from('deadlines').delete().eq('id', id);
+        setDeadlines(prev => prev.filter(d => d.id !== id));
+    } catch (e) {
+        alert('Erro ao excluir');
+    }
+  };
+
+  const toggleStatus = async (id: string, currentStatus: 'pending' | 'completed') => {
+      const newStatus = currentStatus === 'pending' ? 'completed' : 'pending';
+      setDeadlines(prev => prev.map(d => d.id === id ? { ...d, status: newStatus } : d));
+      await supabase.from('deadlines').update({ status: newStatus }).eq('id', id);
+  };
+
+  const getUrgencyColor = (dateString: string, status: string) => {
+    if (status === 'completed') return 'bg-gray-50 border-gray-200 text-gray-500';
+    
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const due = new Date(dateString);
+    due.setHours(0,0,0,0);
+    
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return 'bg-red-50 border-red-200 text-red-800'; // Vencido
+    if (diffDays === 0) return 'bg-orange-50 border-orange-200 text-orange-800'; // Hoje
+    if (diffDays <= 3) return 'bg-amber-50 border-amber-200 text-amber-800'; // Urgente
+    return 'bg-white border-gray-200 text-gray-800'; // Normal
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Calendar className="text-juris-800" />
+            Agenda de Prazos Processuais
+          </h1>
+          <p className="text-gray-500">Gerencie seus vencimentos e configure alertas automáticos.</p>
+        </div>
+        <Button onClick={() => setShowAddForm(!showAddForm)} className="gap-2">
+           {showAddForm ? 'Cancelar' : <><Plus size={18} /> Novo Prazo</>}
+        </Button>
+      </div>
+
+      {showAddForm && (
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 animate-in slide-in-from-top-4">
+           <h3 className="font-semibold text-gray-900 mb-4">Cadastrar Novo Prazo</h3>
+           <form onSubmit={handleAddDeadline} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                 <Input 
+                   label="Título do Prazo / Processo"
+                   placeholder="Ex: Contestação - Processo 12345"
+                   value={newTitle}
+                   onChange={(e) => setNewTitle(e.target.value)}
+                   required
+                 />
+              </div>
+              <div>
+                 <Input 
+                   type="date"
+                   label="Data de Vencimento"
+                   value={newDate}
+                   onChange={(e) => setNewDate(e.target.value)}
+                   required
+                 />
+              </div>
+              <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-2">Alertar por Email</label>
+                 <div className="relative">
+                   <select 
+                     className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-juris-500"
+                     value={alertDays}
+                     onChange={(e) => setAlertDays(Number(e.target.value))}
+                   >
+                      <option value="1">1 dia antes</option>
+                      <option value="2">2 dias antes</option>
+                      <option value="3">3 dias antes</option>
+                      <option value="5">5 dias antes</option>
+                      <option value="7">1 semana antes</option>
+                   </select>
+                   <Bell className="absolute right-3 top-2.5 text-gray-400 w-4 h-4 pointer-events-none" />
+                 </div>
+              </div>
+              <div className="md:col-span-2 flex justify-end mt-2">
+                 <Button type="submit" isLoading={saving}>Salvar Prazo</Button>
+              </div>
+           </form>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {loading ? (
+             <div className="text-center py-10"><div className="animate-spin inline-block w-6 h-6 border-2 border-juris-800 border-t-transparent rounded-full"></div></div>
+        ) : deadlines.length === 0 ? (
+             <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
+                <Clock className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                <h3 className="text-gray-500 font-medium">Nenhum prazo agendado</h3>
+                <p className="text-sm text-gray-400">Clique em "Novo Prazo" para começar.</p>
+             </div>
+        ) : (
+            deadlines.map((deadline) => {
+                const statusColor = getUrgencyColor(deadline.due_date, deadline.status);
+                const isCompleted = deadline.status === 'completed';
+                
+                return (
+                    <div key={deadline.id} className={`p-4 rounded-lg border flex items-center justify-between transition-all ${statusColor}`}>
+                        <div className="flex items-center gap-4">
+                            <button 
+                               onClick={() => toggleStatus(deadline.id, deadline.status)}
+                               className={`rounded-full p-1 transition-colors ${isCompleted ? 'text-green-600 bg-green-100' : 'text-gray-300 hover:bg-gray-200'}`}
+                            >
+                                <CheckCircle2 size={24} className={isCompleted ? "fill-current" : ""} />
+                            </button>
+                            
+                            <div className={isCompleted ? 'opacity-50 line-through' : ''}>
+                                <h4 className="font-semibold text-sm md:text-base">{deadline.title}</h4>
+                                <div className="flex items-center gap-4 text-xs mt-1 opacity-80">
+                                    <span className="flex items-center gap-1 font-medium">
+                                       <Calendar size={12} /> 
+                                       {new Date(deadline.due_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                                    </span>
+                                    {deadline.status !== 'completed' && (
+                                        <span className="flex items-center gap-1">
+                                            <BellRing size={12} />
+                                            Avisar {deadline.alert_days_before} dia(s) antes
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                           {deadline.status === 'pending' && new Date(deadline.due_date) < new Date() && (
+                               <span className="hidden md:flex items-center gap-1 text-red-600 text-xs font-bold bg-red-100 px-2 py-1 rounded-full">
+                                   <AlertTriangle size={12} /> Vencido
+                               </span>
+                           )}
+                           <button 
+                             onClick={() => handleDelete(deadline.id)}
+                             className="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                             title="Excluir"
+                           >
+                             <Trash2 size={18} />
+                           </button>
+                        </div>
+                    </div>
+                );
+            })
+        )}
+      </div>
+    </div>
+  );
+};

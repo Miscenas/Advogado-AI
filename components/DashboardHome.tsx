@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, UsageLimit, Petition } from '../types';
+import { UserProfile, UsageLimit, Petition, Deadline } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { 
   FileText, 
@@ -12,7 +12,8 @@ import {
   Crown,
   Calendar,
   ChevronRight,
-  Clock
+  Clock,
+  Bell
 } from 'lucide-react';
 import { Button } from './ui/Button';
 
@@ -28,31 +29,44 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
 }) => {
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [recentPetitions, setRecentPetitions] = useState<Petition[]>([]);
-  const [loadingPetitions, setLoadingPetitions] = useState(true);
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<Deadline[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const isTrial = profile?.account_status === 'trial';
 
   useEffect(() => {
-    const fetchRecentPetitions = async () => {
+    const fetchDashboardData = async () => {
       if (!profile?.id) return;
       try {
-        const { data, error } = await supabase
+        // Fetch Petitions
+        const { data: petData } = await supabase
           .from('petitions')
           .select('*')
           .eq('user_id', profile.id)
           .order('created_at', { ascending: false })
           .limit(5);
 
-        if (error) throw error;
-        setRecentPetitions((data as Petition[]) || []);
+        // Fetch Upcoming Pending Deadlines
+        const today = new Date().toISOString().split('T')[0];
+        const { data: deadlineData } = await supabase
+          .from('deadlines')
+          .select('*')
+          .eq('user_id', profile.id)
+          .eq('status', 'pending')
+          .gte('due_date', today)
+          .order('due_date', { ascending: true })
+          .limit(3);
+
+        setRecentPetitions((petData as Petition[]) || []);
+        setUpcomingDeadlines((deadlineData as Deadline[]) || []);
       } catch (error) {
-        console.error('Error fetching recent petitions:', error);
+        console.error('Error fetching dashboard data:', error);
       } finally {
-        setLoadingPetitions(false);
+        setLoading(false);
       }
     };
 
-    fetchRecentPetitions();
+    fetchDashboardData();
   }, [profile?.id]);
 
   return (
@@ -102,55 +116,85 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Account Status / Plan Card */}
-        <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <Crown size={100} className="text-juris-900" />
-          </div>
-          
-          <div className="relative z-10">
-            <p className="text-sm font-medium text-gray-500 mb-1">Status da Assinatura</p>
-            <div className="flex items-center gap-2 mb-4">
-                <h3 className={`text-2xl font-bold capitalize ${isTrial ? 'text-gray-900' : 'text-green-600'}`}>
-                    {isTrial ? 'Plano Gratuito' : 'Plano Pro Ativo'}
-                </h3>
-                {isTrial && <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">Trial</span>}
+        {/* Left Column: Plan & Upcoming Deadlines */}
+        <div className="space-y-6 lg:col-span-1">
+            {/* Account Status */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <Crown size={100} className="text-juris-900" />
+                </div>
+                
+                <div className="relative z-10">
+                    <p className="text-sm font-medium text-gray-500 mb-1">Status da Assinatura</p>
+                    <div className="flex items-center gap-2 mb-4">
+                        <h3 className={`text-2xl font-bold capitalize ${isTrial ? 'text-gray-900' : 'text-green-600'}`}>
+                            {isTrial ? 'Plano Gratuito' : 'Plano Pro Ativo'}
+                        </h3>
+                        {isTrial && <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">Trial</span>}
+                    </div>
+
+                    {isTrial ? (
+                        <div className="space-y-4">
+                            <div className="p-4 bg-amber-50 border border-amber-100 rounded-lg">
+                                <div className="flex gap-3">
+                                    <Crown className="text-amber-600 h-6 w-6 flex-shrink-0" />
+                                    <div>
+                                        <p className="font-bold text-amber-900">Seja Premium</p>
+                                        <p className="text-sm text-amber-800 mt-1">Geração ilimitada de petições.</p>
+                                        <p className="text-lg font-bold text-amber-900 mt-2">R$ 40,00 <span className="text-sm font-normal">/mês</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                            <Button className="w-full bg-juris-900 hover:bg-juris-800">
+                                Assinar Agora
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 text-green-700 bg-green-50 p-3 rounded-lg border border-green-100">
+                            <CheckCircle2 size={20} />
+                            <span className="font-medium">Você possui acesso ilimitado.</span>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {isTrial ? (
-                <div className="space-y-4">
-                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-lg">
-                        <div className="flex gap-3">
-                            <Crown className="text-amber-600 h-6 w-6 flex-shrink-0" />
-                            <div>
-                                <p className="font-bold text-amber-900">Seja Premium</p>
-                                <p className="text-sm text-amber-800 mt-1">Geração ilimitada de petições cíveis e trabalhistas.</p>
-                                <p className="text-lg font-bold text-amber-900 mt-2">R$ 40,00 <span className="text-sm font-normal">/mês</span></p>
-                            </div>
+            {/* Upcoming Deadlines Widget */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
+                <div className="px-6 py-4 border-b border-gray-200 bg-orange-50 rounded-t-xl flex justify-between items-center">
+                    <h3 className="font-semibold text-orange-900 flex items-center gap-2">
+                        <AlertCircle size={18} /> Próximos Prazos
+                    </h3>
+                </div>
+                <div className="p-0">
+                    {upcomingDeadlines.length > 0 ? (
+                        <div className="divide-y divide-gray-100">
+                            {upcomingDeadlines.map(d => (
+                                <div key={d.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
+                                    <div>
+                                        <p className="font-medium text-gray-800 text-sm truncate max-w-[180px]">{d.title}</p>
+                                        <p className="text-xs text-orange-600 font-medium flex items-center gap-1 mt-1">
+                                            <Calendar size={10} /> 
+                                            {new Date(d.due_date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}
+                                        </p>
+                                    </div>
+                                    <div className="text-xs text-gray-400 flex flex-col items-end">
+                                        <Bell size={14} className="mb-1" />
+                                        <span>-{d.alert_days_before} dias</span>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    </div>
-                    <Button className="w-full bg-juris-900 hover:bg-juris-800">
-                        Assinar Agora
-                    </Button>
-                </div>
-            ) : (
-                <div className="flex items-center gap-2 text-green-700 bg-green-50 p-3 rounded-lg border border-green-100">
-                    <CheckCircle2 size={20} />
-                    <span className="font-medium">Você possui acesso ilimitado.</span>
-                </div>
-            )}
-            
-            <div className="mt-6 pt-6 border-t border-gray-100">
-                <div className="flex items-center justify-between text-sm text-gray-500">
-                    <span>Petições geradas este mês:</span>
-                    <span className="font-bold text-gray-900">{recentPetitions.length}</span>
+                    ) : (
+                        <div className="p-6 text-center text-gray-400 text-sm">
+                            Nenhum prazo urgente pendente.
+                        </div>
+                    )}
                 </div>
             </div>
-          </div>
         </div>
 
-        {/* Recent Petitions Card */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
+        {/* Right Column: Recent Petitions */}
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-fit">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                 <Clock size={18} className="text-gray-400" />
@@ -159,7 +203,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
           </div>
           
           <div className="flex-1 p-0 overflow-hidden">
-             {loadingPetitions ? (
+             {loading ? (
                  <div className="flex justify-center items-center h-48">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-juris-900"></div>
                  </div>

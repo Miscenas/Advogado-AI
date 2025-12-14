@@ -26,6 +26,7 @@ if (isConfigured) {
   const mockSessionKey = 'jurispet_mock_session';
   const mockPetitionsKey = 'jurispet_mock_petitions';
   const mockProfilesKey = 'jurispet_mock_profiles';
+  const mockDeadlinesKey = 'jurispet_mock_deadlines';
   
   // Try to restore session
   let currentSession: any = null;
@@ -41,6 +42,13 @@ if (isConfigured) {
   try {
     const storedPetitions = localStorage.getItem(mockPetitionsKey);
     if (storedPetitions) mockPetitions = JSON.parse(storedPetitions);
+  } catch (e) { console.error(e); }
+
+  // Restore Deadlines
+  let mockDeadlines: any[] = [];
+  try {
+    const storedDeadlines = localStorage.getItem(mockDeadlinesKey);
+    if (storedDeadlines) mockDeadlines = JSON.parse(storedDeadlines);
   } catch (e) { console.error(e); }
 
   // Restore or Init Profiles (For Admin View)
@@ -206,13 +214,18 @@ if (isConfigured) {
                    return { data: null, error: { message: 'Not found', code: 'PGRST116' } };
                 },
                 order: (col: string, { ascending }: any) => {
+                   let dataResult = [];
+                   if (table === 'petitions') dataResult = [...mockPetitions].sort((a,b) => b.created_at.localeCompare(a.created_at));
+                   if (table === 'deadlines') dataResult = [...mockDeadlines].sort((a,b) => a.due_date.localeCompare(b.due_date));
+                   
                    return {
-                     data: table === 'petitions' ? [...mockPetitions].sort((a,b) => b.created_at.localeCompare(a.created_at)) : [],
+                     data: dataResult,
                      error: null
                    }
                 },
                 then: (resolve: any) => {
                    if (table === 'petitions') resolve({ data: mockPetitions.filter(p => p[column] === value), error: null });
+                   else if (table === 'deadlines') resolve({ data: mockDeadlines.filter(p => p[column] === value), error: null });
                    else resolve({ data: [], error: null });
                 }
               };
@@ -223,8 +236,14 @@ if (isConfigured) {
                  return {
                      then: (resolve: any) => {
                          if (table === 'profiles') {
-                             // Return all mock profiles for admin
                              resolve({ data: mockProfiles, error: null });
+                         } else if (table === 'deadlines') {
+                             const sorted = [...mockDeadlines].sort((a, b) => {
+                                 const valA = new Date(a[col]).getTime();
+                                 const valB = new Date(b[col]).getTime();
+                                 return ascending ? valA - valB : valB - valA;
+                             });
+                             resolve({ data: sorted, error: null });
                          } else {
                              resolve({ data: [], error: null });
                          }
@@ -242,6 +261,12 @@ if (isConfigured) {
                 mockPetitions = mockPetitions.map(p => p[column] === value ? { ...p, ...updates } : p);
                 localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
                 return { data: mockPetitions, error: null };
+              }
+
+              if (table === 'deadlines') {
+                mockDeadlines = mockDeadlines.map(p => p[column] === value ? { ...p, ...updates } : p);
+                localStorage.setItem(mockDeadlinesKey, JSON.stringify(mockDeadlines));
+                return { data: mockDeadlines, error: null };
               }
 
               if (table === 'profiles') {
@@ -262,6 +287,7 @@ if (isConfigured) {
               return {
                  single: async () => {
                     await new Promise(resolve => setTimeout(resolve, 500));
+                    
                     if (table === 'petitions') {
                        const items = Array.isArray(data) ? data : [data];
                        const newItems = items.map((item: any) => ({
@@ -274,11 +300,37 @@ if (isConfigured) {
                        localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
                        return { data: newItems[0], error: null };
                     }
+
+                    if (table === 'deadlines') {
+                        const items = Array.isArray(data) ? data : [data];
+                        const newItems = items.map((item: any) => ({
+                          ...item,
+                          id: Math.random().toString(36).substr(2, 9),
+                          created_at: new Date().toISOString(),
+                        }));
+                        mockDeadlines = [...mockDeadlines, ...newItems];
+                        localStorage.setItem(mockDeadlinesKey, JSON.stringify(mockDeadlines));
+                        return { data: newItems[0], error: null };
+                     }
+
                     return { data: null, error: { message: 'Insert failed' } };
                  }
               }
             }
           }
+        },
+        delete: () => {
+            return {
+                eq: async (column: string, value: any) => {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    if (table === 'deadlines') {
+                        mockDeadlines = mockDeadlines.filter(d => d[column] !== value);
+                        localStorage.setItem(mockDeadlinesKey, JSON.stringify(mockDeadlines));
+                        return { error: null };
+                    }
+                    return { error: null };
+                }
+            }
         }
       };
     }

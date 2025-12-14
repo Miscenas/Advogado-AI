@@ -8,7 +8,8 @@ import {
   Menu, 
   X,
   Scale,
-  ShieldCheck
+  ShieldCheck,
+  CalendarDays
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
@@ -37,6 +38,7 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'dashboard', label: 'Painel do Advogado', icon: LayoutDashboard },
     { id: 'new-petition', label: 'Nova Petição', icon: FileText },
     { id: 'my-petitions', label: 'Minhas Petições', icon: Files },
+    { id: 'deadlines', label: 'Prazos & Agenda', icon: CalendarDays },
     { id: 'profile', label: 'Perfil & Senha', icon: User },
   ];
 

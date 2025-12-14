@@ -8,6 +8,7 @@ import { PetitionWizard } from './components/NewPetition/PetitionWizard';
 import { PetitionList } from './components/PetitionList';
 import { AdminPanel } from './components/AdminPanel';
 import { UserProfileView } from './components/UserProfile';
+import { DeadlineManager } from './components/DeadlineManager';
 import { Lock } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
@@ -152,6 +153,8 @@ function App() {
         );
       case 'my-petitions':
         return <PetitionList userId={authState.user?.id} />;
+      case 'deadlines':
+        return <DeadlineManager userId={authState.user?.id} />;
       case 'profile':
         return <UserProfileView profile={authState.profile} />;
       case 'admin':
