@@ -19,6 +19,83 @@ const apiKey = getApiKey();
 
 const ai = new GoogleGenAI({ apiKey });
 
+export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<Partial<PetitionFormData>> => {
+  if (!apiKey) {
+    console.warn("API_KEY missing. Returning mock extraction.");
+    return {
+      facts: "Fatos extraídos do documento (Mock): O documento relata um acidente de trânsito ocorrido em 12/12/2023...",
+      plaintiff: { name: "João da Silva (Extraído)", doc: "123.456.789-00", type: "pf", address: "Rua A, 1", qualification: "Brasileiro, casado" },
+      actionType: "Ação de Indenização por Danos Materiais"
+    };
+  }
+
+  try {
+    const prompt = `
+      Analise o documento jurídico anexo. Extraia as informações para preencher uma petição inicial.
+      
+      Identifique:
+      1. Área do direito (civel, trabalhista, familia, consumidor).
+      2. Tipo da ação sugerida.
+      3. Foro/Jurisdição (Cidade/Comarca).
+      4. Dados do Autor (Nome, CPF/CNPJ, Endereço, Qualificação).
+      5. Dados do Réu (Nome, CPF/CNPJ, Endereço).
+      6. Resumo narrativo dos fatos relevantes.
+      7. Valor da causa (se houver menção financeira).
+
+      Retorne APENAS um JSON estrito.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          { inlineData: { mimeType: mimeType, data: base64Data } },
+          { text: prompt }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            area: { type: Type.STRING, enum: ["civel", "trabalhista", "familia", "consumidor"] },
+            actionType: { type: Type.STRING },
+            jurisdiction: { type: Type.STRING },
+            plaintiff: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                doc: { type: Type.STRING },
+                address: { type: Type.STRING },
+                qualification: { type: Type.STRING },
+                type: { type: Type.STRING, enum: ["pf", "pj"] }
+              }
+            },
+            defendant: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                doc: { type: Type.STRING },
+                address: { type: Type.STRING },
+                type: { type: Type.STRING, enum: ["pf", "pj"] }
+              }
+            },
+            facts: { type: Type.STRING },
+            value: { type: Type.STRING }
+          }
+        }
+      }
+    });
+
+    const jsonStr = response.text || "{}";
+    return JSON.parse(jsonStr);
+
+  } catch (error) {
+    console.error("Error extracting document data:", error);
+    throw new Error("Não foi possível ler o documento. Tente extrair o texto manualmente.");
+  }
+};
+
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
   if (!apiKey) {
     console.warn("API_KEY is missing. Using mock response for demonstration.");

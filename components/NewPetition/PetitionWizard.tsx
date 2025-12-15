@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { PetitionFormData, PetitionFilingMetadata } from '../../types';
 import { supabase } from '../../services/supabaseClient';
 import { Button } from '../ui/Button';
@@ -19,9 +19,12 @@ import {
   Archive,
   Tags,
   Building2,
-  Printer
+  Printer,
+  Upload,
+  FileCheck,
+  Loader2
 } from 'lucide-react';
-import { generateLegalPetition, refineLegalPetition, suggestFilingMetadata } from '../../services/aiService';
+import { generateLegalPetition, refineLegalPetition, suggestFilingMetadata, extractDataFromDocument } from '../../services/aiService';
 
 interface WizardProps {
   userId: string;
@@ -57,6 +60,11 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const [generatedContent, setGeneratedContent] = useState<string | null>(null);
   const [filingSuggestions, setFilingSuggestions] = useState<PetitionFilingMetadata | null>(null);
   
+  // Document Upload State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  
   // Refinement State
   const [refinementText, setRefinementText] = useState('');
   const [isRefining, setIsRefining] = useState(false);
@@ -71,6 +79,41 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       ...prev,
       [party]: { ...prev[party], [field]: value }
     }));
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsExtracting(true);
+    setUploadSuccess(false);
+
+    try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const base64String = event.target?.result as string;
+            // Remove data URL prefix (e.g., "data:application/pdf;base64,")
+            const base64Data = base64String.split(',')[1];
+            
+            const extractedData = await extractDataFromDocument(base64Data, file.type);
+            
+            // Merge extracted data into form
+            setFormData(prev => ({
+                ...prev,
+                ...extractedData,
+                plaintiff: { ...prev.plaintiff, ...extractedData.plaintiff },
+                defendant: { ...prev.defendant, ...extractedData.defendant },
+            }));
+            
+            setUploadSuccess(true);
+        };
+        reader.readAsDataURL(file);
+    } catch (error) {
+        console.error(error);
+        alert("Erro ao processar o arquivo. Tente preencher manualmente.");
+    } finally {
+        setIsExtracting(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -216,6 +259,52 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       case 1:
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+             {/* Document Upload Area */}
+             <div className="bg-sky-50 border-2 border-dashed border-sky-200 rounded-lg p-6 text-center">
+                 <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    accept=".pdf, .txt, image/png, image/jpeg"
+                 />
+                 
+                 {isExtracting ? (
+                    <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="h-8 w-8 text-sky-600 animate-spin" />
+                        <span className="text-sm font-medium text-sky-700">Lendo documento e extraindo dados...</span>
+                    </div>
+                 ) : uploadSuccess ? (
+                    <div className="flex flex-col items-center gap-2">
+                        <div className="bg-green-100 p-2 rounded-full">
+                           <FileCheck className="h-6 w-6 text-green-600" />
+                        </div>
+                        <span className="text-sm font-medium text-green-700">Dados extraídos com sucesso! Revise abaixo.</span>
+                        <button 
+                           onClick={() => fileInputRef.current?.click()}
+                           className="text-xs text-sky-600 underline hover:text-sky-800"
+                        >
+                           Enviar outro arquivo
+                        </button>
+                    </div>
+                 ) : (
+                    <div className="flex flex-col items-center gap-2">
+                        <Upload className="h-8 w-8 text-sky-400" />
+                        <h3 className="font-semibold text-gray-900">Tem um documento do caso?</h3>
+                        <p className="text-sm text-gray-500 max-w-sm">
+                           Envie um PDF, Imagem ou Texto. Nossa IA irá ler e preencher as partes e fatos automaticamente.
+                        </p>
+                        <Button 
+                           variant="secondary" 
+                           onClick={() => fileInputRef.current?.click()}
+                           className="mt-2"
+                        >
+                           Carregar Arquivo
+                        </Button>
+                    </div>
+                 )}
+             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Área do Direito</label>
