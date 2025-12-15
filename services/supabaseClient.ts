@@ -1,8 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 1. Attempt to load keys from Vite environment variables (Standard for Vercel + Vite)
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+// Helper to safely get env vars in Vite/Browser or Node environments
+const getEnv = (key: string) => {
+  // Check Import Meta (Vite standard)
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
+    return (import.meta as any).env[key];
+  }
+  // Check Process Env (Legacy/Node) - safely
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
+  return undefined;
+};
+
+// 1. Attempt to load keys
+const supabaseUrl = getEnv('VITE_SUPABASE_URL');
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
 // Check if variables are valid
 const isConfigured = 

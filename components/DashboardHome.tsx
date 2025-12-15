@@ -178,8 +178,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
                                         </p>
                                     </div>
                                     <div className="text-xs text-gray-400 flex flex-col items-end">
-                                        <Bell size={14} className="mb-1" />
-                                        <span>-{d.alert_days_before} dias</span>
+                                        <span className="bg-orange-100 text-orange-800 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">PENDENTE</span>
                                     </div>
                                 </div>
                             ))}

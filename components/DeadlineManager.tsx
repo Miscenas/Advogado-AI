@@ -3,7 +3,7 @@ import { supabase } from '../services/supabaseClient';
 import { Deadline } from '../types';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { Calendar, Plus, Clock, CheckCircle2, AlertTriangle, Trash2, Bell, BellRing } from 'lucide-react';
+import { Calendar, Plus, Clock, CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
 
 interface DeadlineManagerProps {
   userId: string;
@@ -17,7 +17,6 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
   // Form State
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState('');
-  const [alertDays, setAlertDays] = useState(1);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -52,7 +51,6 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
           user_id: userId,
           title: newTitle,
           due_date: newDate,
-          alert_days_before: alertDays,
           status: 'pending',
           created_at: new Date().toISOString()
         }])
@@ -65,7 +63,6 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
       setShowAddForm(false);
       setNewTitle('');
       setNewDate('');
-      setAlertDays(1);
     } catch (error) {
       console.error('Error creating deadline:', error);
       alert('Erro ao salvar prazo.');
@@ -115,7 +112,7 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
             <Calendar className="text-juris-800" />
             Agenda de Prazos Processuais
           </h1>
-          <p className="text-gray-500">Gerencie seus vencimentos e configure alertas automáticos.</p>
+          <p className="text-gray-500">Gerencie seus vencimentos.</p>
         </div>
         <Button onClick={() => setShowAddForm(!showAddForm)} className="gap-2">
            {showAddForm ? 'Cancelar' : <><Plus size={18} /> Novo Prazo</>}
@@ -135,7 +132,7 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                    required
                  />
               </div>
-              <div>
+              <div className="md:col-span-2">
                  <Input 
                    type="date"
                    label="Data de Vencimento"
@@ -144,23 +141,7 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                    required
                  />
               </div>
-              <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-2">Alertar por Email</label>
-                 <div className="relative">
-                   <select 
-                     className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-juris-500"
-                     value={alertDays}
-                     onChange={(e) => setAlertDays(Number(e.target.value))}
-                   >
-                      <option value="1">1 dia antes</option>
-                      <option value="2">2 dias antes</option>
-                      <option value="3">3 dias antes</option>
-                      <option value="5">5 dias antes</option>
-                      <option value="7">1 semana antes</option>
-                   </select>
-                   <Bell className="absolute right-3 top-2.5 text-gray-400 w-4 h-4 pointer-events-none" />
-                 </div>
-              </div>
+              
               <div className="md:col-span-2 flex justify-end mt-2">
                  <Button type="submit" isLoading={saving}>Salvar Prazo</Button>
               </div>
@@ -199,12 +180,6 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                                        <Calendar size={12} /> 
                                        {new Date(deadline.due_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
                                     </span>
-                                    {deadline.status !== 'completed' && (
-                                        <span className="flex items-center gap-1">
-                                            <BellRing size={12} />
-                                            Avisar {deadline.alert_days_before} dia(s) antes
-                                        </span>
-                                    )}
                                 </div>
                             </div>
                         </div>

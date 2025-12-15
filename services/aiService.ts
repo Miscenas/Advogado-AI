@@ -1,8 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata } from "../types";
 
+// Helper to safely get the API Key
+const getApiKey = () => {
+  // Check Import Meta (Vite standard)
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_API_KEY) {
+    return (import.meta as any).env.VITE_API_KEY;
+  }
+  // Check Process Env (Legacy/Node) safely without crashing browser
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    return process.env.API_KEY;
+  }
+  return '';
+};
+
 // NOTE: process.env.API_KEY must be configured in your environment.
-const apiKey = process.env.API_KEY || '';
+const apiKey = getApiKey();
 
 const ai = new GoogleGenAI({ apiKey });
 

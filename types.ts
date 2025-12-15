@@ -42,7 +42,6 @@ export interface Deadline {
   title: string;
   description?: string;
   due_date: string; // ISO Date string
-  alert_days_before: number; // How many days before to send email
   status: 'pending' | 'completed';
   created_at: string;
 }
