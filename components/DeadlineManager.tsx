@@ -31,7 +31,11 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
         .eq('user_id', userId)
         .order('due_date', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+          // Silent fail on fetch if table doesn't exist yet, just log
+          console.warn('Error fetching deadlines (Table might not exist):', error);
+          return;
+      }
       setDeadlines((data as Deadline[]) || []);
     } catch (error) {
       console.error('Error fetching deadlines:', error);
@@ -63,9 +67,13 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
       setShowAddForm(false);
       setNewTitle('');
       setNewDate('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating deadline:', error);
-      alert('Erro ao salvar prazo.');
+      if (error.code === '42P01') {
+          alert('Erro crítico: A tabela de prazos não existe no banco de dados. Por favor, contate o administrador para rodar o script de configuração.');
+      } else {
+          alert(`Erro ao salvar prazo: ${error.message || 'Verifique sua conexão.'}`);
+      }
     } finally {
       setSaving(false);
     }

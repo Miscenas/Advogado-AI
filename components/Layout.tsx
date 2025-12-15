@@ -11,9 +11,13 @@ import {
   ShieldCheck,
   CalendarDays,
   Wifi,
-  WifiOff
+  WifiOff,
+  Settings,
+  Database
 } from 'lucide-react';
-import { supabase, isLive } from '../services/supabaseClient';
+import { supabase, isLive, updateConnection, disconnectCustom } from '../services/supabaseClient';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -31,9 +35,26 @@ export const Layout: React.FC<LayoutProps> = ({
   isAdmin = false
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
+  
+  // Connection Form State
+  const [dbUrl, setDbUrl] = useState('');
+  const [dbKey, setDbKey] = useState('');
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  const handleSaveConnection = () => {
+      if (dbUrl && dbKey) {
+          updateConnection(dbUrl, dbKey);
+      }
+  };
+
+  const handleDisconnect = () => {
+      if(confirm('Isso desconectará o banco de dados atual e voltará para o modo simulação (ou variáveis de ambiente se existirem). Continuar?')) {
+          disconnectCustom();
+      }
   };
 
   const navItems = [
@@ -81,17 +102,21 @@ export const Layout: React.FC<LayoutProps> = ({
 
       <div className="p-4 border-t border-juris-800">
          {/* Database Connection Status Indicator */}
-        <div className={`mb-4 px-3 py-2 rounded border flex items-center justify-between text-xs font-medium ${
-            isLive 
-            ? 'bg-green-900/40 border-green-800 text-green-200' 
-            : 'bg-amber-900/40 border-amber-800 text-amber-200'
-        }`}>
+        <button 
+            onClick={() => setShowConnectionModal(true)}
+            className={`w-full mb-4 px-3 py-2 rounded border flex items-center justify-between text-xs font-medium transition-all hover:bg-opacity-80 ${
+                isLive 
+                ? 'bg-green-900/40 border-green-800 text-green-200 cursor-pointer hover:bg-green-900/60' 
+                : 'bg-amber-900/40 border-amber-800 text-amber-200 cursor-pointer hover:bg-amber-900/60'
+            }`}
+            title="Clique para configurar a conexão com o banco de dados"
+        >
             <span className="flex items-center gap-2">
                 {isLive ? <Wifi size={14} /> : <WifiOff size={14} />}
-                {isLive ? 'Conectado' : 'Modo Simulação'}
+                {isLive ? 'Conectado (Live)' : 'Modo Simulação'}
             </span>
             <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`}></div>
-        </div>
+        </button>
 
         <div className="mb-4 px-2">
           <p className="text-xs text-juris-400 uppercase font-semibold">Conta</p>
@@ -159,6 +184,63 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
         </main>
       </div>
+
+      {/* Database Connection Modal */}
+      {showConnectionModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-200 animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                          <Database size={20} className="text-juris-600" /> Configuração do Banco
+                      </h3>
+                      <button onClick={() => setShowConnectionModal(false)} className="text-gray-400 hover:text-gray-600">
+                          <X size={20} />
+                      </button>
+                  </div>
+                  
+                  <div className="p-6 space-y-4">
+                      {isLive ? (
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                              <Wifi size={32} className="text-green-600 mx-auto mb-2" />
+                              <h4 className="font-bold text-green-800">Conectado ao Supabase</h4>
+                              <p className="text-sm text-green-700 mt-1">O sistema está operando em modo real.</p>
+                              <Button variant="danger" className="mt-4 w-full" onClick={handleDisconnect}>
+                                  Desconectar / Resetar
+                              </Button>
+                          </div>
+                      ) : (
+                          <>
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex items-start gap-2">
+                                <WifiOff size={16} className="mt-0.5 flex-shrink-0" />
+                                <p>
+                                    As variáveis de ambiente não foram detectadas. Insira suas credenciais do Supabase abaixo para conectar manualmente.
+                                </p>
+                            </div>
+
+                            <div className="space-y-3">
+                                <Input 
+                                    label="Project URL (VITE_SUPABASE_URL)" 
+                                    placeholder="https://xyz.supabase.co"
+                                    value={dbUrl}
+                                    onChange={(e) => setDbUrl(e.target.value)}
+                                />
+                                <Input 
+                                    label="Anon Key (VITE_SUPABASE_ANON_KEY)" 
+                                    placeholder="eyJxh..."
+                                    value={dbKey}
+                                    onChange={(e) => setDbKey(e.target.value)}
+                                />
+                            </div>
+
+                            <Button className="w-full mt-2" onClick={handleSaveConnection}>
+                                Salvar e Conectar
+                            </Button>
+                          </>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

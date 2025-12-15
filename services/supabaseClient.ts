@@ -13,9 +13,23 @@ const getEnv = (key: string) => {
   return undefined;
 };
 
-// 1. Attempt to load keys
-const supabaseUrl = getEnv('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
+// Helper to get from LocalStorage (for dynamic setup)
+const getStored = (key: string) => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return window.localStorage.getItem(key);
+  }
+  return null;
+};
+
+// 1. Attempt to load keys from Env OR LocalStorage
+const envUrl = getEnv('VITE_SUPABASE_URL');
+const envKey = getEnv('VITE_SUPABASE_ANON_KEY');
+
+const storedUrl = getStored('custom_supabase_url');
+const storedKey = getStored('custom_supabase_key');
+
+const supabaseUrl = envUrl || storedUrl;
+const supabaseAnonKey = envKey || storedKey;
 
 // Check if variables are valid
 const isConfigured = 
@@ -129,7 +143,7 @@ if (isConfigured) {
   const mockUsage = {
     user_id: MOCK_USER_ID,
     monthly_limit: 5,
-    used_this_month: mockPetitions.length,
+    used_this_month: 0, // Calculated dynamically below
     last_reset: new Date().toISOString(),
   };
 
@@ -216,10 +230,25 @@ if (isConfigured) {
         select: (columns = '*') => {
           // Determine initial dataset
           let initialData: any[] = [];
-          if (table === 'petitions') initialData = mockPetitions;
-          else if (table === 'deadlines') initialData = mockDeadlines;
-          else if (table === 'profiles') initialData = mockProfiles;
-          else if (table === 'usage_limits') initialData = [mockUsage];
+          if (table === 'petitions') {
+              initialData = mockPetitions;
+          }
+          else if (table === 'deadlines') {
+              initialData = mockDeadlines;
+          }
+          else if (table === 'profiles') {
+              initialData = mockProfiles;
+          }
+          else if (table === 'usage_limits') {
+              // RECALCULATE usage based on current number of petitions
+              // This simulates the DB trigger behavior in Mock mode
+              if (currentSession?.user) {
+                 const count = mockPetitions.filter(p => p.user_id === currentSession.user.id).length;
+                 mockUsage.used_this_month = count;
+                 mockUsage.user_id = currentSession.user.id;
+              }
+              initialData = [mockUsage];
+          }
 
           // Chain Builder Pattern
           const createChain = (currentData: any[]) => ({
@@ -303,6 +332,11 @@ if (isConfigured) {
                        }));
                        mockPetitions = [...mockPetitions, ...newItems];
                        localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
+                       
+                       // Note: We don't need to manually update usage here because 
+                       // the 'select' query for 'usage_limits' recalculates it dynamically 
+                       // based on mockPetitions array length.
+                       
                        return { data: newItems[0], error: null };
                     }
 
@@ -345,3 +379,16 @@ if (isConfigured) {
 
 export const supabase = client;
 export const isLive = isConfigured;
+
+// Helper methods to configure connection from UI
+export const updateConnection = (url: string, key: string) => {
+    localStorage.setItem('custom_supabase_url', url);
+    localStorage.setItem('custom_supabase_key', key);
+    window.location.reload();
+};
+
+export const disconnectCustom = () => {
+    localStorage.removeItem('custom_supabase_url');
+    localStorage.removeItem('custom_supabase_key');
+    window.location.reload();
+};

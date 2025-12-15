@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Petition } from '../types';
-import { FileText, Calendar, ChevronRight, Copy, Search, Eye, CheckSquare, Square, Printer } from 'lucide-react';
+import { FileText, Calendar, ChevronRight, Copy, Search, Eye, CheckSquare, Square, Printer, FileBadge } from 'lucide-react';
 import { Button } from './ui/Button';
 
 interface PetitionListProps {
@@ -143,11 +143,44 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
             </Button>
           </div>
         </div>
-        <div 
-          id="petition-detail-content"
-          className="p-8 h-[70vh] overflow-y-auto bg-white font-serif whitespace-pre-wrap text-gray-800 leading-relaxed"
-        >
-          {selectedPetition.content}
+        
+        <div className="grid grid-cols-1 lg:grid-cols-4 h-[70vh]">
+            {/* Sidebar with metadata (if available) */}
+            {selectedPetition.analyzed_documents && selectedPetition.analyzed_documents.length > 0 && (
+                <div className="lg:col-span-1 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
+                    <div className="mb-4">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                           <FileBadge size={14} /> Documentos Base
+                        </h3>
+                        <div className="space-y-3">
+                            {selectedPetition.analyzed_documents.map((doc, idx) => (
+                                <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="bg-blue-100 text-blue-600 p-1 rounded">
+                                            <FileText size={12} />
+                                        </div>
+                                        <span className="text-xs font-bold text-gray-700 truncate block w-full">{doc.docType}</span>
+                                    </div>
+                                    <p className="text-xs text-gray-900 font-medium truncate mb-1" title={doc.fileName}>{doc.fileName}</p>
+                                    {doc.summary && (
+                                        <p className="text-[10px] text-gray-500 leading-tight italic bg-gray-50 p-1 rounded border border-gray-100">
+                                            "{doc.summary.length > 80 ? doc.summary.substring(0, 80) + '...' : doc.summary}"
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Main Content */}
+            <div 
+              id="petition-detail-content"
+              className={`${selectedPetition.analyzed_documents && selectedPetition.analyzed_documents.length > 0 ? 'lg:col-span-3' : 'lg:col-span-4'} p-8 overflow-y-auto bg-white font-serif whitespace-pre-wrap text-gray-800 leading-relaxed`}
+            >
+              {selectedPetition.content}
+            </div>
         </div>
       </div>
     );
@@ -184,6 +217,7 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
       <div className="grid gap-4">
         {petitions.map((petition) => {
           const isFiled = petition.filed === true;
+          const hasDocs = petition.analyzed_documents && petition.analyzed_documents.length > 0;
           
           return (
             <div 
@@ -202,10 +236,15 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
                   <FileText size={24} />
                 </div>
                 <div>
-                  <h3 className={`font-semibold transition-colors ${
+                  <h3 className={`font-semibold transition-colors flex items-center gap-2 ${
                     isFiled ? 'text-green-900' : 'text-gray-900 group-hover:text-juris-800'
                   }`}>
                     {petition.action_type || 'Ação Judicial'}
+                    {hasDocs && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-800 border border-indigo-200" title="Gerado com análise de documento">
+                            <FileBadge size={10} className="mr-1" /> IA Doc
+                        </span>
+                    )}
                   </h3>
                   
                   {(petition.plaintiff_name || petition.defendant_name) && (
