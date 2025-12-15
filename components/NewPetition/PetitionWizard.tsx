@@ -241,7 +241,8 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           content: generatedContent,
           created_at: new Date().toISOString(),
           plaintiff_name: pName,
-          defendant_name: dName
+          defendant_name: dName,
+          analyzed_documents: formData.analyzedDocuments // Persisting analysis data
         }
       ]).select().single();
 

@@ -9,9 +9,11 @@ import {
   X,
   Scale,
   ShieldCheck,
-  CalendarDays
+  CalendarDays,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
-import { supabase } from '../services/supabaseClient';
+import { supabase, isLive } from '../services/supabaseClient';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -78,6 +80,19 @@ export const Layout: React.FC<LayoutProps> = ({
       </nav>
 
       <div className="p-4 border-t border-juris-800">
+         {/* Database Connection Status Indicator */}
+        <div className={`mb-4 px-3 py-2 rounded border flex items-center justify-between text-xs font-medium ${
+            isLive 
+            ? 'bg-green-900/40 border-green-800 text-green-200' 
+            : 'bg-amber-900/40 border-amber-800 text-amber-200'
+        }`}>
+            <span className="flex items-center gap-2">
+                {isLive ? <Wifi size={14} /> : <WifiOff size={14} />}
+                {isLive ? 'Conectado' : 'Modo Simulação'}
+            </span>
+            <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`}></div>
+        </div>
+
         <div className="mb-4 px-2">
           <p className="text-xs text-juris-400 uppercase font-semibold">Conta</p>
           <p className="text-sm text-juris-100 truncate">{userEmail}</p>

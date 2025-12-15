@@ -344,3 +344,4 @@ if (isConfigured) {
 }
 
 export const supabase = client;
+export const isLive = isConfigured;

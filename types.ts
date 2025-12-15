@@ -1,3 +1,4 @@
+
 export type AccountStatus = 'trial' | 'active' | 'blocked';
 export type UserRole = 'admin' | 'user';
 
@@ -23,6 +24,13 @@ export interface PetitionFilingMetadata {
   subject: string;    // e.g., "Indenização por Dano Moral"
 }
 
+export interface AnalyzedDocument {
+  id: string;
+  fileName: string;
+  docType: string; // 'procuracao' | 'identidade' | 'contrato' | 'peticao' | 'outros'
+  summary?: string;
+}
+
 export interface Petition {
   id: string;
   user_id: string;
@@ -34,6 +42,7 @@ export interface Petition {
   plaintiff_name?: string;
   defendant_name?: string;
   filed?: boolean; // Indicates if the petition has been filed in court
+  analyzed_documents?: AnalyzedDocument[]; // JSONB column from DB
 }
 
 export interface Deadline {
@@ -54,13 +63,6 @@ export interface PetitionParty {
   doc: string; // CPF or CNPJ
   address?: string;
   qualification?: string; // Profession, marital status, etc.
-}
-
-export interface AnalyzedDocument {
-  id: string;
-  fileName: string;
-  docType: string; // 'procuracao' | 'identidade' | 'contrato' | 'peticao' | 'outros'
-  summary?: string;
 }
 
 export interface PetitionFormData {
