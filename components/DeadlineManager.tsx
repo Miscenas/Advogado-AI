@@ -3,7 +3,7 @@ import { supabase } from '../services/supabaseClient';
 import { Deadline } from '../types';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { Calendar, Plus, Clock, CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
+import { Calendar, Plus, Clock, CheckCircle2, AlertTriangle, Trash2, Flame } from 'lucide-react';
 
 interface DeadlineManagerProps {
   userId: string;
@@ -99,8 +99,13 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) return 'bg-red-50 border-red-200 text-red-800'; // Vencido
-    if (diffDays === 0) return 'bg-orange-50 border-orange-200 text-orange-800'; // Hoje
-    if (diffDays <= 3) return 'bg-amber-50 border-amber-200 text-amber-800'; // Urgente
+    
+    // ATUALIZAÇÃO: 2 dias ou menos (inclui hoje e amanhã) fica VERMELHO
+    if (diffDays <= 2) return 'bg-red-50 border-red-200 text-red-800 font-medium'; 
+    
+    // Entre 3 e 5 dias fica Amarelo/Laranja
+    if (diffDays <= 5) return 'bg-amber-50 border-amber-200 text-amber-800'; 
+    
     return 'bg-white border-gray-200 text-gray-800'; // Normal
   };
 
@@ -163,6 +168,14 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                 const statusColor = getUrgencyColor(deadline.due_date, deadline.status);
                 const isCompleted = deadline.status === 'completed';
                 
+                // Calculate diff for icon logic
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const due = new Date(deadline.due_date);
+                due.setHours(0,0,0,0);
+                const diffTime = due.getTime() - today.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
                 return (
                     <div key={deadline.id} className={`p-4 rounded-lg border flex items-center justify-between transition-all ${statusColor}`}>
                         <div className="flex items-center gap-4">
@@ -174,7 +187,13 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                             </button>
                             
                             <div className={isCompleted ? 'opacity-50 line-through' : ''}>
-                                <h4 className="font-semibold text-sm md:text-base">{deadline.title}</h4>
+                                <h4 className="font-semibold text-sm md:text-base flex items-center gap-2">
+                                  {deadline.title}
+                                  {/* Mostrar ícone de fogo se for muito urgente (<= 2 dias) e não completado */}
+                                  {!isCompleted && diffDays <= 2 && diffDays >= 0 && (
+                                    <Flame size={14} className="text-red-600 animate-pulse" />
+                                  )}
+                                </h4>
                                 <div className="flex items-center gap-4 text-xs mt-1 opacity-80">
                                     <span className="flex items-center gap-1 font-medium">
                                        <Calendar size={12} /> 
@@ -185,11 +204,19 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                         </div>
 
                         <div className="flex items-center gap-2">
-                           {deadline.status === 'pending' && new Date(deadline.due_date) < new Date() && (
+                           {/* Badge Vencido */}
+                           {deadline.status === 'pending' && diffDays < 0 && (
                                <span className="hidden md:flex items-center gap-1 text-red-600 text-xs font-bold bg-red-100 px-2 py-1 rounded-full">
                                    <AlertTriangle size={12} /> Vencido
                                </span>
                            )}
+                           {/* Badge Urgente (0 a 2 dias) */}
+                           {deadline.status === 'pending' && diffDays >= 0 && diffDays <= 2 && (
+                               <span className="hidden md:flex items-center gap-1 text-red-600 text-xs font-bold bg-white/50 px-2 py-1 rounded-full border border-red-200">
+                                   Urgente
+                               </span>
+                           )}
+                           
                            <button 
                              onClick={() => handleDelete(deadline.id)}
                              className="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"

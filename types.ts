@@ -48,6 +48,7 @@ export interface Deadline {
 
 // Advanced Form Types
 export interface PetitionParty {
+  id?: string; // temporary UI id
   name: string;
   type: 'pf' | 'pj'; // Pessoa Física or Jurídica
   doc: string; // CPF or CNPJ
@@ -55,16 +56,24 @@ export interface PetitionParty {
   qualification?: string; // Profession, marital status, etc.
 }
 
+export interface AnalyzedDocument {
+  id: string;
+  fileName: string;
+  docType: string; // 'procuracao' | 'identidade' | 'contrato' | 'peticao' | 'outros'
+  summary?: string;
+}
+
 export interface PetitionFormData {
   area: string;
   actionType: string;
   jurisdiction: string; // Comarca/City
-  plaintiff: PetitionParty; // Autor
-  defendant: PetitionParty; // Réu
+  plaintiffs: PetitionParty[]; // Lista de Autores
+  defendants: PetitionParty[]; // Lista de Réus
   facts: string;
   requests: string[]; // List of specific requests
   evidence: string; // Provas a produzir
   value: string; // Valor da causa
+  analyzedDocuments?: AnalyzedDocument[]; // Files processed by AI
 }
 
 export interface AuthState {

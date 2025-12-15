@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { PetitionFormData, PetitionFilingMetadata } from "../types";
+import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
 // Helper to safely get the API Key
 const getApiKey = () => {
@@ -19,28 +19,43 @@ const apiKey = getApiKey();
 
 const ai = new GoogleGenAI({ apiKey });
 
-export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<Partial<PetitionFormData>> => {
+export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
+  docType: string;
+  summary: string;
+  extractedData: Partial<PetitionFormData>;
+}> => {
   if (!apiKey) {
     console.warn("API_KEY missing. Returning mock extraction.");
     return {
-      facts: "Fatos extraídos do documento (Mock): O documento relata um acidente de trânsito ocorrido em 12/12/2023...",
-      plaintiff: { name: "João da Silva (Extraído)", doc: "123.456.789-00", type: "pf", address: "Rua A, 1", qualification: "Brasileiro, casado" },
-      actionType: "Ação de Indenização por Danos Materiais"
+      docType: "Contrato / Outros",
+      summary: "Documento simulado (Mock) contendo dados de um contrato.",
+      extractedData: {
+        facts: "Fatos extraídos do documento (Mock): O documento relata um acidente...",
+        plaintiffs: [{ name: "João da Silva (Extraído)", doc: "123.456.789-00", type: "pf", address: "Rua A, 1", qualification: "Brasileiro, casado" }],
+        actionType: "Ação de Indenização"
+      }
     };
   }
 
   try {
     const prompt = `
-      Analise o documento jurídico anexo. Extraia as informações para preencher uma petição inicial.
+      Analise o documento jurídico anexo. 
+      
+      TAREFA 1: IDENTIFICAÇÃO
+      Classifique o documento em uma destas categorias: "Procuração", "Documento de Identidade (RG/CNH)", "Contrato", "Fatura/Recibo", "Petição", "Boletim de Ocorrência" ou "Outros".
+      Faça um breve resumo de 1 linha sobre o que se trata.
+
+      TAREFA 2: EXTRAÇÃO DE DADOS PARA PETIÇÃO
+      Extraia as informações para preencher uma petição inicial. Se houver múltiplas partes (ex: múltiplos autores num contrato), liste todas.
       
       Identifique:
-      1. Área do direito (civel, trabalhista, familia, consumidor).
+      1. Área do direito.
       2. Tipo da ação sugerida.
-      3. Foro/Jurisdição (Cidade/Comarca).
-      4. Dados do Autor (Nome, CPF/CNPJ, Endereço, Qualificação).
-      5. Dados do Réu (Nome, CPF/CNPJ, Endereço).
-      6. Resumo narrativo dos fatos relevantes.
-      7. Valor da causa (se houver menção financeira).
+      3. Foro/Jurisdição.
+      4. Autores (Lista).
+      5. Réus (Lista).
+      6. Resumo narrativo dos fatos.
+      7. Valor da causa.
 
       Retorne APENAS um JSON estrito.
     `;
@@ -58,30 +73,43 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            area: { type: Type.STRING, enum: ["civel", "trabalhista", "familia", "consumidor"] },
-            actionType: { type: Type.STRING },
-            jurisdiction: { type: Type.STRING },
-            plaintiff: {
+            docType: { type: Type.STRING, description: "Classificação do documento (ex: Procuração, RG, Contrato)" },
+            summary: { type: Type.STRING, description: "Resumo de 1 linha do conteúdo" },
+            extractedData: {
               type: Type.OBJECT,
               properties: {
-                name: { type: Type.STRING },
-                doc: { type: Type.STRING },
-                address: { type: Type.STRING },
-                qualification: { type: Type.STRING },
-                type: { type: Type.STRING, enum: ["pf", "pj"] }
+                area: { type: Type.STRING, enum: ["civel", "trabalhista", "familia", "consumidor"] },
+                actionType: { type: Type.STRING },
+                jurisdiction: { type: Type.STRING },
+                plaintiffs: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      doc: { type: Type.STRING },
+                      address: { type: Type.STRING },
+                      qualification: { type: Type.STRING },
+                      type: { type: Type.STRING, enum: ["pf", "pj"] }
+                    }
+                  }
+                },
+                defendants: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      doc: { type: Type.STRING },
+                      address: { type: Type.STRING },
+                      type: { type: Type.STRING, enum: ["pf", "pj"] }
+                    }
+                  }
+                },
+                facts: { type: Type.STRING },
+                value: { type: Type.STRING }
               }
-            },
-            defendant: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                doc: { type: Type.STRING },
-                address: { type: Type.STRING },
-                type: { type: Type.STRING, enum: ["pf", "pj"] }
-              }
-            },
-            facts: { type: Type.STRING },
-            value: { type: Type.STRING }
+            }
           }
         }
       }
@@ -92,7 +120,7 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
 
   } catch (error) {
     console.error("Error extracting document data:", error);
-    throw new Error("Não foi possível ler o documento. Tente extrair o texto manualmente.");
+    throw new Error("Não foi possível ler o documento.");
   }
 };
 
@@ -102,6 +130,11 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
     return mockGeneration(data);
   }
 
+  // Format parties for the prompt
+  const formatParty = (p: PetitionParty) => `Nome: ${p.name}, Doc: ${p.doc}, Endereço: ${p.address}, Qualificação: ${p.qualification}`;
+  const plaintiffsText = data.plaintiffs.map((p, i) => `AUTOR ${i+1}: ${formatParty(p)}`).join('\n');
+  const defendantsText = data.defendants.map((d, i) => `RÉU ${i+1}: ${formatParty(d)}`).join('\n');
+
   try {
     const prompt = `
       Atue como um advogado sênior especialista em Direito ${data.area} no Brasil.
@@ -110,15 +143,11 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
       DADOS DO CASO:
       1. EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA COMARCA DE ${data.jurisdiction}.
       
-      2. AUTOR (Qualificação):
-         Nome: ${data.plaintiff.name}
-         Documento: ${data.plaintiff.doc}
-         Qualificação/Endereço: ${data.plaintiff.qualification}, ${data.plaintiff.address}
+      2. POLO ATIVO (Pluralize se houver mais de um):
+         ${plaintiffsText}
          
-      3. RÉU (Qualificação):
-         Nome: ${data.defendant.name}
-         Documento: ${data.defendant.doc}
-         Qualificação/Endereço: ${data.defendant.qualification}, ${data.defendant.address}
+      3. POLO PASSIVO (Pluralize se houver mais de um):
+         ${defendantsText}
          
       4. DOS FATOS:
          ${data.facts}
@@ -134,17 +163,17 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
       INSTRUÇÕES DE REDAÇÃO:
       - Use linguagem jurídica culta, persuasiva e técnica.
+      - Se houver múltiplos autores ou réus, faça a concordância correta (ex: "vêm", "os Autores", "em face dos Réus").
       - Cite legislação pertinente (Código Civil, CPC, CLT, Constituição, etc.) e doutrina se aplicável.
       - Estruture em: I - DOS FATOS, II - DO DIREITO/FUNDAMENTAÇÃO, III - DOS PEDIDOS.
       - Formate a saída em Markdown limpo (headers, bold, listas).
     `;
 
-    // Using gemini-3-pro-preview for complex reasoning and legal drafting
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
-        temperature: 0.4, // Lower temperature for more formal/consistent output
+        temperature: 0.4,
         topP: 0.8,
         topK: 40,
       }
@@ -154,8 +183,7 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    // Fallback if API fails (e.g., quota exceeded)
-    throw new Error("Falha na comunicação com a IA Jurídica. Verifique sua conexão ou tente mais tarde.");
+    throw new Error("Falha na comunicação com a IA Jurídica.");
   }
 };
 
@@ -172,7 +200,7 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
       Área: ${data.area}
       Fatos resumidos: ${data.facts}
       
-      Retorne a Competência (órgão julgador sugerido), a Classe Judicial e o Assunto Principal.
+      Retorne a Competência, a Classe Judicial e o Assunto Principal.
     `;
 
     const response = await ai.models.generateContent({
@@ -183,16 +211,15 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            competence: { type: Type.STRING, description: "Sugestão de competência/vara (ex: Vara Cível, Juizado Especial)" },
-            class: { type: Type.STRING, description: "Classe processual CNJ (ex: Procedimento Comum Cível)" },
-            subject: { type: Type.STRING, description: "Assunto principal CNJ (ex: Indenização por Dano Moral)" }
+            competence: { type: Type.STRING },
+            class: { type: Type.STRING },
+            subject: { type: Type.STRING }
           },
           required: ["competence", "class", "subject"]
         }
       }
     });
     
-    // Parse JSON
     const jsonStr = response.text || "{}";
     const result = JSON.parse(jsonStr);
     
@@ -217,46 +244,46 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
     const prompt = `
       Atue como um advogado sênior revisando uma peça jurídica.
       
-      TEXTO ORIGINAL DA PETIÇÃO:
+      TEXTO ORIGINAL:
       ---
       ${currentContent}
       ---
 
-      SOLICITAÇÃO DE ALTERAÇÃO DO ADVOGADO:
+      SOLICITAÇÃO DE ALTERAÇÃO:
       "${instructions}"
 
       TAREFA:
-      1. Reescreva a petição mantendo a estrutura original, mas incorporando as alterações solicitadas.
-      2. Mantenha o tom formal e técnico.
-      3. Se a solicitação for para adicionar um pedido ou fato, insira-o na seção logicamente correta (Fatos, Direito ou Pedidos).
-      4. Retorne APENAS o texto completo da petição atualizada, sem comentários adicionais.
+      1. Reescreva a petição mantendo a estrutura original.
+      2. Incorpore as alterações solicitadas.
+      3. Retorne APENAS o texto completo da petição atualizada.
     `;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: prompt,
-      config: {
-        temperature: 0.3,
-      }
+      config: { temperature: 0.3 }
     });
 
     return response.text || currentContent;
   } catch (error) {
     console.error("Error refining petition:", error);
-    throw new Error("Não foi possível refinar a petição no momento.");
+    throw new Error("Não foi possível refinar a petição.");
   }
 };
 
-// Fallback Mock for when API Key is not present in demo environment
+// Fallback Mock
 const mockGeneration = (data: PetitionFormData) => {
+  const authorNames = data.plaintiffs.map(p => p.name.toUpperCase()).join(', ');
+  const defNames = data.defendants.map(d => d.name.toUpperCase()).join(', ');
+
   return `
 # EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DA COMARCA DE ${data.jurisdiction.toUpperCase()}
 
-**${data.plaintiff.name.toUpperCase()}**, inscrito(a) no CPF/CNPJ sob nº ${data.plaintiff.doc}, residente e domiciliado(a) em ${data.plaintiff.address}, vem, respeitosamente, à presença de Vossa Excelência, propor a presente
+**${authorNames}**, qualificados nos autos, vêm, respeitosamente, à presença de Vossa Excelência, propor a presente
 
 ## ${data.actionType.toUpperCase()}
 
-em face de **${data.defendant.name.toUpperCase()}**, inscrito(a) no CPF/CNPJ sob nº ${data.defendant.doc}, pelos fatos e fundamentos a seguir expostos:
+em face de **${defNames}**, pelos fatos e fundamentos a seguir expostos:
 
 ### I - DOS FATOS
 
@@ -264,20 +291,9 @@ ${data.facts}
 
 ### II - DO DIREITO
 
-A pretensão da parte Autora encontra amparo legal no ordenamento jurídico pátrio...
-*(A IA expandiria aqui com fundamentação baseada na área ${data.area})*
+(Mock de Fundamentação...)
 
 ### III - DOS PEDIDOS
-
-Diante do exposto, requer a Vossa Excelência:
-
-${data.requests.map(r => `- A procedência do pedido para condenar o Réu a ${r}`).join('\n')}
-- A citação do Réu para, querendo, contestar a presente ação;
-- A condenação do Réu ao pagamento de custas e honorários advocatícios.
-
-Protesta provar o alegado por todos os meios de prova em direito admitidos, especialmente ${data.evidence}.
-
-Dá-se à causa o valor de ${data.value}.
 
 Nestes termos,
 Pede deferimento.
@@ -286,7 +302,6 @@ ${data.jurisdiction}, ${new Date().toLocaleDateString('pt-BR')}.
 
 _____________________________
 ADVOGADO(A)
-OAB/UF
   `;
 };
 
@@ -299,5 +314,5 @@ const mockMetadata = (data: PetitionFormData): PetitionFilingMetadata => {
 };
 
 const mockRefinement = (content: string, instructions: string) => {
-  return content + `\n\n[ADICIONADO PELA IA (MOCK) - INSTRUÇÃO: "${instructions}"]\n\n(Aqui a IA reescreveria o texto integrando a solicitação de forma orgânica ao documento)`;
+  return content + `\n\n[MOCK REFINEMENT: "${instructions}"]`;
 };

@@ -13,7 +13,9 @@ import {
   Calendar,
   ChevronRight,
   Clock,
-  Bell
+  Bell,
+  Flame,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from './ui/Button';
 
@@ -55,7 +57,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
           .eq('status', 'pending')
           .gte('due_date', today)
           .order('due_date', { ascending: true })
-          .limit(3);
+          .limit(5); // Increased limit slightly
 
         setRecentPetitions((petData as Petition[]) || []);
         setUpcomingDeadlines((deadlineData as Deadline[]) || []);
@@ -160,28 +162,60 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
 
             {/* Upcoming Deadlines Widget */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
-                <div className="px-6 py-4 border-b border-gray-200 bg-orange-50 rounded-t-xl flex justify-between items-center">
-                    <h3 className="font-semibold text-orange-900 flex items-center gap-2">
-                        <AlertCircle size={18} /> Próximos Prazos
+                <div className="px-6 py-4 border-b border-gray-200 bg-white rounded-t-xl flex justify-between items-center">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <AlertCircle size={18} className="text-gray-500" /> Próximos Prazos
                     </h3>
                 </div>
                 <div className="p-0">
                     {upcomingDeadlines.length > 0 ? (
                         <div className="divide-y divide-gray-100">
-                            {upcomingDeadlines.map(d => (
-                                <div key={d.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
-                                    <div>
-                                        <p className="font-medium text-gray-800 text-sm truncate max-w-[180px]">{d.title}</p>
-                                        <p className="text-xs text-orange-600 font-medium flex items-center gap-1 mt-1">
-                                            <Calendar size={10} /> 
-                                            {new Date(d.due_date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}
-                                        </p>
+                            {upcomingDeadlines.map(d => {
+                                // Logic shared with DeadlineManager
+                                const today = new Date();
+                                today.setHours(0,0,0,0);
+                                const due = new Date(d.due_date);
+                                due.setHours(0,0,0,0);
+                                const diffTime = due.getTime() - today.getTime();
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                
+                                let containerClass = "hover:bg-gray-50 bg-white";
+                                let textClass = "text-gray-800";
+                                let dateClass = "text-gray-500";
+                                let badge = <span className="bg-gray-100 text-gray-600 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">NO PRAZO</span>;
+
+                                if (diffDays < 0) {
+                                    containerClass = "bg-red-50 hover:bg-red-100";
+                                    textClass = "text-red-800 font-bold";
+                                    dateClass = "text-red-600 font-medium";
+                                    badge = <span className="bg-red-200 text-red-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1"><AlertTriangle size={10} /> VENCIDO</span>;
+                                } else if (diffDays <= 2) {
+                                    containerClass = "bg-red-50 hover:bg-red-100 border-l-4 border-red-500";
+                                    textClass = "text-red-800 font-bold";
+                                    dateClass = "text-red-700 font-medium";
+                                    badge = <span className="bg-white border border-red-200 text-red-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1"><Flame size={10} className="fill-red-600" /> URGENTE</span>;
+                                } else if (diffDays <= 5) {
+                                    containerClass = "bg-amber-50 hover:bg-amber-100";
+                                    textClass = "text-amber-900 font-medium";
+                                    dateClass = "text-amber-700";
+                                    badge = <span className="bg-white border border-amber-200 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">ATENÇÃO</span>;
+                                }
+
+                                return (
+                                    <div key={d.id} className={`p-4 flex justify-between items-center transition-colors ${containerClass}`}>
+                                        <div>
+                                            <p className={`text-sm truncate max-w-[180px] ${textClass}`}>{d.title}</p>
+                                            <p className={`text-xs flex items-center gap-1 mt-1 ${dateClass}`}>
+                                                <Calendar size={10} /> 
+                                                {new Date(d.due_date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            {badge}
+                                        </div>
                                     </div>
-                                    <div className="text-xs text-gray-400 flex flex-col items-end">
-                                        <span className="bg-orange-100 text-orange-800 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">PENDENTE</span>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="p-6 text-center text-gray-400 text-sm">

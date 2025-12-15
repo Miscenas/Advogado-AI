@@ -214,56 +214,48 @@ if (isConfigured) {
     from: (table: string) => {
       return {
         select: (columns = '*') => {
-          return {
-            eq: (column: string, value: any) => {
-              const chain = {
-                single: async () => {
-                   await new Promise(resolve => setTimeout(resolve, 300));
-                   if (table === 'profiles') {
-                       const p = getProfile(value);
-                       return { data: p, error: p ? null : { message: 'Not found', code: 'PGRST116' } };
-                   }
-                   if (table === 'usage_limits') return { data: { ...mockUsage, used_this_month: mockPetitions.length }, error: null };
-                   return { data: null, error: { message: 'Not found', code: 'PGRST116' } };
-                },
-                order: (col: string, { ascending }: any) => {
-                   let dataResult = [];
-                   if (table === 'petitions') dataResult = [...mockPetitions].sort((a,b) => b.created_at.localeCompare(a.created_at));
-                   if (table === 'deadlines') dataResult = [...mockDeadlines].sort((a,b) => a.due_date.localeCompare(b.due_date));
-                   
-                   return {
-                     data: dataResult,
-                     error: null
-                   }
-                },
-                then: (resolve: any) => {
-                   if (table === 'petitions') resolve({ data: mockPetitions.filter(p => p[column] === value), error: null });
-                   else if (table === 'deadlines') resolve({ data: mockDeadlines.filter(p => p[column] === value), error: null });
-                   else resolve({ data: [], error: null });
-                }
-              };
-              return chain;
-            },
-            // Logic for "Select All" (e.g. Admin listing profiles)
-            order: (col: string, { ascending }: any) => {
-                 return {
-                     then: (resolve: any) => {
-                         if (table === 'profiles') {
-                             resolve({ data: mockProfiles, error: null });
-                         } else if (table === 'deadlines') {
-                             const sorted = [...mockDeadlines].sort((a, b) => {
-                                 const valA = new Date(a[col]).getTime();
-                                 const valB = new Date(b[col]).getTime();
-                                 return ascending ? valA - valB : valB - valA;
-                             });
-                             resolve({ data: sorted, error: null });
-                         } else {
-                             resolve({ data: [], error: null });
-                         }
-                     }
-                 }
-            }
-          };
+          // Determine initial dataset
+          let initialData: any[] = [];
+          if (table === 'petitions') initialData = mockPetitions;
+          else if (table === 'deadlines') initialData = mockDeadlines;
+          else if (table === 'profiles') initialData = mockProfiles;
+          else if (table === 'usage_limits') initialData = [mockUsage];
+
+          // Chain Builder Pattern
+          const createChain = (currentData: any[]) => ({
+             eq: (col: string, val: any) => {
+                return createChain(currentData.filter(x => x[col] === val));
+             },
+             gte: (col: string, val: any) => {
+                return createChain(currentData.filter(x => x[col] >= val));
+             },
+             order: (col: string, { ascending = true }: any) => {
+                const sorted = [...currentData].sort((a, b) => {
+                    const vA = a[col];
+                    const vB = b[col];
+                    if (typeof vA === 'string' && typeof vB === 'string') {
+                        return ascending ? vA.localeCompare(vB) : vB.localeCompare(vA);
+                    }
+                    if (vA < vB) return ascending ? -1 : 1;
+                    if (vA > vB) return ascending ? 1 : -1;
+                    return 0;
+                });
+                return createChain(sorted);
+             },
+             limit: (n: number) => {
+                return createChain(currentData.slice(0, n));
+             },
+             single: async () => {
+                await new Promise(r => setTimeout(r, 100));
+                if (currentData.length === 0) return { data: null, error: { code: 'PGRST116', message: 'Not found' } };
+                return { data: currentData[0], error: null };
+             },
+             then: (resolve: any) => {
+                resolve({ data: currentData, error: null });
+             }
+          });
+
+          return createChain(initialData);
         },
         update: (updates: any) => {
           return {
