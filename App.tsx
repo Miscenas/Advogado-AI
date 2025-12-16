@@ -9,7 +9,7 @@ import { PetitionList } from './components/PetitionList';
 import { AdminPanel } from './components/AdminPanel';
 import { UserProfileView } from './components/UserProfile';
 import { DeadlineManager } from './components/DeadlineManager';
-import { Lock } from 'lucide-react';
+import { Lock, Database, AlertTriangle } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
 const BlockedScreen = () => (
@@ -32,12 +32,13 @@ function App() {
     loading: true,
   });
   const [currentRoute, setCurrentRoute] = useState('dashboard');
+  const [dbError, setDbError] = useState(false);
 
   useEffect(() => {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthState((prev) => ({ ...prev, session, user: session?.user ?? null }));
-      if (session?.user) fetchData(session.user.id);
+      if (session?.user) fetchData(session.user.id, session.user);
       else setAuthState(prev => ({ ...prev, loading: false }));
     });
 
@@ -47,7 +48,7 @@ function App() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthState((prev) => ({ ...prev, session, user: session?.user ?? null }));
       if (session?.user) {
-        fetchData(session.user.id);
+        fetchData(session.user.id, session.user);
       } else {
         setAuthState(prev => ({ ...prev, profile: null, usage: null, loading: false }));
       }
@@ -56,18 +57,55 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchData = async (userId: string) => {
+  const fetchData = async (userId: string, userObject: any) => {
     setAuthState(prev => ({ ...prev, loading: true }));
+    setDbError(false);
+    
     try {
       // Fetch Profile
-      const { data: profileData, error: profileError } = await supabase
+      let { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error fetching profile:', profileError);
+      if (profileError) {
+        // Handle "Relation does not exist" (42P01) OR "Infinite Recursion" (42P17)
+        // 42P17 means the policies are broken and need the SQL script fix.
+        if (profileError.code === '42P01' || profileError.code === '42P17') {
+           console.error('Critical DB Error:', profileError.message);
+           setDbError(true);
+           setAuthState(prev => ({ ...prev, loading: false }));
+           return;
+        }
+
+        // Handle "No rows found" (Profile missing) - Auto-create self-healing
+        if (profileError.code === 'PGRST116') {
+             console.log('Profile not found. Attempting to create default profile...');
+             const { data: newProfile, error: createError } = await supabase
+                .from('profiles')
+                .insert([{
+                   id: userId,
+                   email: userObject.email,
+                   full_name: userObject.user_metadata?.full_name || 'Novo Usuário',
+                   role: 'user',
+                   account_status: 'trial'
+                }])
+                .select()
+                .single();
+             
+             if (!createError && newProfile) {
+                profileData = newProfile;
+                
+                // Initialize usage limit too
+                await supabase.from('usage_limits').insert([{ user_id: userId }]);
+             } else {
+                console.error('Error creating profile fallback:', createError);
+             }
+        } else {
+             // Log other errors clearly
+             console.error('Error fetching profile:', JSON.stringify(profileError, null, 2));
+        }
       }
 
       // Fetch Usage
@@ -78,7 +116,8 @@ function App() {
         .single();
 
       if (usageError && usageError.code !== 'PGRST116') {
-         console.error('Error fetching usage:', usageError);
+         // Don't alert on usage error, just log
+         console.warn('Error fetching usage:', usageError);
       }
 
       setAuthState(prev => ({
@@ -103,6 +142,40 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  if (dbError) {
+      return (
+          <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+              <div className="max-w-xl w-full bg-white rounded-xl shadow-xl p-8 border border-red-200">
+                  <div className="flex flex-col items-center text-center">
+                      <div className="bg-red-100 p-4 rounded-full mb-4">
+                          <Database size={48} className="text-red-600" />
+                      </div>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Configuração do Banco Necessária</h2>
+                      <p className="text-gray-600 mb-6">
+                          O sistema detectou um problema nas permissões ou tabelas do banco de dados (Erro de Recursão ou Tabela Faltante).
+                      </p>
+                      
+                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-left w-full mb-6">
+                          <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                              <AlertTriangle size={16} className="text-amber-500" /> Ação Necessária:
+                          </h4>
+                          <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2">
+                              <li>Acesse o <strong>SQL Editor</strong> no painel do Supabase.</li>
+                              <li>Copie o conteúdo atualizado do arquivo <code>SUPABASE_SETUP.sql</code>.</li>
+                              <li>Execute o script para corrigir as políticas de segurança.</li>
+                              <li>Recarregue esta página.</li>
+                          </ol>
+                      </div>
+
+                      <Button onClick={() => window.location.reload()}>
+                          Já executei o script, recarregar
+                      </Button>
+                  </div>
+              </div>
+          </div>
+      );
   }
 
   if (!authState.session) {
@@ -146,7 +219,7 @@ function App() {
             onCancel={() => setCurrentRoute('dashboard')}
             onSuccess={() => {
               // Refresh usage if needed, then navigate
-              if (authState.user) fetchData(authState.user.id);
+              if (authState.user) fetchData(authState.user.id, authState.user);
               setCurrentRoute('my-petitions');
             }}
           />

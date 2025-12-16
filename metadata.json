@@ -1,5 +1,7 @@
 {
   "name": "Advogado AI",
   "description": "Micro SaaS jurídico para geração de petições cíveis e trabalhistas com foco em produtividade para pequenos escritórios.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

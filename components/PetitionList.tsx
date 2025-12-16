@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Petition } from '../types';
-import { FileText, Calendar, ChevronRight, Copy, Search, Eye, CheckSquare, Square, Printer, FileBadge } from 'lucide-react';
+import saveAs from 'file-saver';
+import { FileText, Calendar, ChevronRight, Copy, Search, Eye, CheckSquare, Square, Printer, FileBadge, Download } from 'lucide-react';
 import { Button } from './ui/Button';
 
 interface PetitionListProps {
@@ -61,9 +62,55 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
     }
   };
 
+  const handleDownloadDoc = (content: string, title?: string) => {
+    if (!content) return;
+
+    const header = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' 
+            xmlns:w='urn:schemas-microsoft-com:office:word' 
+            xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <title>Petição</title>
+        <style>
+          body { 
+            font-family: 'Times New Roman', serif; 
+            font-size: 12pt; 
+            line-height: 1.5;
+          }
+          p { 
+            text-align: justify; 
+            text-indent: 3cm; 
+            margin-bottom: 12px; 
+          }
+          h1, h2, h3 { 
+            text-align: center; 
+            text-transform: uppercase; 
+            margin-top: 24px; 
+            margin-bottom: 12px; 
+            font-weight: bold;
+          }
+        </style>
+      </head><body>`;
+    
+    const footer = "</body></html>";
+    const sourceHTML = header + content + footer;
+
+    const blob = new Blob(['\ufeff', sourceHTML], {
+        type: 'application/msword'
+    });
+    
+    const safeTitle = title ? title.replace(/\s+/g, '_') : 'Peticao';
+    saveAs(blob, `${safeTitle}.doc`);
+  };
+
   const handleCopy = (content: string) => {
-    navigator.clipboard.writeText(content);
-    alert('Conteúdo copiado!');
+    // Basic copy
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+    const text = tempDiv.innerText; // Falls back to text copy if rich copy fails
+    navigator.clipboard.writeText(text);
+    alert('Conteúdo copiado! (Use visualizar para copiar com formatação)');
   };
 
   const handlePrint = (content: string) => {
@@ -78,25 +125,44 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Impressão - Advogado AI</title>
+          <title></title>
           <style>
+            /* Reset browser headers/footers via @page */
+            @page {
+              margin: 0;
+            }
+
             body { 
               font-family: 'Times New Roman', Times, serif; 
               font-size: 12pt;
               line-height: 1.5;
-              padding: 40px;
+              /* Manually set margins for the content */
+              margin: 2.5cm 2cm;
               color: #000;
             }
-            .content {
-              white-space: pre-wrap;
+
+            p {
+              text-align: justify;
+              text-indent: 3cm;
+              margin-bottom: 12px;
+            }
+            h1, h2, h3 {
+              text-align: center;
+              text-transform: uppercase;
+              margin-top: 24px;
+              margin-bottom: 12px;
+              font-weight: bold;
             }
             @media print {
-              body { padding: 0; margin: 2cm; }
+               /* Redundant check to ensure padding is 0 on the body itself inside print view */
+               body { padding: 0; }
             }
           </style>
         </head>
         <body>
-          <div class="content">${content}</div>
+          <div class="content">
+            ${content}
+          </div>
         </body>
       </html>
     `);
@@ -104,8 +170,6 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
     printWindow.focus();
     setTimeout(() => {
         printWindow.print();
-        // Alguns navegadores/usuários preferem que a janela não feche automaticamente
-        // printWindow.close();
     }, 500);
   };
 
@@ -135,11 +199,14 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
             <Button variant="outline" onClick={() => setSelectedPetition(null)} className="flex-1 sm:flex-none">
               Voltar
             </Button>
+            <Button variant="outline" onClick={() => handleDownloadDoc(selectedPetition.content, selectedPetition.action_type)} className="flex-1 sm:flex-none">
+              <Download size={16} className="mr-2" /> Baixar Word
+            </Button>
             <Button variant="outline" onClick={() => handlePrint(selectedPetition.content)} className="flex-1 sm:flex-none">
               <Printer size={16} className="mr-2" /> Imprimir
             </Button>
             <Button onClick={() => handleCopy(selectedPetition.content)} className="flex-1 sm:flex-none">
-              <Copy size={16} className="mr-2" /> Copiar
+              <Copy size={16} className="mr-2" /> Copiar Texto
             </Button>
           </div>
         </div>
@@ -177,9 +244,39 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
             {/* Main Content */}
             <div 
               id="petition-detail-content"
-              className={`${selectedPetition.analyzed_documents && selectedPetition.analyzed_documents.length > 0 ? 'lg:col-span-3' : 'lg:col-span-4'} p-8 overflow-y-auto bg-white font-serif whitespace-pre-wrap text-gray-800 leading-relaxed`}
+              className={`${selectedPetition.analyzed_documents && selectedPetition.analyzed_documents.length > 0 ? 'lg:col-span-3' : 'lg:col-span-4'} p-8 overflow-y-auto bg-gray-100`}
             >
-              {selectedPetition.content}
+              <div 
+                  className="bg-white shadow-lg mx-auto p-[2.5cm] max-w-[21cm] min-h-[800px]"
+                  style={{
+                      fontFamily: '"Times New Roman", Times, serif',
+                      fontSize: '12pt',
+                      lineHeight: '1.5',
+                      color: 'black'
+                  }}
+              >
+                  <style>{`
+                       #petition-detail-content p {
+                           text-align: justify;
+                           text-indent: 3cm;
+                           margin-bottom: 12px;
+                       }
+                       #petition-detail-content h3, #petition-detail-content h2 {
+                           text-align: center;
+                           text-transform: uppercase;
+                           margin-top: 24px;
+                           margin-bottom: 12px;
+                           font-weight: bold;
+                       }
+                  `}</style>
+
+                  {/* Detect HTML or fallback to text */}
+                  {selectedPetition.content.trim().startsWith('<') ? (
+                       <div dangerouslySetInnerHTML={{ __html: selectedPetition.content }} />
+                   ) : (
+                       <div className="whitespace-pre-wrap">{selectedPetition.content}</div>
+                   )}
+              </div>
             </div>
         </div>
       </div>

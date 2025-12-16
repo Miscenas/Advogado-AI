@@ -125,6 +125,37 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   }
 };
 
+export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
+  if (!ai) {
+    console.warn("API_KEY missing. Returning mock transcription.");
+    return "Transcrição simulada: O cliente relata que sofreu danos materiais...";
+  }
+
+  try {
+    const prompt = `
+      Você é um assistente jurídico. 
+      Transcreva o áudio anexo fielmente para texto. 
+      Se houver termos coloquiais, mantenha o sentido mas ajuste levemente para uma linguagem clara (sem gírias excessivas), pronta para ser usada como base de fatos em uma petição.
+      Retorne APENAS o texto transcrito.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          { inlineData: { mimeType: mimeType, data: base64Data } },
+          { text: prompt }
+        ]
+      }
+    });
+
+    return response.text || "";
+  } catch (error) {
+    console.error("Error transcribing audio:", error);
+    throw new Error("Falha na transcrição do áudio.");
+  }
+};
+
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
   if (!ai) {
     console.warn("API_KEY is missing. Using mock response for demonstration.");
@@ -139,35 +170,38 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
   try {
     const prompt = `
       Atue como um advogado sênior especialista em Direito ${data.area} no Brasil.
-      Redija uma petição inicial completa e formal para uma "${data.actionType}".
+      Redija uma petição inicial completa e formal.
+      
+      IMPORTANTE:
+      O usuário pode NÃO ter especificado o "Tipo da Ação" exato.
+      Se o campo "TIPO DE AÇÃO" abaixo estiver vazio, você DEVE deduzir a ação correta (ex: Ação de Cobrança, Indenizatória, Alimentos, etc.) baseando-se nos FATOS e PEDIDOS narrados.
       
       DADOS DO CASO:
-      1. EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA COMARCA DE ${data.jurisdiction}.
-      
-      2. POLO ATIVO (Pluralize se houver mais de um):
-         ${plaintiffsText}
-         
-      3. POLO PASSIVO (Pluralize se houver mais de um):
-         ${defendantsText}
-         
-      4. DOS FATOS:
-         ${data.facts}
-         
-      5. DOS PEDIDOS ESPECÍFICOS:
-         ${data.requests.join('; ')}
-         
-      6. DAS PROVAS:
-         ${data.evidence}
-         
-      7. VALOR DA CAUSA:
-         ${data.value}
+      1. JURISDIÇÃO: ${data.jurisdiction || '(Deixe espaço para preenchimento se não dedutível)'}.
+      2. TIPO DE AÇÃO (Input): ${data.actionType || 'NÃO ESPECIFICADO - DEDUZIR PELOS FATOS'}.
+      3. POLO ATIVO: ${plaintiffsText}
+      4. POLO PASSIVO: ${defendantsText}
+      5. FATOS: ${data.facts}
+      6. PEDIDOS: ${data.requests.join('; ')}
+      7. PROVAS: ${data.evidence}
+      8. VALOR: ${data.value}
 
-      INSTRUÇÕES DE REDAÇÃO:
-      - Use linguagem jurídica culta, persuasiva e técnica.
-      - Se houver múltiplos autores ou réus, faça a concordância correta (ex: "vêm", "os Autores", "em face dos Réus").
-      - Cite legislação pertinente (Código Civil, CPC, CLT, Constituição, etc.) e doutrina se aplicável.
-      - Estruture em: I - DOS FATOS, II - DO DIREITO/FUNDAMENTAÇÃO, III - DOS PEDIDOS.
-      - Formate a saída em Markdown limpo (headers, bold, listas).
+      INSTRUÇÕES DE FORMATAÇÃO E ESTILO (PADRÃO WORD/JURÍDICO):
+      - Retorne a resposta EXCLUSIVAMENTE em HTML (sem tags de markdown como \`\`\`html).
+      - Use a tag <h3> com style="text-align: center; text-transform: uppercase;" para o Endereçamento e para os Títulos das Seções (DOS FATOS, DO DIREITO, etc).
+      - Use a tag <p> para todos os parágrafos de texto.
+      - Use a tag <b> para negritos (nomes das partes, destaques).
+      - NÃO use listas com marcadores (bullet points) para a narrativa. Use texto corrido.
+      - O Endereçamento deve ser em CAIXA ALTA e centralizado.
+      - A qualificação das partes deve ser um parágrafo único e formal.
+      - A estrutura deve ser: ENDEREÇAMENTO -> QUALIFICAÇÃO -> DOS FATOS -> DO DIREITO -> DOS PEDIDOS -> FECHAMENTO.
+      
+      Exemplo de estrutura HTML desejada:
+      <h3 style="text-align: center; text-transform: uppercase;">EXCELENTÍSSIMO...</h3>
+      <br>
+      <p><b>NOME DO AUTOR</b>, nacionalidade...</p>
+      <h3 style="text-align: center; text-transform: uppercase;">AÇÃO DE ...</h3>
+      ...
     `;
 
     // Using gemini-2.5-flash instead of pro-preview for better key compatibility
@@ -181,14 +215,15 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
       }
     });
 
-    return response.text || "Erro ao gerar conteúdo. Tente novamente.";
+    let text = response.text || "Erro ao gerar conteúdo.";
+    // Clean up if the model adds markdown code blocks despite instructions
+    text = text.replace(/```html/g, '').replace(/```/g, '');
+    return text;
 
   } catch (error: any) {
     console.error("Error calling Gemini API:", error);
-    
-    // Fallback to mock if API fails to avoid breaking user flow entirely in demo
     console.warn("Fallback to Mock generation due to API error.");
-    return mockGeneration(data) + "\n\n**[Nota: Gerado em modo offline devido a erro de conexão com a IA]**";
+    return mockGeneration(data) + "<br><br><p><b>[Nota: Gerado em modo offline devido a erro de conexão com a IA]</b></p>";
   }
 };
 
@@ -201,7 +236,9 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
     const prompt = `
       Analise os dados desta petição e sugira o preenchimento dos metadados para cadastro no sistema de processo eletrônico (PJe / e-SAJ / Projudi) conforme as Tabelas Processuais Unificadas (TPU) do CNJ.
       
-      Ação: ${data.actionType}
+      Se a Ação não estiver explícita, deduza pelos fatos.
+
+      Ação/Input: ${data.actionType}
       Área: ${data.area}
       Fatos resumidos: ${data.facts}
       
@@ -247,20 +284,18 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
 
   try {
     const prompt = `
-      Atue como um advogado sênior revisando uma peça jurídica.
+      Atue como um advogado sênior revisando uma peça jurídica (HTML).
       
-      TEXTO ORIGINAL:
-      ---
+      CONTEÚDO ORIGINAL (HTML):
       ${currentContent}
-      ---
 
       SOLICITAÇÃO DE ALTERAÇÃO:
       "${instructions}"
 
       TAREFA:
-      1. Reescreva a petição mantendo a estrutura original.
+      1. Reescreva a petição mantendo a formatação HTML (h3 centralizado, p, b).
       2. Incorpore as alterações solicitadas.
-      3. Retorne APENAS o texto completo da petição atualizada.
+      3. Retorne APENAS o HTML completo.
     `;
 
     const response = await ai.models.generateContent({
@@ -269,44 +304,46 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
       config: { temperature: 0.3 }
     });
 
-    return response.text || currentContent;
+    let text = response.text || currentContent;
+    text = text.replace(/```html/g, '').replace(/```/g, '');
+    return text;
+
   } catch (error) {
     console.error("Error refining petition:", error);
     throw new Error("Não foi possível refinar a petição.");
   }
 };
 
-// Fallback Mock
+// Fallback Mock with HTML
 const mockGeneration = (data: PetitionFormData) => {
   const authorNames = data.plaintiffs.map(p => p.name.toUpperCase()).join(', ');
   const defNames = data.defendants.map(d => d.name.toUpperCase()).join(', ');
 
   return `
-# EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DA COMARCA DE ${data.jurisdiction.toUpperCase() || '...'}
-
-**${authorNames || 'NOME DO AUTOR'}**, qualificados nos autos, vêm, respeitosamente, à presença de Vossa Excelência, propor a presente
-
-## ${data.actionType.toUpperCase() || 'AÇÃO'}
-
-em face de **${defNames || 'NOME DO RÉU'}**, pelos fatos e fundamentos a seguir expostos:
-
-### I - DOS FATOS
-
-${data.facts || 'Descreva os fatos aqui...'}
-
-### II - DO DIREITO
-
-(Fundamentação jurídica gerada automaticamente...)
-
-### III - DOS PEDIDOS
-
-Nestes termos,
-Pede deferimento.
-
-${data.jurisdiction || 'Local'}, ${new Date().toLocaleDateString('pt-BR')}.
-
-_____________________________
-ADVOGADO(A)
+<h3 style="text-align: center; text-transform: uppercase;">EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DA COMARCA DE ${data.jurisdiction?.toUpperCase() || '...'}</h3>
+<br>
+<br>
+<p><b>${authorNames || 'NOME DO AUTOR'}</b>, qualificados nos autos, vêm, respeitosamente, à presença de Vossa Excelência, propor a presente</p>
+<br>
+<h3 style="text-align: center; text-transform: uppercase;">${data.actionType?.toUpperCase() || 'AÇÃO'}</h3>
+<br>
+<p>em face de <b>${defNames || 'NOME DO RÉU'}</b>, pelos fatos e fundamentos a seguir expostos:</p>
+<br>
+<h3 style="text-align: center; text-transform: uppercase;">I - DOS FATOS</h3>
+<p>${data.facts || 'Descreva os fatos aqui...'}</p>
+<br>
+<h3 style="text-align: center; text-transform: uppercase;">II - DO DIREITO</h3>
+<p>(Fundamentação jurídica gerada automaticamente...)</p>
+<br>
+<h3 style="text-align: center; text-transform: uppercase;">III - DOS PEDIDOS</h3>
+<p>Nestes termos,</p>
+<p>Pede deferimento.</p>
+<br>
+<p>${data.jurisdiction || 'Local'}, ${new Date().toLocaleDateString('pt-BR')}.</p>
+<br>
+<br>
+<p>_____________________________</p>
+<p>ADVOGADO(A)</p>
   `;
 };
 
@@ -319,5 +356,5 @@ const mockMetadata = (data: PetitionFormData): PetitionFilingMetadata => {
 };
 
 const mockRefinement = (content: string, instructions: string) => {
-  return content + `\n\n[MOCK REFINEMENT: "${instructions}"]`;
+  return content + `<br><p style="color: red;">[MOCK REFINEMENT: "${instructions}"]</p>`;
 };

@@ -113,7 +113,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
         </div>
         <Button onClick={onNewPetition} className="gap-2 shadow-lg shadow-sky-900/20">
           <Zap size={18} />
-          Nova Petição Inteligente
+          Criar Petição
         </Button>
       </div>
 

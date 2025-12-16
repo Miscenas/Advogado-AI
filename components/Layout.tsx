@@ -59,7 +59,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const navItems = [
     { id: 'dashboard', label: 'Painel do Advogado', icon: LayoutDashboard },
-    { id: 'new-petition', label: 'Nova Petição', icon: FileText },
+    { id: 'new-petition', label: 'Criar Petição', icon: FileText },
     { id: 'my-petitions', label: 'Minhas Petições', icon: Files },
     { id: 'deadlines', label: 'Prazos & Agenda', icon: CalendarDays },
     { id: 'profile', label: 'Perfil & Senha', icon: User },
