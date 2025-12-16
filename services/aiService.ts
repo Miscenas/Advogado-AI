@@ -1,9 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
-// Inicializa o cliente AI diretamente com a chave de ambiente, conforme diretrizes.
-// Assume-se que process.env.API_KEY está configurada no ambiente de build/execução.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper to safely get the API Key without crashing if process is undefined (Browser/Vite)
+const getApiKey = (): string => {
+  try {
+    // Check if process.env exists (Node/Webpack/Some Vite setups)
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.API_KEY || '';
+    }
+  } catch (e) {
+    // Ignore reference errors
+  }
+  return '';
+};
+
+// Initialize AI client with safe key access
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
   docType: string;
@@ -93,10 +105,9 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
 
   } catch (error) {
     console.error("Error extracting document data:", error);
-    // Em caso de erro real, retornamos um objeto vazio ou erro, mas não um mock confuso.
     return {
       docType: "Erro na Leitura",
-      summary: "Falha ao processar o documento. Verifique se a chave de API está configurada corretamente.",
+      summary: "Falha ao processar o documento. Verifique a chave de API.",
       extractedData: {}
     };
   }
@@ -183,7 +194,6 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
   } catch (error: any) {
     console.error("Error calling Gemini API:", error);
-    // Fallback de erro visual para o usuário
     return mockGeneration(data) + "<br><br><p style='color:red; text-align:center;'><b>[Erro: Falha na conexão com a IA. Verifique sua chave de API.]</b></p>";
   }
 };
@@ -193,7 +203,6 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
   const plaintiffsText = data.plaintiffs.map((p, i) => `AUTOR (Adverso): ${formatParty(p)}`).join('\n');
   const defendantsText = data.defendants.map((d, i) => `RÉU (Meu Cliente): ${formatParty(d)}`).join('\n');
 
-  // Prepare context from uploaded document if exists
   let documentContext = "";
   if (data.analyzedDocuments && data.analyzedDocuments.length > 0) {
       documentContext = `
@@ -346,7 +355,7 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
   }
 };
 
-// Fallback Mock with HTML (Mantido apenas para uso nos catch blocks)
+// Fallback Mock with HTML
 const mockGeneration = (data: PetitionFormData) => {
   const authorNames = data.plaintiffs.map(p => p.name.toUpperCase()).join(', ');
   const defNames = data.defendants.map(d => d.name.toUpperCase()).join(', ');
