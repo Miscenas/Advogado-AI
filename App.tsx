@@ -10,8 +10,11 @@ import { PetitionList } from './components/PetitionList';
 import { AdminPanel } from './components/AdminPanel';
 import { UserProfileView } from './components/UserProfile';
 import { DeadlineManager } from './components/DeadlineManager';
-import { Lock, Database, AlertTriangle } from 'lucide-react';
+import { Lock, Database, AlertTriangle, FileCode } from 'lucide-react';
 import { Button } from './components/ui/Button';
+
+// Setup file content needs to be fetched or hardcoded for display if file system access isn't available in browser
+// For this view, we will instruct the user to open the file.
 
 const BlockedScreen = () => (
     <div className="max-w-2xl mx-auto mt-8">
@@ -153,28 +156,30 @@ function App() {
                       <div className="bg-red-100 p-4 rounded-full mb-4">
                           <Database size={48} className="text-red-600" />
                       </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Configuração do Banco Necessária</h2>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Correção do Banco de Dados Necessária</h2>
                       <p className="text-gray-600 mb-6">
-                          O sistema detectou um problema crítico nas permissões do banco de dados.<br/>
-                          <span className="text-xs text-red-500 font-mono bg-red-50 px-2 py-1 rounded mt-2 inline-block">
-                              Erro: {dbError.code} - {dbError.message}
-                          </span>
+                          O sistema identificou um conflito nas políticas de segurança do Supabase (Erro {dbError.code}).
+                          Isso ocorre geralmente quando as permissões entram em loop infinito.
                       </p>
                       
-                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-left w-full mb-6">
-                          <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                              <AlertTriangle size={16} className="text-amber-500" /> Ação Necessária:
+                      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200 text-left w-full mb-6">
+                          <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                              <AlertTriangle size={18} className="text-amber-500" /> Como corrigir agora:
                           </h4>
-                          <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2">
-                              <li>Acesse o <strong>SQL Editor</strong> no painel do Supabase.</li>
-                              <li>Copie o conteúdo atualizado do arquivo <code>SUPABASE_SETUP.sql</code> (já disponível no código).</li>
-                              <li>Execute o script para criar as tabelas e corrigir o loop infinito nas políticas.</li>
-                              <li>Clique no botão abaixo para recarregar.</li>
+                          <ol className="list-decimal list-inside text-sm text-gray-700 space-y-3">
+                              <li>Abra o arquivo <strong className="font-mono text-juris-700 bg-juris-50 px-1 rounded">SUPABASE_SETUP.sql</strong> que está na raiz do projeto.</li>
+                              <li>Copie todo o código SQL contido nele.</li>
+                              <li>Vá até o painel do seu projeto no Supabase &rarr; <strong>SQL Editor</strong>.</li>
+                              <li>Cole o código e clique em <strong>RUN</strong>.</li>
                           </ol>
+                          <div className="mt-4 flex items-center gap-2 text-xs text-gray-500 bg-white p-2 rounded border border-gray-100">
+                             <FileCode size={14} />
+                             <span>O arquivo contém a função <code>is_admin()</code> que corrige o erro 42P17.</span>
+                          </div>
                       </div>
 
-                      <Button onClick={() => window.location.reload()}>
-                          Já executei o script, recarregar
+                      <Button onClick={() => window.location.reload()} className="w-full">
+                          Já executei o script, Tentar Novamente
                       </Button>
                   </div>
               </div>
