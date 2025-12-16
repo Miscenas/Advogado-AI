@@ -13,7 +13,8 @@ import {
   Wifi,
   WifiOff,
   Settings,
-  Database
+  Database,
+  ShieldAlert
 } from 'lucide-react';
 import { supabase, isLive, updateConnection, disconnectCustom } from '../services/supabaseClient';
 import { Button } from './ui/Button';
@@ -60,6 +61,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const navItems = [
     { id: 'dashboard', label: 'Painel do Advogado', icon: LayoutDashboard },
     { id: 'new-petition', label: 'Criar Petição', icon: FileText },
+    { id: 'new-defense', label: 'Criar Contestação', icon: ShieldAlert }, // Added New Defense
     { id: 'my-petitions', label: 'Minhas Petições', icon: Files },
     { id: 'deadlines', label: 'Prazos & Agenda', icon: CalendarDays },
     { id: 'profile', label: 'Perfil & Senha', icon: User },

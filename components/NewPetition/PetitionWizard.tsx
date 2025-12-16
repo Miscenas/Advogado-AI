@@ -30,7 +30,12 @@ import {
   Mic,
   MicOff,
   Download,
-  FileAudio
+  FileAudio,
+  Maximize2,
+  Minimize2,
+  ArrowLeft,
+  Info,
+  Edit3
 } from 'lucide-react';
 import { generateLegalPetition, refineLegalPetition, suggestFilingMetadata, extractDataFromDocument, transcribeAudio } from '../../services/aiService';
 
@@ -70,6 +75,10 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const [generatedContent, setGeneratedContent] = useState<string | null>(null);
   const [filingSuggestions, setFilingSuggestions] = useState<PetitionFilingMetadata | null>(null);
   
+  // Full Screen State
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
   // Document Upload State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -98,14 +107,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     if (mode === 'upload') {
       return [
         { id: 1, title: 'Upload & Análise', icon: Upload },
-        { id: 2, title: 'Dados Iniciais', icon: User }, // Renamed from Revisão Partes
+        { id: 2, title: 'Dados Iniciais', icon: User }, 
         { id: 3, title: 'Revisão Fatos', icon: FileText },
         { id: 4, title: 'Pedidos', icon: Gavel },
         { id: 5, title: 'Gerar Petição', icon: Sparkles },
       ];
     }
-    // Scratch Mode: Adjusted flow
-    // 1. Dados Iniciais (Parties) -> 2. Fatos -> 3. Pedidos -> 4. Gerar
+    // Scratch Mode
     return [
       { id: 1, title: 'Dados Iniciais', icon: User }, 
       { id: 2, title: 'Fatos', icon: FileText },
@@ -126,6 +134,15 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     };
   }, []);
   
+  // Sync content for editable div
+  useEffect(() => {
+    if (isFullScreen && contentRef.current && generatedContent) {
+        if (contentRef.current.innerHTML !== generatedContent) {
+            contentRef.current.innerHTML = generatedContent;
+        }
+    }
+  }, [isFullScreen, generatedContent]);
+
   // Helpers
   const handleInputChange = (field: keyof PetitionFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -159,33 +176,23 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     const file = files[0];
-
-    // VALIDATION: Max size 10MB
     if (file.size > 10 * 1024 * 1024) {
         alert("O arquivo é muito grande. O limite máximo para análise é 10MB.");
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
     }
-
     setIsExtracting(true);
     setUploadSuccess(false);
-
     try {
         const reader = new FileReader();
-        
         reader.onload = async (event) => {
             const base64String = event.target?.result as string;
             const base64Data = base64String.split(',')[1];
-            
-            // Call AI
             const analysis = await extractDataFromDocument(base64Data, file.type);
-            
             setFormData(prev => {
               const newPlaintiffs = analysis.extractedData.plaintiffs?.map((p: any) => ({...p, id: Math.random().toString()})) || [];
               const newDefendants = analysis.extractedData.defendants?.map((p: any) => ({...p, id: Math.random().toString()})) || [];
-
               return {
                 ...prev,
                 area: prev.area === 'civel' && analysis.extractedData.area ? analysis.extractedData.area : prev.area,
@@ -228,38 +235,26 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const handleAudioFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     const file = files[0];
     if (file.size > 25 * 1024 * 1024) {
         alert("Arquivo de áudio muito grande. Máximo 25MB.");
         return;
     }
-
     setIsTranscribing(true);
     try {
         const reader = new FileReader();
         reader.onload = async (event) => {
             const base64String = event.target?.result as string;
             const base64Data = base64String.split(',')[1];
-            
             const text = await transcribeAudio(base64Data, file.type);
-            
             if (transcriptionTarget === 'facts') {
-                setFormData(prev => ({
-                    ...prev,
-                    facts: prev.facts + (prev.facts ? '\n\n' : '') + text
-                }));
+                setFormData(prev => ({ ...prev, facts: prev.facts + (prev.facts ? '\n\n' : '') + text }));
             } else if (transcriptionTarget === 'requests') {
-                const currentRequests = prev => prev.requests.join('\n');
                 const newRequests = formData.requests.join('\n') + (formData.requests.length ? '\n' : '') + text;
-                setFormData(prev => ({
-                    ...prev,
-                    requests: newRequests.split('\n')
-                }));
+                setFormData(prev => ({ ...prev, requests: newRequests.split('\n') }));
             } else if (transcriptionTarget === 'refinement') {
                 setRefinementText(prev => prev + (prev ? ' ' : '') + text);
             }
-            
             setIsTranscribing(false);
         };
         reader.readAsDataURL(file);
@@ -270,85 +265,57 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     }
   };
 
-  // --- Dictation Handlers ---
-
   const toggleRecording = (target: 'facts' | 'requests' | 'refinement') => {
-    // Check if a field dictation is active and stop it
     if (activeDictationField) {
         recognitionRef.current?.stop();
         setActiveDictationField(null);
     }
-
     if (isListening && listeningTarget === target) {
       recognitionRef.current?.stop();
       setIsListening(false);
       return;
     }
-
     setListeningTarget(target);
     startRecognition((text) => {
         if (target === 'facts') {
-            setFormData(prev => ({
-                ...prev,
-                facts: prev.facts + (prev.facts ? ' ' : '') + text
-            }));
+            setFormData(prev => ({ ...prev, facts: prev.facts + (prev.facts ? ' ' : '') + text }));
         } else if (target === 'requests') {
              const currentText = formData.requests.join('\n');
              const newText = currentText + (currentText ? ' ' : '') + text;
-             setFormData(prev => ({
-                ...prev,
-                requests: newText.split('\n')
-             }));
+             setFormData(prev => ({ ...prev, requests: newText.split('\n') }));
         } else if (target === 'refinement') {
             setRefinementText(prev => prev + (prev ? ' ' : '') + text);
         }
-    }, () => {
-        setIsListening(true);
-    }, () => {
-        setIsListening(false);
-    });
+    }, () => { setIsListening(true); }, () => { setIsListening(false); });
   };
 
   const toggleFieldDictation = (type: 'plaintiffs' | 'defendants', id: string, field: keyof PetitionParty) => {
       const dictationKey = `${type}-${id}-${field}`;
-
-      // If clicking same button, stop recording
       if (activeDictationField === dictationKey) {
           recognitionRef.current?.stop();
           setActiveDictationField(null);
           return;
       }
-
-      // Stop any main area dictation
       if (isListening) {
           recognitionRef.current?.stop();
           setIsListening(false);
       }
-
-      // Stop any other field dictation (implicitly handled by startRecognition overriding ref)
       if (recognitionRef.current) {
           recognitionRef.current.stop();
       }
-
       setActiveDictationField(dictationKey);
-
       startRecognition((text) => {
           setFormData(prev => {
               const list = prev[type];
               const partyIndex = list.findIndex(p => p.id === id);
               if (partyIndex === -1) return prev;
-
               const currentVal = list[partyIndex][field] || '';
               const newVal = currentVal + (currentVal ? ' ' : '') + text;
-
               const newList = [...list];
               newList[partyIndex] = { ...newList[partyIndex], [field]: newVal };
-
               return { ...prev, [type]: newList };
           });
-      }, () => {}, () => {
-          setActiveDictationField(null);
-      });
+      }, () => {}, () => { setActiveDictationField(null); });
   };
 
   const startRecognition = (onResult: (text: string) => void, onStart?: () => void, onEnd?: () => void) => {
@@ -357,37 +324,20 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       alert("Seu navegador não suporta reconhecimento de voz.");
       return;
     }
-
     const recognition = new SpeechRecognition();
     recognition.lang = 'pt-BR';
     recognition.continuous = true;
     recognition.interimResults = true;
-
-    recognition.onstart = () => {
-        if (onStart) onStart();
-    };
-
+    recognition.onstart = () => { if (onStart) onStart(); };
     recognition.onresult = (event: any) => {
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        }
+        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
       }
-      if (finalTranscript) {
-          onResult(finalTranscript);
-      }
+      if (finalTranscript) onResult(finalTranscript);
     };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
-      if (onEnd) onEnd();
-    };
-
-    recognition.onend = () => {
-      if (onEnd) onEnd();
-    };
-
+    recognition.onerror = (event: any) => { console.error("Speech recognition error", event.error); if (onEnd) onEnd(); };
+    recognition.onend = () => { if (onEnd) onEnd(); };
     recognitionRef.current = recognition;
     recognition.start();
   };
@@ -401,6 +351,8 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       ]);
       setGeneratedContent(content);
       setFilingSuggestions(metadata);
+      // AUTO ENTER FULL SCREEN ON SUCCESS
+      setIsFullScreen(true);
     } catch (error) {
       alert("Erro na geração. Tente novamente.");
     } finally {
@@ -424,17 +376,15 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
   const handleSave = async () => {
     if (!generatedContent || !userId) return;
-
     setIsSaving(true);
     try {
       const pName = formData.plaintiffs.map(p => p.name).join(', ');
       const dName = formData.defendants.map(d => d.name).join(', ');
-
       const { error } = await supabase.from('petitions').insert([
         {
           user_id: userId,
           area: formData.area,
-          action_type: formData.actionType || 'Ação (Detectada pela IA)', // Fallback if empty
+          action_type: formData.actionType || 'Ação (Detectada pela IA)',
           content: generatedContent,
           created_at: new Date().toISOString(),
           plaintiff_name: pName,
@@ -442,22 +392,12 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           analyzed_documents: formData.analyzedDocuments 
         }
       ]).select().single();
-
       if (error) throw error;
-      
       alert("Petição salva com sucesso!");
       onSuccess();
-      
     } catch (error: any) {
       console.error('Error saving petition:', JSON.stringify(error, null, 2));
-      
-      if (error.code === '42P01') {
-          alert("ERRO DE CONFIGURAÇÃO: A tabela 'petitions' não existe no Supabase. Execute o script SQL no painel do Supabase.");
-      } else if (error.code === '42703') {
-          alert("ERRO DE BANCO: Algumas colunas (como 'analyzed_documents') estão faltando na tabela. Execute o script SQL para atualizar.");
-      } else {
-          alert(`Erro ao salvar: ${error.message || 'Erro desconhecido.'}`);
-      }
+      alert(`Erro ao salvar: ${error.message || 'Erro desconhecido.'}`);
     } finally {
       setIsSaving(false);
     }
@@ -465,11 +405,9 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
   const handleDownloadDoc = () => {
     if (!generatedContent) return;
-
     const fileName = formData.actionType 
         ? `Peticao_${formData.actionType.replace(/\s+/g, '_')}.doc`
         : `Peticao_Juridica_${new Date().toISOString().split('T')[0]}.doc`;
-
     const header = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' 
             xmlns:w='urn:schemas-microsoft-com:office:word' 
@@ -477,34 +415,11 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       <head>
         <meta charset='utf-8'>
         <title>Petição</title>
-        <style>
-          body { 
-            font-family: 'Times New Roman', serif; 
-            font-size: 12pt; 
-            line-height: 1.5;
-          }
-          p { 
-            text-align: justify; 
-            text-indent: 3cm; 
-            margin-bottom: 12px; 
-          }
-          h1, h2, h3 { 
-            text-align: center; 
-            text-transform: uppercase; 
-            margin-top: 24px; 
-            margin-bottom: 12px; 
-            font-weight: bold;
-          }
-        </style>
+        <style>body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5}p{text-align:justify;text-indent:3cm;margin-bottom:12px}h1,h2,h3{text-align:center;text-transform:uppercase;margin-top:24px;margin-bottom:12px;font-weight:bold}</style>
       </head><body>`;
-    
     const footer = "</body></html>";
     const sourceHTML = header + generatedContent + footer;
-
-    const blob = new Blob(['\ufeff', sourceHTML], {
-        type: 'application/msword'
-    });
-    
+    const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
     saveAs(blob, fileName);
   };
 
@@ -512,36 +427,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     printWindow.document.write(`
-      <html>
-        <head>
-          <title></title>
-          <style>
-            @page {
-              margin: 0;
-            }
-            body {
-              font-family: 'Times New Roman', Times, serif;
-              font-size: 12pt;
-              line-height: 1.5;
-              margin: 2.5cm 2cm;
-            }
-            p {
-              text-align: justify;
-              text-indent: 3cm;
-              margin-bottom: 12px;
-            }
-            h1, h2, h3 {
-              text-align: center;
-              text-transform: uppercase;
-              margin-top: 24px;
-              margin-bottom: 12px;
-            }
-          </style>
-        </head>
-        <body>
-          ${generatedContent}
-        </body>
-      </html>
+      <html><head><title></title><style>@page{margin:0}body{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.5;margin:2.5cm 2cm}p{text-align:justify;text-indent:3cm;margin-bottom:12px}h1,h2,h3{text-align:center;text-transform:uppercase;margin-top:24px;margin-bottom:12px}</style></head><body>${generatedContent}</body></html>
     `);
     printWindow.document.close();
     printWindow.focus();
@@ -549,26 +435,15 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   };
 
   const handleCopy = () => {
-    const element = document.getElementById('petition-content-view');
-    if (element) {
-        const range = document.createRange();
-        range.selectNode(element);
-        window.getSelection()?.removeAllRanges();
-        window.getSelection()?.addRange(range);
-        document.execCommand('copy');
-        window.getSelection()?.removeAllRanges();
-        alert('Conteúdo copiado! Cole no Word (Ctrl+V) para manter a formatação.');
-    } else if (generatedContent) {
+    if (generatedContent) {
         navigator.clipboard.writeText(generatedContent);
-        alert('Código HTML copiado.');
+        alert('Conteúdo copiado (HTML). Cole em um editor compatível.');
     }
   };
 
-  // Reusable Voice Input Control
   const VoiceControls = ({ target }: { target: 'facts' | 'requests' | 'refinement' }) => {
      const isTargetListening = isListening && listeningTarget === target;
      const isTargetTranscribing = isTranscribing && transcriptionTarget === target;
-
      return (
         <div className="grid grid-cols-2 gap-4 mt-3">
              <Button 
@@ -577,17 +452,8 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                 className={`w-full py-6 text-base font-semibold shadow-md ${isTargetListening ? "animate-pulse ring-2 ring-red-400" : "bg-juris-700 hover:bg-juris-900"}`}
                 disabled={isTranscribing}
              >
-                {isTargetListening ? (
-                    <>
-                        <MicOff className="mr-2" /> Parar de Ditar
-                    </>
-                ) : (
-                    <>
-                        <Mic className="mr-2" /> Ditar (Voz)
-                    </>
-                )}
+                {isTargetListening ? <><MicOff className="mr-2" /> Parar</> : <><Mic className="mr-2" /> Ditar</>}
              </Button>
-             
              <Button 
                 variant="outline" 
                 onClick={() => triggerAudioImport(target)}
@@ -602,25 +468,145 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
      );
   };
 
-  // Field Mic Button Renderer
   const FieldMicButton = ({ type, id, field }: { type: 'plaintiffs' | 'defendants', id: string, field: keyof PetitionParty }) => {
       const isFieldActive = activeDictationField === `${type}-${id}-${field}`;
-      
       return (
           <button
               onClick={() => toggleFieldDictation(type, id, field)}
-              className={`p-1.5 rounded-full transition-colors ${
-                  isFieldActive 
-                    ? 'bg-red-100 text-red-600 animate-pulse' 
-                    : 'text-gray-400 hover:text-juris-600 hover:bg-gray-100'
-              }`}
+              className={`p-1.5 rounded-full transition-colors ${isFieldActive ? 'bg-red-100 text-red-600 animate-pulse' : 'text-gray-400 hover:text-juris-600 hover:bg-gray-100'}`}
               title="Ditar campo"
-              tabIndex={-1} // Skip tab index to keep flow on inputs
+              tabIndex={-1}
           >
               {isFieldActive ? <MicOff size={14} /> : <Mic size={14} />}
           </button>
       );
   };
+
+  const handleBackToEditing = () => {
+      if(confirm('Isso descartará a petição gerada para que você possa editar os dados. Deseja continuar?')) {
+          setGeneratedContent(null);
+          setIsFullScreen(false);
+          // Current step is already correct (Step 4/5 depending on flow)
+      }
+  };
+
+  // --- FULL SCREEN PREVIEW MODE ---
+  if (isFullScreen && generatedContent) {
+      return (
+        <div className="fixed inset-0 z-[100] bg-gray-100 flex flex-col animate-in slide-in-from-bottom duration-300">
+           {/* Top Toolbar */}
+           <div className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shadow-sm z-10 flex-shrink-0">
+               <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setIsFullScreen(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full text-gray-500 hover:text-gray-900 transition-colors"
+                    title="Minimizar e Voltar para Ações"
+                  >
+                     <X size={24} />
+                  </button>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                       <Scale className="text-juris-600 h-5 w-5" /> Revisão da Peça
+                    </h2>
+                    <p className="text-xs text-gray-500">Modo de Leitura Imersiva</p>
+                  </div>
+               </div>
+
+               <div className="flex gap-2">
+                   <Button variant="outline" onClick={handleDownloadDoc} className="hidden sm:flex items-center gap-2">
+                      <Download size={16} /> Word
+                   </Button>
+                   <Button variant="outline" onClick={handlePrint} className="hidden sm:flex items-center gap-2">
+                      <Printer size={16} /> Imprimir
+                   </Button>
+                   <Button onClick={handleSave} isLoading={isSaving} className="flex items-center gap-2 px-6 shadow-lg shadow-juris-900/20">
+                      <Save size={18} /> Salvar Petição
+                   </Button>
+               </div>
+           </div>
+
+           {/* Info Banner */}
+           <div className="bg-sky-50 border-b border-sky-100 px-4 py-2 text-center text-sm text-sky-800 flex items-center justify-center gap-2 animate-in fade-in">
+                <Info size={16} />
+                <span>Este documento é editável. A IA entende e preserva as suas edições! Clique no texto para começar.</span>
+           </div>
+
+           {/* Main Content Area (Scrollable) */}
+           <div className="flex-1 overflow-y-auto p-8 relative">
+               <div className="max-w-[23cm] mx-auto flex gap-6 items-start">
+                   {/* Paper Document (Editable) */}
+                   <div 
+                      id="petition-fullscreen-view"
+                      ref={contentRef}
+                      className="flex-1 bg-white shadow-2xl min-h-[1123px] p-[2.5cm] text-black focus:outline-none focus:ring-1 focus:ring-juris-200 transition-shadow"
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => setGeneratedContent(e.currentTarget.innerHTML)}
+                      style={{
+                          fontFamily: '"Times New Roman", Times, serif',
+                          fontSize: '12pt',
+                          lineHeight: '1.5',
+                          maxWidth: '21cm', // A4 width approx
+                          outline: 'none'
+                      }}
+                   />
+
+                   {/* Right Floating Panel for Refinement & Info */}
+                   <div className="w-80 hidden xl:flex flex-col gap-4 sticky top-0">
+                       {/* Metadata Card */}
+                       {filingSuggestions && (
+                           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                  <Archive size={14} /> Protocolo CNJ
+                               </h4>
+                               <div className="space-y-3">
+                                   <div>
+                                      <span className="text-xs text-gray-400 block">Competência</span>
+                                      <span className="text-sm font-semibold text-gray-800">{filingSuggestions.competence}</span>
+                                   </div>
+                                   <div>
+                                      <span className="text-xs text-gray-400 block">Classe</span>
+                                      <span className="text-sm font-semibold text-gray-800">{filingSuggestions.class}</span>
+                                   </div>
+                                   <div>
+                                      <span className="text-xs text-gray-400 block">Assunto</span>
+                                      <span className="text-sm font-semibold text-gray-800">{filingSuggestions.subject}</span>
+                                   </div>
+                               </div>
+                           </div>
+                       )}
+                       
+                       {/* Refinement Card */}
+                       <div className="bg-sky-50 rounded-lg shadow-sm border border-sky-100 p-4">
+                           <h4 className="text-xs font-bold text-sky-800 uppercase tracking-wider mb-2 flex items-center gap-2">
+                              <RefreshCw size={14} /> Refinar com IA
+                           </h4>
+                           <textarea
+                              className="w-full rounded-md border border-sky-200 p-2 text-sm focus:ring-2 focus:ring-sky-500 resize-none h-32 bg-white mb-2"
+                              placeholder="Ex: Adicione um tópico sobre dano moral..."
+                              value={refinementText}
+                              onChange={(e) => setRefinementText(e.target.value)}
+                           />
+                           <Button 
+                              onClick={handleRefine} 
+                              disabled={!refinementText.trim() || isRefining}
+                              isLoading={isRefining}
+                              className="w-full bg-sky-600 hover:bg-sky-700 text-white"
+                           >
+                              Aplicar Ajustes
+                           </Button>
+                           <div className="mt-2">
+                             <button onClick={() => triggerAudioImport('refinement')} className="text-xs text-sky-600 hover:underline flex items-center justify-center w-full gap-1">
+                                <Mic size={12} /> Ditar Ajuste
+                             </button>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+           </div>
+        </div>
+      );
+  }
 
   // --- Render Selection Screen (Step 0) ---
   if (mode === 'selection') {
@@ -662,8 +648,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       );
   }
 
-  // --- Render Wizard Steps ---
-
+  // --- Render Wizard Steps (Inline Mode) ---
   const renderStepIndicator = () => (
     <div className="mb-8">
       <div className="flex items-center justify-between relative">
@@ -688,7 +673,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const renderStepContent = () => {
     // Determine logical steps based on mode
     const isUploadStep = mode === 'upload' && currentStep === 1;
-    // Step 2 in upload OR Step 1 in Scratch is "Dados Iniciais" (Parties)
     const isPartiesStep = (mode === 'upload' && currentStep === 2) || (mode !== 'upload' && currentStep === 1);
     const isFactsStep = (mode === 'upload' && currentStep === 3) || (mode !== 'upload' && currentStep === 2);
     const isRequestsStep = (mode === 'upload' && currentStep === 4) || (mode !== 'upload' && currentStep === 3);
@@ -698,14 +682,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
              <div className="bg-sky-50 border-2 border-dashed border-sky-200 rounded-lg p-6 text-center">
-                <input 
-                    type="file" 
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    accept=".pdf, .txt, image/png, image/jpeg"
-                />
-                
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf, .txt, image/png, image/jpeg" />
                 {isExtracting ? (
                     <div className="flex flex-col items-center gap-2">
                         <Loader2 className="h-8 w-8 text-sky-600 animate-spin" />
@@ -713,9 +690,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                     </div>
                 ) : uploadSuccess ? (
                     <div className="flex flex-col items-center gap-2 animate-in fade-in">
-                        <div className="bg-green-100 p-2 rounded-full">
-                            <FileCheck className="h-6 w-6 text-green-600" />
-                        </div>
+                        <div className="bg-green-100 p-2 rounded-full"><FileCheck className="h-6 w-6 text-green-600" /></div>
                         <span className="text-sm font-medium text-green-700">Dados extraídos com sucesso! Revise abaixo.</span>
                         <button onClick={() => fileInputRef.current?.click()} className="text-xs text-sky-600 underline">Substituir arquivo</button>
                     </div>
@@ -723,33 +698,20 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                     <div className="flex flex-col items-center gap-2">
                         <Upload className="h-8 w-8 text-sky-400" />
                         <h3 className="font-semibold text-gray-900">Upload de Documento Base</h3>
-                        <p className="text-sm text-gray-500 max-w-sm">
-                        Envie petições iniciais, procurações, RGs ou contratos (Max 10MB).
-                        </p>
-                        <Button 
-                        variant="secondary" 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="mt-2"
-                        >
-                        Selecionar Arquivo
-                        </Button>
+                        <p className="text-sm text-gray-500 max-w-sm">Envie petições iniciais, procurações, RGs ou contratos (Max 10MB).</p>
+                        <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="mt-2">Selecionar Arquivo</Button>
                     </div>
                 )}
             </div>
-            {/* Analyzed Documents List */}
             {formData.analyzedDocuments && formData.analyzedDocuments.length > 0 && (
                 <div className="space-y-2">
                 <h4 className="text-sm font-semibold text-gray-700">Documentos Analisados</h4>
                 {formData.analyzedDocuments.map((doc, idx) => (
                     <div key={idx} className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
-                        <div className="bg-green-100 p-2 rounded-md text-green-700">
-                            <FileBadge size={20} />
-                        </div>
+                        <div className="bg-green-100 p-2 rounded-md text-green-700"><FileBadge size={20} /></div>
                         <div>
                             <p className="text-sm font-medium text-gray-900">{doc.fileName}</p>
-                            <p className="text-xs font-bold text-juris-700 bg-juris-50 px-2 py-0.5 rounded-full inline-block mt-1">
-                            Tipo Identificado: {doc.docType}
-                            </p>
+                            <p className="text-xs font-bold text-juris-700 bg-juris-50 px-2 py-0.5 rounded-full inline-block mt-1">Tipo Identificado: {doc.docType}</p>
                             <p className="text-xs text-gray-500 mt-1 italic">{doc.summary}</p>
                         </div>
                     </div>
@@ -765,120 +727,53 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
              {mode === 'upload' && (
                 <div className="bg-amber-50 p-3 rounded-md border border-amber-200 text-sm text-amber-800 flex items-center gap-2 mb-4">
-                    <CheckCircle size={16} />
-                    Confira se os dados das partes foram extraídos corretamente do documento.
+                    <CheckCircle size={16} /> Confira se os dados das partes foram extraídos corretamente do documento.
                 </div>
              )}
-             
-             {/* Header indicating this is the "Dados Iniciais" step */}
              <div className="border-b border-gray-100 pb-4 mb-2">
                  <h2 className="text-lg font-bold text-gray-800">Dados Iniciais (Partes)</h2>
                  <p className="text-sm text-gray-500">Informe quem são as partes envolvidas no processo.</p>
              </div>
-
-            {/* Plaintiffs Section */}
             <div className="space-y-4">
                <div className="flex items-center justify-between border-b pb-2">
-                  <h3 className="text-lg font-semibold text-juris-900 flex items-center gap-2">
-                    <User size={18} /> Polo Ativo (Autores)
-                  </h3>
-                  <Button size="sm" variant="secondary" onClick={() => addParty('plaintiffs')} className="gap-1">
-                    <Plus size={14} /> Adicionar Autor
-                  </Button>
+                  <h3 className="text-lg font-semibold text-juris-900 flex items-center gap-2"><User size={18} /> Polo Ativo (Autores)</h3>
+                  <Button size="sm" variant="secondary" onClick={() => addParty('plaintiffs')} className="gap-1"><Plus size={14} /> Adicionar Autor</Button>
                </div>
-               
                {formData.plaintiffs.map((party, index) => (
                  <div key={party.id || index} className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 relative">
                     {formData.plaintiffs.length > 1 && (
-                      <button 
-                        onClick={() => removeParty('plaintiffs', party.id!)}
-                        className="absolute top-2 right-2 text-red-400 hover:text-red-600 p-1"
-                        title="Remover"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <button onClick={() => removeParty('plaintiffs', party.id!)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 p-1" title="Remover"><Trash2 size={16} /></button>
                     )}
                     <span className="text-xs font-bold text-blue-300 absolute -top-2 left-2 bg-white px-2 border border-blue-100 rounded">Autor {index + 1}</span>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                        <Input 
-                          label="Nome Completo"
-                          value={party.name}
-                          onChange={(e) => updateParty('plaintiffs', party.id!, 'name', e.target.value)}
-                          rightElement={<FieldMicButton type="plaintiffs" id={party.id!} field="name" />}
-                        />
-                        <Input 
-                          label="CPF / CNPJ"
-                          value={party.doc}
-                          onChange={(e) => updateParty('plaintiffs', party.id!, 'doc', e.target.value)}
-                          rightElement={<FieldMicButton type="plaintiffs" id={party.id!} field="doc" />}
-                        />
+                        <Input label="Nome Completo" value={party.name} onChange={(e) => updateParty('plaintiffs', party.id!, 'name', e.target.value)} rightElement={<FieldMicButton type="plaintiffs" id={party.id!} field="name" />} />
+                        <Input label="CPF / CNPJ" value={party.doc} onChange={(e) => updateParty('plaintiffs', party.id!, 'doc', e.target.value)} rightElement={<FieldMicButton type="plaintiffs" id={party.id!} field="doc" />} />
                         <div className="md:col-span-2">
-                          <Input 
-                            label="Qualificação"
-                            placeholder="Nacionalidade, estado civil, profissão"
-                            value={party.qualification}
-                            onChange={(e) => updateParty('plaintiffs', party.id!, 'qualification', e.target.value)}
-                            rightElement={<FieldMicButton type="plaintiffs" id={party.id!} field="qualification" />}
-                          />
+                          <Input label="Qualificação" placeholder="Nacionalidade, estado civil, profissão" value={party.qualification} onChange={(e) => updateParty('plaintiffs', party.id!, 'qualification', e.target.value)} rightElement={<FieldMicButton type="plaintiffs" id={party.id!} field="qualification" />} />
                         </div>
                         <div className="md:col-span-2">
-                          <Input 
-                            label="Endereço"
-                            value={party.address}
-                            onChange={(e) => updateParty('plaintiffs', party.id!, 'address', e.target.value)}
-                            rightElement={<FieldMicButton type="plaintiffs" id={party.id!} field="address" />}
-                          />
+                          <Input label="Endereço" value={party.address} onChange={(e) => updateParty('plaintiffs', party.id!, 'address', e.target.value)} rightElement={<FieldMicButton type="plaintiffs" id={party.id!} field="address" />} />
                         </div>
                     </div>
                  </div>
                ))}
             </div>
-
-            {/* Defendants Section */}
             <div className="space-y-4 pt-4">
                <div className="flex items-center justify-between border-b pb-2">
-                  <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                    <User size={18} /> Polo Passivo (Réus)
-                  </h3>
-                  <Button size="sm" variant="secondary" onClick={() => addParty('defendants')} className="gap-1">
-                    <Plus size={14} /> Adicionar Réu
-                  </Button>
+                  <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2"><User size={18} /> Polo Passivo (Réus)</h3>
+                  <Button size="sm" variant="secondary" onClick={() => addParty('defendants')} className="gap-1"><Plus size={14} /> Adicionar Réu</Button>
                </div>
-               
                {formData.defendants.map((party, index) => (
                  <div key={party.id || index} className="bg-gray-50 p-4 rounded-lg border border-gray-200 relative">
                     {formData.defendants.length > 1 && (
-                      <button 
-                        onClick={() => removeParty('defendants', party.id!)}
-                        className="absolute top-2 right-2 text-red-400 hover:text-red-600 p-1"
-                        title="Remover"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <button onClick={() => removeParty('defendants', party.id!)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 p-1" title="Remover"><Trash2 size={16} /></button>
                     )}
                     <span className="text-xs font-bold text-gray-400 absolute -top-2 left-2 bg-white px-2 border border-gray-200 rounded">Réu {index + 1}</span>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                        <Input 
-                          label="Nome / Razão Social"
-                          value={party.name}
-                          onChange={(e) => updateParty('defendants', party.id!, 'name', e.target.value)}
-                          rightElement={<FieldMicButton type="defendants" id={party.id!} field="name" />}
-                        />
-                        <Input 
-                          label="CPF / CNPJ"
-                          value={party.doc}
-                          onChange={(e) => updateParty('defendants', party.id!, 'doc', e.target.value)}
-                          rightElement={<FieldMicButton type="defendants" id={party.id!} field="doc" />}
-                        />
+                        <Input label="Nome / Razão Social" value={party.name} onChange={(e) => updateParty('defendants', party.id!, 'name', e.target.value)} rightElement={<FieldMicButton type="defendants" id={party.id!} field="name" />} />
+                        <Input label="CPF / CNPJ" value={party.doc} onChange={(e) => updateParty('defendants', party.id!, 'doc', e.target.value)} rightElement={<FieldMicButton type="defendants" id={party.id!} field="doc" />} />
                         <div className="md:col-span-2">
-                          <Input 
-                            label="Endereço"
-                            value={party.address}
-                            onChange={(e) => updateParty('defendants', party.id!, 'address', e.target.value)}
-                            rightElement={<FieldMicButton type="defendants" id={party.id!} field="address" />}
-                          />
+                          <Input label="Endereço" value={party.address} onChange={(e) => updateParty('defendants', party.id!, 'address', e.target.value)} rightElement={<FieldMicButton type="defendants" id={party.id!} field="address" />} />
                         </div>
                     </div>
                  </div>
@@ -893,27 +788,15 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
              {mode === 'upload' && (
                 <div className="bg-amber-50 p-3 rounded-md border border-amber-200 text-sm text-amber-800 flex items-center gap-2 mb-4">
-                    <CheckCircle size={16} />
-                    O resumo dos fatos foi gerado pela IA com base no documento. Edite se necessário.
+                    <CheckCircle size={16} /> O resumo dos fatos foi gerado pela IA com base no documento. Edite se necessário.
                 </div>
              )}
             <div>
               <div className="flex justify-between items-center mb-2">
                   <label className="block text-sm font-medium text-gray-700">Narrativa dos Fatos</label>
-                  {isListening && listeningTarget === 'facts' && (
-                       <span className="text-xs text-red-600 font-bold animate-pulse flex items-center">
-                           <span className="w-2 h-2 bg-red-600 rounded-full mr-1"></span> Gravando...
-                       </span>
-                  )}
+                  {isListening && listeningTarget === 'facts' && <span className="text-xs text-red-600 font-bold animate-pulse flex items-center"><span className="w-2 h-2 bg-red-600 rounded-full mr-1"></span> Gravando...</span>}
               </div>
-              <textarea 
-                className="w-full h-64 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-juris-500 text-sm leading-relaxed resize-none"
-                placeholder="Descreva os fatos detalhadamente..."
-                value={formData.facts}
-                onChange={(e) => handleInputChange('facts', e.target.value)}
-              />
-              
-              {/* Voice Controls Bottom Toolbar */}
+              <textarea className="w-full h-64 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-juris-500 text-sm leading-relaxed resize-none" placeholder="Descreva os fatos detalhadamente..." value={formData.facts} onChange={(e) => handleInputChange('facts', e.target.value)} />
               <VoiceControls target="facts" />
             </div>
           </div>
@@ -925,36 +808,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
              <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Pedidos (Liste um por linha)</label>
-              {isListening && listeningTarget === 'requests' && (
-                    <span className="text-xs text-red-600 font-bold animate-pulse flex items-center mb-1">
-                        <span className="w-2 h-2 bg-red-600 rounded-full mr-1"></span> Gravando...
-                    </span>
-               )}
-              <textarea 
-                className="w-full h-40 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-juris-500 text-sm"
-                placeholder="1. A condenação ao pagamento de R$ X..."
-                value={formData.requests.join('\n')}
-                onChange={(e) => handleInputChange('requests', e.target.value.split('\n'))}
-              />
-              {/* Voice Controls Bottom Toolbar */}
+              {isListening && listeningTarget === 'requests' && <span className="text-xs text-red-600 font-bold animate-pulse flex items-center mb-1"><span className="w-2 h-2 bg-red-600 rounded-full mr-1"></span> Gravando...</span>}
+              <textarea className="w-full h-40 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-juris-500 text-sm" placeholder="1. A condenação ao pagamento de R$ X..." value={formData.requests.join('\n')} onChange={(e) => handleInputChange('requests', e.target.value.split('\n'))} />
               <VoiceControls target="requests" />
             </div>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Valor da Causa</label>
-                <Input 
-                  value={formData.value}
-                  onChange={(e) => handleInputChange('value', e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Provas a Produzir</label>
-                <Input 
-                  value={formData.evidence}
-                  onChange={(e) => handleInputChange('evidence', e.target.value)}
-                />
-              </div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-2">Valor da Causa</label><Input value={formData.value} onChange={(e) => handleInputChange('value', e.target.value)} /></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-2">Provas a Produzir</label><Input value={formData.evidence} onChange={(e) => handleInputChange('evidence', e.target.value)} /></div>
             </div>
           </div>
         );
@@ -962,112 +822,26 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
     if (isGenerateStep) {
         if (generatedContent) {
+          // Inline success view (shown when user closes Full Screen)
           return (
-            <div className="animate-in fade-in zoom-in-95 duration-300 h-full flex flex-col gap-4">
-               {/* Header & Actions */}
-               <div className="flex flex-col sm:flex-row justify-between items-center bg-gray-50 p-4 rounded-lg border border-gray-200 gap-3">
-                  <h3 className="text-lg font-bold text-green-700 flex items-center gap-2">
-                    <CheckCircle className="h-5 w-5" /> Petição Gerada
-                  </h3>
-                  <div className="flex gap-2 w-full sm:w-auto">
-                     <Button variant="outline" onClick={handleDownloadDoc} className="gap-2 bg-white flex-1 sm:flex-none">
-                        <Download size={16} /> <span className="hidden sm:inline">Baixar Word</span>
-                     </Button>
-                     <Button variant="outline" onClick={handleCopy} className="gap-2 bg-white flex-1 sm:flex-none">
-                        <Copy size={16} /> <span className="hidden sm:inline">Copiar</span>
-                     </Button>
-                     <Button variant="outline" onClick={handlePrint} className="gap-2 bg-white flex-1 sm:flex-none">
-                        <Printer size={16} /> <span className="hidden sm:inline">Imprimir</span>
-                     </Button>
-                     <Button onClick={handleSave} className="gap-2 flex-1 sm:flex-none" isLoading={isSaving}>
-                        <Save size={16} /> <span className="hidden sm:inline">Salvar</span>
-                     </Button>
-                  </div>
+            <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center justify-center py-8 text-center">
+               <div className="bg-green-100 p-4 rounded-full mb-4">
+                  <CheckCircle className="h-12 w-12 text-green-600" />
                </div>
-               
-               {/* Word-like Document Viewer */}
-               <div className="flex-1 bg-gray-100 p-4 sm:p-8 rounded-lg border border-gray-300 overflow-y-auto shadow-inner">
-                  <div 
-                    id="petition-content-view"
-                    className="bg-white shadow-xl mx-auto min-h-[800px] p-[2.5cm] max-w-[21cm]" // Approx A4 width (210mm) and margins
-                    style={{
-                        fontFamily: '"Times New Roman", Times, serif',
-                        fontSize: '12pt',
-                        lineHeight: '1.5',
-                        color: 'black'
-                    }}
-                  >
-                     {/* 
-                         Inject HTML content safely. 
-                         The CSS handles paragraphs (<p>) and headers (<h3>) from the AI.
-                         We add a style block to enforce document standards inside this specific container.
-                     */}
-                     <style>{`
-                         #petition-content-view p {
-                             text-align: justify;
-                             text-indent: 3cm; /* Recuo de parágrafo jurídico */
-                             margin-bottom: 12px;
-                         }
-                         #petition-content-view h3, #petition-content-view h2, #petition-content-view h1 {
-                             text-align: center;
-                             text-transform: uppercase;
-                             margin-top: 24px;
-                             margin-bottom: 12px;
-                             font-weight: bold;
-                         }
-                     `}</style>
-                     
-                     {/* Render content */}
-                     {generatedContent.trim().startsWith('<') ? (
-                         <div dangerouslySetInnerHTML={{ __html: generatedContent }} />
-                     ) : (
-                         <div className="whitespace-pre-wrap">{generatedContent}</div>
-                     )}
-                  </div>
-               </div>
-
-               {filingSuggestions && (
-                 <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4">
-                    <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-                       <Archive size={14} /> Sugestão para Protocolo (CNJ)
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                       <div className="bg-white rounded border border-indigo-200 px-3 py-2">
-                          <span className="text-xs text-indigo-500 block">Competência</span>
-                          <span className="text-sm font-semibold text-gray-800">{filingSuggestions.competence}</span>
-                       </div>
-                       <div className="bg-white rounded border border-indigo-200 px-3 py-2">
-                          <span className="text-xs text-indigo-500 block">Classe</span>
-                          <span className="text-sm font-semibold text-gray-800">{filingSuggestions.class}</span>
-                       </div>
-                       <div className="bg-white rounded border border-indigo-200 px-3 py-2">
-                          <span className="text-xs text-indigo-500 block">Assunto</span>
-                          <span className="text-sm font-semibold text-gray-800">{filingSuggestions.subject}</span>
-                       </div>
-                    </div>
-                 </div>
-               )}
-
-               <div className="bg-sky-50 p-4 rounded-lg border border-sky-100 shadow-sm flex flex-col gap-3">
-                  <div className="flex gap-2 w-full">
-                     <textarea
-                        className="flex-1 rounded-md border border-sky-200 p-3 text-sm focus:ring-2 focus:ring-juris-500 resize-none h-24 bg-white"
-                        placeholder="Solicite ajustes para a IA reescrever a peça..."
-                        value={refinementText}
-                        onChange={(e) => setRefinementText(e.target.value)}
-                     />
-                     <Button 
-                        onClick={handleRefine} 
-                        disabled={!refinementText.trim() || isRefining}
-                        isLoading={isRefining}
-                        className="h-auto w-32 bg-sky-600 hover:bg-sky-700 text-white"
-                     >
-                        <RefreshCw size={16} className={isRefining ? "animate-spin mr-2" : "mr-2"} />
-                        Refinar
-                     </Button>
-                  </div>
-                  {/* Refinement Voice Controls */}
-                  <VoiceControls target="refinement" />
+               <h3 className="text-2xl font-bold text-gray-900 mb-2">Petição Pronta!</h3>
+               <p className="text-gray-500 mb-8 max-w-md">
+                 Sua peça jurídica foi gerada. O que deseja fazer agora?
+               </p>
+               <div className="flex flex-col gap-3 w-full max-w-sm">
+                  <Button size="lg" onClick={() => setIsFullScreen(true)}>
+                     <Maximize2 size={18} className="mr-2" /> Revisar em Tela Cheia
+                  </Button>
+                  <Button variant="outline" onClick={handleSave} isLoading={isSaving}>
+                     <Save size={18} className="mr-2" /> Salvar na Minha Lista
+                  </Button>
+                  <button onClick={handleBackToEditing} className="text-sm text-gray-400 hover:text-gray-600 mt-2 flex items-center justify-center gap-1">
+                      <Edit3 size={14} /> Descartar e Voltar a Editar
+                  </button>
                </div>
             </div>
           );
@@ -1103,59 +877,33 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           </div>
         );
     }
-    
     return null;
   };
 
   return (
     <>
-      <div className={`max-w-4xl mx-auto ${generatedContent ? 'max-w-6xl' : ''} transition-all duration-500`}>
-        {/* Hidden Audio Input for Imports */}
-        <input 
-            type="file"
-            ref={audioInputRef}
-            className="hidden"
-            accept="audio/*"
-            onChange={handleAudioFileImport}
-        />
-
+      <div className="max-w-4xl mx-auto transition-all duration-500">
+        <input type="file" ref={audioInputRef} className="hidden" accept="audio/*" onChange={handleAudioFileImport} />
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
               {mode === 'upload' ? 'Criar Petição (Upload & Revisão)' : mode === 'scratch' ? 'Criar Petição (Manual)' : 'Criar Petição'}
           </h1>
           <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
         </div>
-
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
           <div className="p-8 flex-1">
-            {renderStepIndicator()}
-            
+            {/* Oculta os passos quando a petição já estiver gerada para limpar a tela de sucesso */}
+            {!generatedContent && renderStepIndicator()}
             <div className={generatedContent ? "h-auto" : "min-h-[400px]"}>
               {renderStepContent()}
             </div>
           </div>
-
           {(!generatedContent) && (
             <div className="bg-gray-50 px-8 py-4 border-t border-gray-200 flex justify-between items-center">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  // If at step 1, go back to selection
-                  if (currentStep === 1) {
-                      setMode('selection');
-                  } else {
-                      setCurrentStep(prev => Math.max(1, prev - 1));
-                  }
-                }}
-                disabled={isGenerating}
-              >
+              <Button variant="outline" onClick={() => { if (currentStep === 1) { setMode('selection'); } else { setCurrentStep(prev => Math.max(1, prev - 1)); } }} disabled={isGenerating}>
                 <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
               </Button>
-
-              <Button 
-                onClick={() => setCurrentStep(prev => Math.min(TOTAL_STEPS, prev + 1))}
-                disabled={isGenerating}
-              >
+              <Button onClick={() => setCurrentStep(prev => Math.min(TOTAL_STEPS, prev + 1))} disabled={isGenerating}>
                 Próximo <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </div>

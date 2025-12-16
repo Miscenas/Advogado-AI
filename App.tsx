@@ -5,6 +5,7 @@ import { AuthPage } from './pages/AuthPage';
 import { Layout } from './components/Layout';
 import { DashboardHome } from './components/DashboardHome';
 import { PetitionWizard } from './components/NewPetition/PetitionWizard';
+import { DefenseWizard } from './components/NewPetition/DefenseWizard';
 import { PetitionList } from './components/PetitionList';
 import { AdminPanel } from './components/AdminPanel';
 import { UserProfileView } from './components/UserProfile';
@@ -32,7 +33,7 @@ function App() {
     loading: true,
   });
   const [currentRoute, setCurrentRoute] = useState('dashboard');
-  const [dbError, setDbError] = useState(false);
+  const [dbError, setDbError] = useState<{isError: boolean, code?: string, message?: string}>({ isError: false });
 
   useEffect(() => {
     // Check initial session
@@ -59,7 +60,7 @@ function App() {
 
   const fetchData = async (userId: string, userObject: any) => {
     setAuthState(prev => ({ ...prev, loading: true }));
-    setDbError(false);
+    setDbError({ isError: false });
     
     try {
       // Fetch Profile
@@ -74,7 +75,7 @@ function App() {
         // 42P17 means the policies are broken and need the SQL script fix.
         if (profileError.code === '42P01' || profileError.code === '42P17') {
            console.error('Critical DB Error:', profileError.message);
-           setDbError(true);
+           setDbError({ isError: true, code: profileError.code, message: profileError.message });
            setAuthState(prev => ({ ...prev, loading: false }));
            return;
         }
@@ -144,7 +145,7 @@ function App() {
     );
   }
 
-  if (dbError) {
+  if (dbError.isError) {
       return (
           <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
               <div className="max-w-xl w-full bg-white rounded-xl shadow-xl p-8 border border-red-200">
@@ -154,7 +155,10 @@ function App() {
                       </div>
                       <h2 className="text-2xl font-bold text-gray-900 mb-2">Configuração do Banco Necessária</h2>
                       <p className="text-gray-600 mb-6">
-                          O sistema detectou um problema nas permissões ou tabelas do banco de dados (Erro de Recursão ou Tabela Faltante).
+                          O sistema detectou um problema crítico nas permissões do banco de dados.<br/>
+                          <span className="text-xs text-red-500 font-mono bg-red-50 px-2 py-1 rounded mt-2 inline-block">
+                              Erro: {dbError.code} - {dbError.message}
+                          </span>
                       </p>
                       
                       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-left w-full mb-6">
@@ -163,9 +167,9 @@ function App() {
                           </h4>
                           <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2">
                               <li>Acesse o <strong>SQL Editor</strong> no painel do Supabase.</li>
-                              <li>Copie o conteúdo atualizado do arquivo <code>SUPABASE_SETUP.sql</code>.</li>
-                              <li>Execute o script para corrigir as políticas de segurança.</li>
-                              <li>Recarregue esta página.</li>
+                              <li>Copie o conteúdo atualizado do arquivo <code>SUPABASE_SETUP.sql</code> (já disponível no código).</li>
+                              <li>Execute o script para criar as tabelas e corrigir o loop infinito nas políticas.</li>
+                              <li>Clique no botão abaixo para recarregar.</li>
                           </ol>
                       </div>
 
@@ -198,31 +202,34 @@ function App() {
           />
         );
       case 'new-petition':
-        // Check blocks/limits
-        // If blocked, stop. If trial and limit reached, stop.
-        const isBlocked = authState.profile?.account_status === 'blocked';
-        const isTrialLimit = authState.profile?.account_status === 'trial' && (authState.usage?.used_this_month || 0) >= (authState.usage?.monthly_limit || 5);
-        
-        if (isBlocked || isTrialLimit) {
-          // If active, they are never blocked by limit in this logic (per requirements "Active has unlimited")
-          // But if status is explicitly 'blocked', we show block screen.
-          if (authState.profile?.account_status === 'active' && !isBlocked) {
-             // Pass through if active and not blocked
-          } else {
-             return <BlockedScreen />;
-          }
+        // Check blocks/limits for new petition
+        if (authState.profile?.account_status === 'blocked' || (authState.profile?.account_status === 'trial' && (authState.usage?.used_this_month || 0) >= (authState.usage?.monthly_limit || 5))) {
+            return <BlockedScreen />;
         }
-        
         return (
           <PetitionWizard 
             userId={authState.user?.id}
             onCancel={() => setCurrentRoute('dashboard')}
             onSuccess={() => {
-              // Refresh usage if needed, then navigate
               if (authState.user) fetchData(authState.user.id, authState.user);
               setCurrentRoute('my-petitions');
             }}
           />
+        );
+      case 'new-defense':
+        // Check blocks/limits for new defense (shares same limits)
+         if (authState.profile?.account_status === 'blocked' || (authState.profile?.account_status === 'trial' && (authState.usage?.used_this_month || 0) >= (authState.usage?.monthly_limit || 5))) {
+            return <BlockedScreen />;
+        }
+        return (
+            <DefenseWizard 
+                userId={authState.user?.id}
+                onCancel={() => setCurrentRoute('dashboard')}
+                onSuccess={() => {
+                  if (authState.user) fetchData(authState.user.id, authState.user);
+                  setCurrentRoute('my-petitions');
+                }}
+            />
         );
       case 'my-petitions':
         return <PetitionList userId={authState.user?.id} />;
