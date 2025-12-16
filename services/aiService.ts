@@ -1,21 +1,36 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
-// Helper to safely get the API Key without crashing if process is undefined (Browser/Vite)
+// Helper robusto para recuperar a chave de API em diferentes ambientes (Vite, Next, Node)
 const getApiKey = (): string => {
-  try {
-    // Check if process.env exists (Node/Webpack/Some Vite setups)
-    if (typeof process !== 'undefined' && process.env) {
-      return process.env.API_KEY || '';
-    }
-  } catch (e) {
-    // Ignore reference errors
+  let key = '';
+
+  // 1. Tentativa via import.meta.env (Padrão Vite)
+  // Verifica VITE_API_KEY (recomendado para Vite) e API_KEY (padrão Vercel backend)
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    const env = (import.meta as any).env;
+    key = env.VITE_API_KEY || env.API_KEY || env.VITE_GOOGLE_API_KEY || '';
   }
-  return '';
+
+  // 2. Tentativa via process.env (Padrão Node/Webpack) - com verificação de segurança para evitar crash
+  if (!key) {
+    try {
+      if (typeof process !== 'undefined' && process.env) {
+        key = process.env.API_KEY || process.env.VITE_API_KEY || '';
+      }
+    } catch (e) {
+      // Ignora ReferenceError se process não estiver definido no navegador
+    }
+  }
+
+  return key;
 };
 
-// Initialize AI client with safe key access
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
+const apiKey = getApiKey();
+
+// Inicializa AI client
+// Se a chave estiver vazia, as chamadas falharão no catch com a mensagem apropriada
+const ai = new GoogleGenAI({ apiKey });
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
   docType: string;
@@ -23,6 +38,8 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   extractedData: Partial<PetitionFormData>;
 }> => {
   try {
+    if (!apiKey) throw new Error("Chave de API não configurada (VITE_API_KEY ou API_KEY).");
+
     const prompt = `
       Analise o documento jurídico anexo. 
       
@@ -115,6 +132,8 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
 
 export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
   try {
+    if (!apiKey) throw new Error("Chave de API não configurada.");
+
     const prompt = `
       Você é um assistente jurídico. 
       Transcreva o áudio anexo fielmente para texto. 
@@ -145,6 +164,8 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
   const defendantsText = data.defendants.map((d, i) => `RÉU ${i+1}: ${formatParty(d)}`).join('\n');
 
   try {
+    if (!apiKey) throw new Error("Chave de API não configurada.");
+
     const prompt = `
       ATUE COMO UM JURISTA SÊNIOR DE ELITE (20+ ANOS DE EXPERIÊNCIA EM DIREITO BRASILEIRO).
       OBJETIVO: Criar uma Petição Inicial IMPECÁVEL, ROBUSTA, ARGUMENTATIVA e DETALHADA, independentemente da área (Cível, Trabalhista, Família, Consumidor, etc).
@@ -213,6 +234,8 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
   }
 
   try {
+    if (!apiKey) throw new Error("Chave de API não configurada.");
+
     const prompt = `
       ATUE COMO UM ADVOGADO DE DEFESA BRILHANTE E COMBATIVO.
       OBJETIVO: Criar uma CONTESTAÇÃO (ou Recurso, dependendo do contexto) robusta e técnica.
@@ -277,6 +300,8 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
 
 export const suggestFilingMetadata = async (data: PetitionFormData): Promise<PetitionFilingMetadata> => {
   try {
+    if (!apiKey) throw new Error("Chave de API não configurada.");
+
     const prompt = `
       Analise os dados desta petição e sugira o preenchimento dos metadados para cadastro no sistema de processo eletrônico (PJe / e-SAJ / Projudi) conforme as Tabelas Processuais Unificadas (TPU) do CNJ.
       
@@ -323,6 +348,8 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
 
 export const refineLegalPetition = async (currentContent: string, instructions: string): Promise<string> => {
   try {
+    if (!apiKey) throw new Error("Chave de API não configurada.");
+
     const prompt = `
       Atue como um advogado sênior revisando uma peça jurídica (HTML).
       
