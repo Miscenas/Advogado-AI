@@ -10,11 +10,68 @@ import { PetitionList } from './components/PetitionList';
 import { AdminPanel } from './components/AdminPanel';
 import { UserProfileView } from './components/UserProfile';
 import { DeadlineManager } from './components/DeadlineManager';
-import { Lock, Database, AlertTriangle, FileCode } from 'lucide-react';
+import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
-// Setup file content needs to be fetched or hardcoded for display if file system access isn't available in browser
-// For this view, we will instruct the user to open the file.
+// Script SQL para correção disponível diretamente na UI em caso de erro
+const SQL_FIX_SCRIPT = `-- CORREÇÃO DEFINITIVA PARA ERRO 42P17 (RECURSÃO INFINITA)
+-- Execute este script no SQL Editor do Supabase.
+
+-- 1. Função segura para verificar se é admin
+-- SECURITY DEFINER: roda com permissões do dono (postgres), ignorando o RLS da tabela profiles para evitar o loop.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN FALSE;
+  END IF;
+  
+  RETURN EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+    AND role = 'admin'
+  );
+END;
+$$;
+
+-- 2. Habilitar RLS
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- 3. Remover TODAS as políticas existentes da tabela profiles para limpar conflitos
+-- Isso garante que nenhuma política antiga continue causando recursão.
+DO $$ 
+DECLARE 
+    pol record; 
+BEGIN 
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'profiles' 
+    LOOP 
+        EXECUTE format('DROP POLICY IF EXISTS %I ON profiles', pol.policyname); 
+    END LOOP; 
+END $$;
+
+-- 4. Criar Políticas Seguras
+
+-- Leitura: Usuário vê o próprio perfil OU Admin vê todos
+CREATE POLICY "Profiles View Policy" 
+ON profiles FOR SELECT 
+USING ( (auth.uid() = id) OR (is_admin()) );
+
+-- Atualização: Usuário edita o próprio OU Admin edita todos
+CREATE POLICY "Profiles Update Policy" 
+ON profiles FOR UPDATE 
+USING ( (auth.uid() = id) OR (is_admin()) );
+
+-- Inserção: Usuário pode criar seu próprio perfil (ao se cadastrar)
+CREATE POLICY "Profiles Insert Policy" 
+ON profiles FOR INSERT 
+WITH CHECK ( auth.uid() = id );
+
+-- 5. Garantir permissões na função
+GRANT EXECUTE ON FUNCTION public.is_admin TO authenticated, service_role;
+`;
 
 const BlockedScreen = () => (
     <div className="max-w-2xl mx-auto mt-8">
@@ -37,6 +94,7 @@ function App() {
   });
   const [currentRoute, setCurrentRoute] = useState('dashboard');
   const [dbError, setDbError] = useState<{isError: boolean, code?: string, message?: string}>({ isError: false });
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     // Check initial session
@@ -75,10 +133,13 @@ function App() {
 
       if (profileError) {
         // Handle "Relation does not exist" (42P01) OR "Infinite Recursion" (42P17)
-        // 42P17 means the policies are broken and need the SQL script fix.
-        if (profileError.code === '42P01' || profileError.code === '42P17') {
+        if (
+            profileError.code === '42P01' || 
+            profileError.code === '42P17' || 
+            profileError.message?.toLowerCase().includes('infinite recursion')
+        ) {
            console.error('Critical DB Error:', profileError.message);
-           setDbError({ isError: true, code: profileError.code, message: profileError.message });
+           setDbError({ isError: true, code: profileError.code || '42P17', message: profileError.message });
            setAuthState(prev => ({ ...prev, loading: false }));
            return;
         }
@@ -100,7 +161,6 @@ function App() {
              
              if (!createError && newProfile) {
                 profileData = newProfile;
-                
                 // Initialize usage limit too
                 await supabase.from('usage_limits').insert([{ user_id: userId }]);
              } else {
@@ -137,6 +197,16 @@ function App() {
     }
   };
 
+  const copyToClipboard = async () => {
+      try {
+        await navigator.clipboard.writeText(SQL_FIX_SCRIPT);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        alert('Erro ao copiar automaticamente. Selecione o texto e pressione Ctrl+C.');
+      }
+  };
+
   if (authState.loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -151,36 +221,46 @@ function App() {
   if (dbError.isError) {
       return (
           <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-              <div className="max-w-xl w-full bg-white rounded-xl shadow-xl p-8 border border-red-200">
+              <div className="max-w-2xl w-full bg-white rounded-xl shadow-xl p-8 border border-red-200">
                   <div className="flex flex-col items-center text-center">
                       <div className="bg-red-100 p-4 rounded-full mb-4">
                           <Database size={48} className="text-red-600" />
                       </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Correção do Banco de Dados Necessária</h2>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Correção Crítica Necessária</h2>
                       <p className="text-gray-600 mb-6">
-                          O sistema identificou um conflito nas políticas de segurança do Supabase (Erro {dbError.code}).
-                          Isso ocorre geralmente quando as permissões entram em loop infinito.
+                          O sistema detectou um erro de <strong>Recursão Infinita (42P17)</strong> nas políticas de segurança.
+                          <br/>Isso ocorre quando a verificação de permissão entra em loop.
                       </p>
                       
-                      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200 text-left w-full mb-6">
+                      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200 text-left w-full mb-6 relative">
                           <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                              <AlertTriangle size={18} className="text-amber-500" /> Como corrigir agora:
+                              <AlertTriangle size={18} className="text-amber-500" /> Como resolver:
                           </h4>
-                          <ol className="list-decimal list-inside text-sm text-gray-700 space-y-3">
-                              <li>Abra o arquivo <strong className="font-mono text-juris-700 bg-juris-50 px-1 rounded">SUPABASE_SETUP.sql</strong> que está na raiz do projeto.</li>
-                              <li>Copie todo o código SQL contido nele.</li>
-                              <li>Vá até o painel do seu projeto no Supabase &rarr; <strong>SQL Editor</strong>.</li>
+                          <ol className="list-decimal list-inside text-sm text-gray-700 space-y-2 mb-4">
+                              <li>Copie o script SQL abaixo.</li>
+                              <li>Abra o <strong>Supabase Dashboard</strong> &rarr; <strong>SQL Editor</strong>.</li>
                               <li>Cole o código e clique em <strong>RUN</strong>.</li>
                           </ol>
-                          <div className="mt-4 flex items-center gap-2 text-xs text-gray-500 bg-white p-2 rounded border border-gray-100">
-                             <FileCode size={14} />
-                             <span>O arquivo contém a função <code>is_admin()</code> que corrige o erro 42P17.</span>
+
+                          <div className="relative group">
+                              <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto h-48 border border-gray-700 whitespace-pre-wrap">
+                                  {SQL_FIX_SCRIPT}
+                              </pre>
+                              <button 
+                                  onClick={copyToClipboard}
+                                  className="absolute top-2 right-2 bg-white text-gray-900 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 hover:bg-gray-100 transition-colors shadow-sm cursor-pointer z-10"
+                              >
+                                  {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                                  {copied ? 'Copiado!' : 'Copiar SQL'}
+                              </button>
                           </div>
                       </div>
 
-                      <Button onClick={() => window.location.reload()} className="w-full">
-                          Já executei o script, Tentar Novamente
-                      </Button>
+                      <div className="flex gap-4 w-full">
+                        <Button onClick={() => window.location.reload()} className="w-full flex items-center justify-center gap-2">
+                            <RefreshCw size={18} /> Já executei o script, Tentar Novamente
+                        </Button>
+                      </div>
                   </div>
               </div>
           </div>
