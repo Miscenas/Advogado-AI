@@ -1,43 +1,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
-// Helper to safely get the API Key
-const getApiKey = () => {
-  // Check Import Meta (Vite standard)
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_API_KEY) {
-    return (import.meta as any).env.VITE_API_KEY;
-  }
-  // Check Process Env (Legacy/Node) safely without crashing browser
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-    return process.env.API_KEY;
-  }
-  return '';
-};
-
-// NOTE: process.env.API_KEY must be configured in your environment.
-const apiKey = getApiKey();
-
-// Initialize client conditionally to avoid crash if key is missing during build
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+// Inicializa o cliente AI diretamente com a chave de ambiente, conforme diretrizes.
+// Assume-se que process.env.API_KEY está configurada no ambiente de build/execução.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
   docType: string;
   summary: string;
   extractedData: Partial<PetitionFormData>;
 }> => {
-  if (!ai) {
-    console.warn("API_KEY missing. Returning mock extraction.");
-    return {
-      docType: "Contrato / Outros",
-      summary: "Documento simulado (Mock - Chave de API ausente) contendo dados de um contrato.",
-      extractedData: {
-        facts: "Fatos extraídos do documento (Mock): O documento relata um acidente...",
-        plaintiffs: [{ name: "João da Silva (Extraído)", doc: "123.456.789-00", type: "pf", address: "Rua A, 1", qualification: "Brasileiro, casado" }],
-        actionType: "Ação de Indenização"
-      }
-    };
-  }
-
   try {
     const prompt = `
       Analise o documento jurídico anexo. 
@@ -121,16 +93,16 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
 
   } catch (error) {
     console.error("Error extracting document data:", error);
-    throw new Error("Não foi possível ler o documento.");
+    // Em caso de erro real, retornamos um objeto vazio ou erro, mas não um mock confuso.
+    return {
+      docType: "Erro na Leitura",
+      summary: "Falha ao processar o documento. Verifique se a chave de API está configurada corretamente.",
+      extractedData: {}
+    };
   }
 };
 
 export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
-  if (!ai) {
-    console.warn("API_KEY missing. Returning mock transcription.");
-    return "Transcrição simulada: O cliente relata que sofreu danos materiais...";
-  }
-
   try {
     const prompt = `
       Você é um assistente jurídico. 
@@ -152,17 +124,11 @@ export const transcribeAudio = async (base64Data: string, mimeType: string): Pro
     return response.text || "";
   } catch (error) {
     console.error("Error transcribing audio:", error);
-    throw new Error("Falha na transcrição do áudio.");
+    throw new Error("Falha na transcrição do áudio. Verifique a chave de API.");
   }
 };
 
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
-  if (!ai) {
-    console.warn("API_KEY is missing. Using mock response for demonstration.");
-    return mockGeneration(data);
-  }
-
-  // Format parties for the prompt
   const formatParty = (p: PetitionParty) => `Nome: ${p.name}, Doc: ${p.doc}, Endereço: ${p.address}, Qualificação: ${p.qualification}`;
   const plaintiffsText = data.plaintiffs.map((p, i) => `AUTOR ${i+1}: ${formatParty(p)}`).join('\n');
   const defendantsText = data.defendants.map((d, i) => `RÉU ${i+1}: ${formatParty(d)}`).join('\n');
@@ -217,15 +183,12 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
   } catch (error: any) {
     console.error("Error calling Gemini API:", error);
-    return mockGeneration(data) + "<br><br><p><b>[Nota: Gerado em modo offline devido a erro de conexão com a IA]</b></p>";
+    // Fallback de erro visual para o usuário
+    return mockGeneration(data) + "<br><br><p style='color:red; text-align:center;'><b>[Erro: Falha na conexão com a IA. Verifique sua chave de API.]</b></p>";
   }
 };
 
 export const generateLegalDefense = async (data: PetitionFormData): Promise<string> => {
-  if (!ai) {
-    return mockGeneration(data) + " (Modo Contestação Mock)";
-  }
-
   const formatParty = (p: PetitionParty) => `Nome: ${p.name}, Doc: ${p.doc}`;
   const plaintiffsText = data.plaintiffs.map((p, i) => `AUTOR (Adverso): ${formatParty(p)}`).join('\n');
   const defendantsText = data.defendants.map((d, i) => `RÉU (Meu Cliente): ${formatParty(d)}`).join('\n');
@@ -299,15 +262,11 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
 
   } catch (error: any) {
     console.error("Error generating defense:", error);
-    return mockGeneration(data);
+    return mockGeneration(data) + "<br><br><p style='color:red; text-align:center;'><b>[Erro: Falha na conexão com a IA.]</b></p>";
   }
 };
 
 export const suggestFilingMetadata = async (data: PetitionFormData): Promise<PetitionFilingMetadata> => {
-  if (!ai) {
-    return mockMetadata(data);
-  }
-
   try {
     const prompt = `
       Analise os dados desta petição e sugira o preenchimento dos metadados para cadastro no sistema de processo eletrônico (PJe / e-SAJ / Projudi) conforme as Tabelas Processuais Unificadas (TPU) do CNJ.
@@ -354,10 +313,6 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
 };
 
 export const refineLegalPetition = async (currentContent: string, instructions: string): Promise<string> => {
-  if (!ai) {
-    return mockRefinement(currentContent, instructions);
-  }
-
   try {
     const prompt = `
       Atue como um advogado sênior revisando uma peça jurídica (HTML).
@@ -387,11 +342,11 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
 
   } catch (error) {
     console.error("Error refining petition:", error);
-    throw new Error("Não foi possível refinar a petição.");
+    throw new Error("Não foi possível refinar a petição. Verifique a chave de API.");
   }
 };
 
-// Fallback Mock with HTML
+// Fallback Mock with HTML (Mantido apenas para uso nos catch blocks)
 const mockGeneration = (data: PetitionFormData) => {
   const authorNames = data.plaintiffs.map(p => p.name.toUpperCase()).join(', ');
   const defNames = data.defendants.map(d => d.name.toUpperCase()).join(', ');
@@ -430,8 +385,4 @@ const mockMetadata = (data: PetitionFormData): PetitionFilingMetadata => {
     class: 'Procedimento Comum Cível',
     subject: data.actionType || 'Direito Civil'
   };
-};
-
-const mockRefinement = (content: string, instructions: string) => {
-  return content + `<br><p style="color: red;">[MOCK REFINEMENT: "${instructions}"]</p>`;
 };
