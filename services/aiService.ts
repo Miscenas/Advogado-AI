@@ -172,13 +172,14 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
       Atue como um advogado sênior especialista em Direito ${data.area} no Brasil.
       Redija uma petição inicial completa e formal.
       
-      IMPORTANTE:
-      O usuário pode NÃO ter especificado o "Tipo da Ação" exato.
-      Se o campo "TIPO DE AÇÃO" abaixo estiver vazio, você DEVE deduzir a ação correta (ex: Ação de Cobrança, Indenizatória, Alimentos, etc.) baseando-se nos FATOS e PEDIDOS narrados.
+      IMPORTANTE SOBRE DADOS FALTANTES:
+      O usuário pode NÃO ter informado o TIPO DA AÇÃO ou a JURISDIÇÃO.
+      1. Se "TIPO DE AÇÃO" estiver vazio, você DEVE DEDUZIR a ação correta baseando-se nos FATOS e PEDIDOS narrados (ex: Ação de Cobrança, Indenizatória, Alimentos, etc.).
+      2. Se "JURISDIÇÃO" estiver vazio, deixe um espaço em branco sublinhado (ex: "AO JUÍZO DA ___ VARA CÍVEL DA COMARCA DE ___________________").
       
       DADOS DO CASO:
-      1. JURISDIÇÃO: ${data.jurisdiction || '(Deixe espaço para preenchimento se não dedutível)'}.
-      2. TIPO DE AÇÃO (Input): ${data.actionType || 'NÃO ESPECIFICADO - DEDUZIR PELOS FATOS'}.
+      1. JURISDIÇÃO INFORMADA: ${data.jurisdiction || '(Não informada - Usar placeholder)'}.
+      2. TIPO DE AÇÃO INFORMADO: ${data.actionType || '(Não informado - DEDUZIR DO CONTEXTO)'}.
       3. POLO ATIVO: ${plaintiffsText}
       4. POLO PASSIVO: ${defendantsText}
       5. FATOS: ${data.facts}
@@ -195,13 +196,6 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
       - O Endereçamento deve ser em CAIXA ALTA e centralizado.
       - A qualificação das partes deve ser um parágrafo único e formal.
       - A estrutura deve ser: ENDEREÇAMENTO -> QUALIFICAÇÃO -> DOS FATOS -> DO DIREITO -> DOS PEDIDOS -> FECHAMENTO.
-      
-      Exemplo de estrutura HTML desejada:
-      <h3 style="text-align: center; text-transform: uppercase;">EXCELENTÍSSIMO...</h3>
-      <br>
-      <p><b>NOME DO AUTOR</b>, nacionalidade...</p>
-      <h3 style="text-align: center; text-transform: uppercase;">AÇÃO DE ...</h3>
-      ...
     `;
 
     // Using gemini-2.5-flash instead of pro-preview for better key compatibility

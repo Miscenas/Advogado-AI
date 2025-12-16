@@ -104,8 +104,8 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         { id: 5, title: 'Gerar Petição', icon: Sparkles },
       ];
     }
-    // Scratch Mode: Removed the old input step.
-    // "Partes" is now step 1 and renamed to "Dados Iniciais".
+    // Scratch Mode: Adjusted flow
+    // 1. Dados Iniciais (Parties) -> 2. Fatos -> 3. Pedidos -> 4. Gerar
     return [
       { id: 1, title: 'Dados Iniciais', icon: User }, 
       { id: 2, title: 'Fatos', icon: FileText },
@@ -395,8 +395,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      // In scratch mode, we removed Action Type input.
-      // If actionType is empty, AI service will infer it (logic updated in aiService).
       const [content, metadata] = await Promise.all([
         generateLegalPetition(formData),
         suggestFilingMetadata(formData)
@@ -436,7 +434,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         {
           user_id: userId,
           area: formData.area,
-          action_type: formData.actionType || 'Ação (Detectada pela IA)', // Fallback for list view
+          action_type: formData.actionType || 'Ação (Detectada pela IA)', // Fallback if empty
           content: generatedContent,
           created_at: new Date().toISOString(),
           plaintiff_name: pName,
@@ -472,7 +470,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         ? `Peticao_${formData.actionType.replace(/\s+/g, '_')}.doc`
         : `Peticao_Juridica_${new Date().toISOString().split('T')[0]}.doc`;
 
-    // Create a complete HTML document with specific CSS for Word
     const header = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' 
             xmlns:w='urn:schemas-microsoft-com:office:word' 
@@ -504,12 +501,10 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     const footer = "</body></html>";
     const sourceHTML = header + generatedContent + footer;
 
-    // Use Blob with MIME type for Word
     const blob = new Blob(['\ufeff', sourceHTML], {
         type: 'application/msword'
     });
     
-    // Save file
     saveAs(blob, fileName);
   };
 
@@ -521,19 +516,15 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         <head>
           <title></title>
           <style>
-            /* Reset browser headers/footers via @page */
             @page {
               margin: 0;
             }
-
             body {
               font-family: 'Times New Roman', Times, serif;
               font-size: 12pt;
               line-height: 1.5;
-              /* Manually set margins for the content */
               margin: 2.5cm 2cm;
             }
-
             p {
               text-align: justify;
               text-indent: 3cm;
@@ -778,6 +769,12 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                     Confira se os dados das partes foram extraídos corretamente do documento.
                 </div>
              )}
+             
+             {/* Header indicating this is the "Dados Iniciais" step */}
+             <div className="border-b border-gray-100 pb-4 mb-2">
+                 <h2 className="text-lg font-bold text-gray-800">Dados Iniciais (Partes)</h2>
+                 <p className="text-sm text-gray-500">Informe quem são as partes envolvidas no processo.</p>
+             </div>
 
             {/* Plaintiffs Section */}
             <div className="space-y-4">
