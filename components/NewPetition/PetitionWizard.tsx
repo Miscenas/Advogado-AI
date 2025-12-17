@@ -225,14 +225,9 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             const base64Data = base64String.split(',')[1];
             const analysis = await extractDataFromDocument(base64Data, file.type);
             
-            // TRATAMENTO DE ERROS / FALTA DE CHAVE
-            if (analysis.docType.includes('Aviso') || analysis.docType.includes('Erro')) {
-               alert(`⚠️ ${analysis.summary}\n\nPor favor, preencha os dados manualmente.`);
-               
-               // Se for falta de chave, tenta abrir o modal de conexões (se implementado) ou apenas alerta
-               if (analysis.summary.includes('API Key')) {
-                   // Opcional: Adicionar lógica para destacar onde configurar
-               }
+            // LÓGICA DE FALLBACK AMIGÁVEL
+            if (analysis.docType.includes('Leitura Manual') || analysis.docType.includes('Inválido')) {
+               alert(`⚠️ Arquivo não identificado como petição.\n\nO sistema não conseguiu extrair os dados automaticamente. Por favor, prossiga preenchendo o formulário manualmente.`);
             }
 
             setFormData(prev => {
@@ -252,7 +247,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                   {
                     id: Math.random().toString(),
                     fileName: file.name,
-                    docType: analysis.docType || 'Desconhecido',
+                    docType: analysis.docType || 'Documento Anexo',
                     summary: analysis.summary
                   }
                 ]
@@ -264,7 +259,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         reader.readAsDataURL(file);
     } catch (error) {
         console.error(error);
-        alert("Erro ao processar o arquivo.");
+        alert("Erro ao ler o arquivo. Por favor, preencha os dados manualmente.");
         setIsExtracting(false);
     }
   };

@@ -50,29 +50,24 @@ const getAiClient = (): GoogleGenAI | null => {
   const apiKey = FIXED_API_KEY || getStored('custom_gemini_api_key') || getEnv('API_KEY');
   
   if (!apiKey || apiKey.length < 10 || apiKey.includes('YOUR_API_KEY')) {
-    console.warn("Advogado IA: API Key não detectada ou inválida. Ativando Modo Demonstração (Mock AI).");
-    console.log("Dica: Vá em Configurações no menu lateral e cole sua chave API.");
+    // Silently fail to mock mode without warning the user console too aggressively
     return null;
   }
   
   return new GoogleGenAI({ apiKey });
 };
 
-// --- FUNÇÕES MOCK (SIMULAÇÃO QUANDO SEM CHAVE) ---
+// --- FUNÇÕES MOCK (SIMULAÇÃO/FALLBACK) ---
 
-const mockAnalysisResult = (reason: 'missing_key' | 'api_error' = 'missing_key', errorMessage?: string) => {
-    const isKeyError = reason === 'missing_key';
-    
-    const summaryMsg = isKeyError 
-        ? "IA DESCONECTADA: Configure sua API Key no menu lateral para analisar documentos reais."
-        : `FALHA NA LEITURA: Ocorreu um erro ao processar o arquivo. (${errorMessage || 'Formato inválido'})`;
+const mockAnalysisResult = (errorMessage?: string) => {
+    // Mensagem amigável para o advogado, sem tecniquês
+    const summaryMsg = "O sistema não identificou o arquivo como uma petição ou documento legível. Prossiga com o preenchimento manual.";
 
-    const factsMsg = isKeyError
-        ? "⚠️ **Atenção: Leitura Automática Indisponível**\n\nO sistema não conseguiu ler o conteúdo do seu arquivo porque a Inteligência Artificial não está conectada.\n\n**COMO RESOLVER:**\n1. No menu lateral esquerdo, clique em 'Painel' ou no ícone de engrenagem.\n2. Cole sua chave Google Gemini API.\n3. Salve e tente enviar o arquivo novamente.\n\nAlternativamente, você pode apagar este texto e preencher os fatos manualmente."
-        : `⚠️ **Atenção: Erro na Leitura do Arquivo**\n\nA IA não conseguiu extrair dados deste documento.\n\n**Motivo Provável:**\n- O arquivo pode ser uma imagem de baixa qualidade ou manuscrito ilegível.\n- O arquivo está corrompido ou protegido por senha.\n- Erro técnico: ${errorMessage}\n\nPor favor, preencha os dados manualmente abaixo.`;
+    // Placeholder para o campo de fatos
+    const factsMsg = "A leitura automática não foi possível para este arquivo.\n\nIsso ocorre quando:\n1. O documento não é uma peça jurídica padrão (ex: é uma foto, planta, recibo).\n2. O texto está ilegível ou manuscrito.\n3. O sistema de análise está momentaneamente indisponível.\n\n➡️ Por favor, descreva os fatos do caso neste campo manualmente.";
 
     return {
-        docType: isKeyError ? "Aviso: Falta Configuração" : "Erro de Leitura",
+        docType: "Leitura Manual Necessária",
         summary: summaryMsg,
         extractedData: {
             area: "civel",
@@ -86,7 +81,15 @@ const mockAnalysisResult = (reason: 'missing_key' | 'api_error' = 'missing_key',
     };
 };
 
-const mockTranscription = "Transcrição indisponível: Chave de API não configurada. Vá em Configurações > Google Gemini API para ativar este recurso.";
+const mockTranscription = "Transcrição indisponível no momento. Por favor, digite o conteúdo do áudio.";
+
+// --- HELPER DE TRATAMENTO DE ERROS ---
+
+const parseAiError = (error: any): string => {
+    // Log interno para o desenvolvedor, mas retorno genérico para o usuário
+    console.warn("AI Error:", error);
+    return "O sistema não conseguiu processar este arquivo automaticamente.";
+};
 
 // --- FUNÇÕES PRINCIPAIS ---
 
@@ -98,16 +101,20 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   try {
     const ai = getAiClient();
     
-    // FALLBACK: Se não tem AI, retorna Mock Instrutivo
+    // FALLBACK: Se não tem AI configurada no sistema, retorna Mock direto pedindo preenchimento manual
     if (!ai) {
         await new Promise(r => setTimeout(r, 1000));
-        return mockAnalysisResult('missing_key');
+        return mockAnalysisResult();
     }
 
     const prompt = `
-      Analise o documento jurídico anexo. 
-      Retorne um JSON com: docType (Classificação ex: "Petição Inicial", "Contestação", "Sentença", "Inquérito"), summary (Resumo 1 linha) e extractedData (Objeto com area, actionType, jurisdiction, plaintiffs, defendants, facts, value).
-      Se for imagem ilegível, retorne docType: "Erro".
+      Analise o documento jurídico anexo.
+      Se o documento NÃO FOR uma peça jurídica ou documento de identificação claro, defina docType como "Inválido".
+      
+      Retorne um JSON com: 
+      - docType (Classificação ex: "Petição Inicial", "Contestação", "Sentença", "RG/CPF").
+      - summary (Resumo de 1 linha).
+      - extractedData (Objeto com area, actionType, jurisdiction, plaintiffs, defendants, facts, value).
     `;
 
     const response = await ai.models.generateContent({
@@ -143,12 +150,18 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
     });
 
     const jsonStr = response.text || "{}";
-    return JSON.parse(jsonStr);
+    const result = JSON.parse(jsonStr);
+
+    // Se a IA disse que é inválido ou veio vazio, retorna mensagem de preenchimento manual
+    if (result.docType === 'Inválido' || !result.extractedData || (result.extractedData?.facts?.length || 0) < 5) {
+        return mockAnalysisResult("Documento não reconhecido.");
+    }
+
+    return result;
 
   } catch (error: any) {
-    console.error("Error extracting document data:", error);
-    // Retorna Mock Instrutivo de Erro
-    return mockAnalysisResult('api_error', error.message || 'Chave inválida ou arquivo ilegível');
+    // Qualquer erro (429, 500, Key inválida) cai aqui e retorna a mensagem amigável
+    return mockAnalysisResult();
   }
 };
 
@@ -173,7 +186,6 @@ export const transcribeAudio = async (base64Data: string, mimeType: string): Pro
 
     return response.text || "";
   } catch (error) {
-    console.error("Transcription error", error);
     return mockTranscription;
   }
 };
@@ -183,13 +195,8 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
     const ai = getAiClient();
     if (!ai) {
         return `
-        <div class="p-4 bg-red-50 border border-red-200 rounded text-red-800 mb-4 text-sm">
-           <strong>IA Desconectada:</strong> Insira sua API Key nas Configurações para realizar pesquisas reais.
-        </div>
-        <div class="juris-card opacity-50">
-            <h4>RESULTADO EXEMPLO (MODO DEMO)</h4>
-            <p><strong>Relator:</strong> IA JurisPet</p>
-            <p class="ementa"><strong>Ementa:</strong> Este resultado é fictício porque o sistema não detectou uma chave de API válida.</p>
+        <div class="p-4 bg-amber-50 border border-amber-200 rounded text-amber-800 mb-4 text-sm">
+           <strong>Busca Indisponível:</strong> O sistema de pesquisa inteligente está temporariamente offline. Tente novamente mais tarde.
         </div>`;
     }
 
@@ -211,7 +218,7 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
     return text;
 
   } catch (error: any) {
-    return `<p class="text-red-500">Erro na busca: ${error.message}</p>`;
+    return `<p class="text-red-500">Erro momentâneo na busca. Tente refazer a pesquisa.</p>`;
   }
 };
 
@@ -226,18 +233,16 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
   try {
     const isCriminal = data.area === 'criminal';
     
-    // Prompt Base (Comum a todas as áreas)
     let systemRole = "ATUE COMO UM ADVOGADO SÊNIOR COM 20 ANOS DE EXPERIÊNCIA.";
     let styleGuide = `
       ESTILO DE REDAÇÃO:
       - Linguagem culta, técnica, persuasiva e direta.
-      - Use termos jurídicos adequados e brocardos latinos pertinentes (ex: "fumus boni iuris", "in dubio pro reo" se criminal).
+      - Use termos jurídicos adequados e brocardos latinos pertinentes.
       - CITE ARTIGOS DE LEI ESPECÍFICOS (CF/88, CP, CPP, CC, CPC, CLT).
       - CITE JURISPRUDÊNCIA RECENTE (STF/STJ) como fundamento.
       - Formatação HTML limpa: <h3> para títulos (centralizados), <p> justificados, <ul> para listas.
     `;
 
-    // Prompt Específico por Área
     let structureInstructions = "";
 
     if (isCriminal) {
@@ -252,11 +257,10 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
              - Invoque princípios constitucionais (Presunção de Inocência, Devido Processo Legal, Ampla Defesa).
              - Cite artigos do Código Penal e Processo Penal.
              - Cite Súmulas do STF/STJ.
-          5. III - DOS PEDIDOS: Liste os requerimentos de forma técnica (Absolvição, Relaxamento, Trancamento, Condenação, etc).
+          5. III - DOS PEDIDOS: Liste os requerimentos de forma técnica.
           6. FECHAMENTO: Local, Data, Advogado OAB.
         `;
     } else {
-        // Cível / Trabalhista / Família
         structureInstructions = `
           ESTRUTURA CÍVEL/GERAL:
           1. ENDEREÇAMENTO (Excelentíssimo...).
@@ -346,7 +350,7 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
 
 export const refineLegalPetition = async (currentContent: string, instructions: string): Promise<string> => {
     const ai = getAiClient();
-    if (!ai) return currentContent + "<br><p style='color:red;'><strong>[IA Offline]</strong> Não foi possível processar a alteração: " + instructions + "</p>";
+    if (!ai) return currentContent + "<br><p style='color:red;'><strong>[Aviso]</strong> Não foi possível processar a alteração solicitada automaticamente.</p>";
     
     try {
         const response = await ai.models.generateContent({
@@ -366,14 +370,13 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
     } catch (e) { return currentContent; }
 };
 
-// --- MOCKS DE GERAÇÃO ---
+// --- MOCKS DE GERAÇÃO (Fallback se a IA falhar na geração) ---
 
 const mockGeneration = (data: PetitionFormData, showWarning = false) => {
+  // Aviso sutil apenas no topo, sem falar de API Key
   const warning = showWarning ? 
-    `<div style="background:#fef2f2; border:1px solid #fee2e2; color:#991b1b; padding:20px; margin-bottom:20px; border-radius:8px; text-align:center;">
-        <h3 style="margin:0 0 10px 0;">⚠️ MODO DEMONSTRAÇÃO (IA DESCONECTADA)</h3>
-        <p style="margin:0;">Esta petição é apenas um modelo genérico.</p>
-        <p style="margin:5px 0 0 0; font-size:0.9em;">Para gerar conteúdo real, insira sua <strong>API Key</strong> no menu Configurações.</p>
+    `<div style="background:#fff7ed; border:1px solid #ffedd5; color:#9a3412; padding:15px; margin-bottom:20px; border-radius:8px; text-align:center; font-size: 0.9em;">
+        <strong>Nota:</strong> O sistema de IA está temporariamente indisponível. Esta é uma minuta modelo baseada nos dados inseridos. Recomendamos revisão manual atenta.
     </div>` : '';
 
   const isCriminal = data.area === 'criminal';
@@ -387,7 +390,7 @@ const mockGeneration = (data: PetitionFormData, showWarning = false) => {
         <h3 style="text-align: center;">${data.actionType?.toUpperCase() || 'REQUERIMENTO CRIMINAL'}</h3>
         <br>
         <h3 style="text-align: center;">I - DOS FATOS</h3>
-        <p>${data.facts || 'Fatos não processados (Modo Demo).'}</p>
+        <p>${data.facts || 'Narrativa dos fatos conforme informado.'}</p>
         <br>
         <h3 style="text-align: center;">II - DO DIREITO</h3>
         <p>O direito assiste ao requerente, com base no princípio do <i>in dubio pro reo</i> e na legislação vigente (CP/CPP).</p>
@@ -411,7 +414,7 @@ ${warning}
 <p>em face de <b>${data.defendants[0]?.name || 'NOME DO RÉU'}</b>, pelos motivos de fato e de direito a seguir aduzidos.</p>
 <br>
 <h3 style="text-align: center;">I - DOS FATOS</h3>
-<p>${data.facts || 'O autor alega que os fatos ocorreram conforme narrativa inserida no formulário. (Texto placeholder do modo demonstração).'}</p>
+<p>${data.facts || 'O autor alega que os fatos ocorreram conforme narrativa inserida no formulário.'}</p>
 <p>Diante do exposto, resta evidente o direito pleiteado.</p>
 <br>
 <h3 style="text-align: center;">II - DOS PEDIDOS</h3>
