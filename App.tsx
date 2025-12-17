@@ -11,6 +11,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { UserProfileView } from './components/UserProfile';
 import { DeadlineManager } from './components/DeadlineManager';
 import { JurisprudenceSearch } from './components/JurisprudenceSearch';
+import { CourtPortals } from './components/CourtPortals';
 import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw, Info } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
@@ -346,6 +347,8 @@ function App() {
         return <JurisprudenceSearch userId={authState.user?.id} />;
       case 'deadlines':
         return <DeadlineManager userId={authState.user?.id} />;
+      case 'portals':
+        return <CourtPortals />;
       case 'profile':
         return <UserProfileView profile={authState.profile} />;
       case 'admin':
