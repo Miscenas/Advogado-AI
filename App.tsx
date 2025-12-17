@@ -16,84 +16,149 @@ import { SubscriptionPage, PaymentSuccess, PaymentFailure } from './components/S
 import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw, Info } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
-// Script SQL para correção disponível diretamente na UI em caso de erro
-const SQL_FIX_SCRIPT = `-- ATUALIZAÇÃO HÍBRIDA (CONTAGEM P/ FREE, ARMAZENAMENTO P/ PRO)
--- Execute este script no SQL Editor do Supabase.
+// Script SQL COMPLETO para configuração do Supabase
+const SQL_FIX_SCRIPT = `-- SETUP COMPLETO DO BANCO DE DADOS (JURISPET AI)
+-- Copie e cole este script no SQL Editor do Supabase para criar todas as tabelas e políticas.
 
--- 1. FUNÇÕES AUXILIARES DE SEGURANÇA
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN
-LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = public
-AS $$
-BEGIN
-  IF auth.uid() IS NULL THEN RETURN FALSE; END IF;
-  RETURN EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin');
-END;
-$$;
+-- 1. Habilitar UUIDs
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. TABELA DE LIMITES DE USO (Campos para ambos os modelos)
+-- 2. Tabela de Perfis (Profiles)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id uuid REFERENCES auth.users(id) PRIMARY KEY,
+  email text,
+  full_name text,
+  role text DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  account_status text DEFAULT 'trial' CHECK (account_status IN ('trial', 'active', 'blocked')),
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- 3. Tabela de Petições (Petitions)
+CREATE TABLE IF NOT EXISTS public.petitions (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id) NOT NULL,
+  area text,
+  action_type text,
+  content text,
+  plaintiff_name text,
+  defendant_name text,
+  filed boolean DEFAULT false,
+  analyzed_documents jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.petitions ENABLE ROW LEVEL SECURITY;
+
+-- 4. Tabela de Prazos (Deadlines)
+CREATE TABLE IF NOT EXISTS public.deadlines (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id) NOT NULL,
+  title text NOT NULL,
+  description text,
+  due_date date NOT NULL,
+  status text DEFAULT 'pending' CHECK (status IN ('pending', 'completed')),
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.deadlines ENABLE ROW LEVEL SECURITY;
+
+-- 5. Tabela de Jurisprudência Salva
+CREATE TABLE IF NOT EXISTS public.saved_jurisprudence (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id) NOT NULL,
+  query text NOT NULL,
+  result text, -- HTML content
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.saved_jurisprudence ENABLE ROW LEVEL SECURITY;
+
+-- 6. Tabela de Limites de Uso (Usage Limits)
 CREATE TABLE IF NOT EXISTS public.usage_limits (
   user_id uuid REFERENCES auth.users(id) PRIMARY KEY,
-  -- Modelo Free (Contagem)
   petitions_limit int DEFAULT 5,
   petitions_this_month int DEFAULT 0,
-  last_reset timestamp with time zone DEFAULT timezone('utc'::text, now()),
-  -- Modelo Pro (Armazenamento)
   storage_limit_bytes bigint DEFAULT 52428800, -- 50 MB
   used_storage_bytes bigint DEFAULT 0,
-  
+  last_reset timestamp with time zone DEFAULT timezone('utc'::text, now()),
   last_update timestamp with time zone DEFAULT timezone('utc'::text, now())
 );
+ALTER TABLE public.usage_limits ENABLE ROW LEVEL SECURITY;
 
--- Migração de colunas para garantir que todas existam
-DO $$ 
-BEGIN 
-    BEGIN
-        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS petitions_limit int DEFAULT 5;
-        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS petitions_this_month int DEFAULT 0;
-        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS last_reset timestamp with time zone DEFAULT timezone('utc'::text, now());
-        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS storage_limit_bytes bigint DEFAULT 52428800;
-        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS used_storage_bytes bigint DEFAULT 0;
-        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS last_update timestamp with time zone DEFAULT timezone('utc'::text, now());
-        -- Cleanup legacy names if confusing
-        -- ALTER TABLE usage_limits DROP COLUMN IF EXISTS monthly_limit;
-    EXCEPTION
-        WHEN others THEN NULL;
-    END;
-END $$;
+-- 7. Tabela de Tentativas de Pagamento
+CREATE TABLE IF NOT EXISTS public.payment_attempts (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id) NOT NULL,
+  plan text,
+  status text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.payment_attempts ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE usage_limits ENABLE ROW LEVEL SECURITY;
+-- 8. POLÍTICAS DE SEGURANÇA (RLS)
+-- Remove políticas antigas para evitar duplicação
+DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can view own petitions" ON petitions;
+DROP POLICY IF EXISTS "Users can insert own petitions" ON petitions;
+DROP POLICY IF EXISTS "Users can update own petitions" ON petitions;
+DROP POLICY IF EXISTS "Users can delete own petitions" ON petitions;
+DROP POLICY IF EXISTS "Users can view own deadlines" ON deadlines;
+DROP POLICY IF EXISTS "Users can insert own deadlines" ON deadlines;
+DROP POLICY IF EXISTS "Users can update own deadlines" ON deadlines;
+DROP POLICY IF EXISTS "Users can delete own deadlines" ON deadlines;
+DROP POLICY IF EXISTS "Users can view own jurisprudence" ON saved_jurisprudence;
+DROP POLICY IF EXISTS "Users can insert own jurisprudence" ON saved_jurisprudence;
+DROP POLICY IF EXISTS "Users can delete own jurisprudence" ON saved_jurisprudence;
+DROP POLICY IF EXISTS "Users can view own usage" ON usage_limits;
 
-DO $$ 
-BEGIN 
-    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'usage_limits' LOOP 
-        EXECUTE format('DROP POLICY IF EXISTS %I ON usage_limits', pol.policyname); 
-    END LOOP; 
-END $$;
+-- Cria novas políticas
+CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can view own petitions" ON petitions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own petitions" ON petitions FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own petitions" ON petitions FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own petitions" ON petitions FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view own deadlines" ON deadlines FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own deadlines" ON deadlines FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own deadlines" ON deadlines FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own deadlines" ON deadlines FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view own jurisprudence" ON saved_jurisprudence FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own jurisprudence" ON saved_jurisprudence FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete own jurisprudence" ON saved_jurisprudence FOR DELETE USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can view own usage" ON usage_limits FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can update own usage" ON usage_limits FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own usage" ON usage_limits FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- Usage limits is generally updated by triggers/system, but we allow select.
 
--- 3. TRIGGER HÍBRIDO
--- Atualiza contagem (com reset mensal) e armazenamento simultaneamente
+-- 9. FUNÇÃO E TRIGGER PARA PERFIL AUTOMÁTICO
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, role, account_status)
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name', 'user', 'trial');
+  
+  INSERT INTO public.usage_limits (user_id)
+  VALUES (NEW.id);
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- 10. TRIGGER DE USO HÍBRIDO (Contagem + Armazenamento)
 CREATE OR REPLACE FUNCTION update_hybrid_usage() 
 RETURNS TRIGGER AS $$
 DECLARE
   row_size bigint;
   old_size bigint;
-  is_new_month boolean;
 BEGIN
   IF (TG_OP = 'INSERT') THEN
     row_size := pg_column_size(NEW);
-    
-    -- Verifica se mudou o mês para resetar contador
-    SELECT (EXTRACT(MONTH FROM last_reset) != EXTRACT(MONTH FROM now()) OR 
-            EXTRACT(YEAR FROM last_reset) != EXTRACT(YEAR FROM now()))
-    INTO is_new_month
-    FROM usage_limits WHERE user_id = NEW.user_id;
-
     INSERT INTO public.usage_limits (user_id, petitions_this_month, used_storage_bytes, last_reset, last_update)
     VALUES (NEW.user_id, 1, row_size, now(), now())
     ON CONFLICT (user_id) DO UPDATE 
@@ -108,38 +173,21 @@ BEGIN
       END,
       used_storage_bytes = usage_limits.used_storage_bytes + row_size,
       last_update = now();
-        
-  ELSIF (TG_OP = 'UPDATE') THEN
-    row_size := pg_column_size(NEW);
-    old_size := pg_column_size(OLD);
-    
-    UPDATE public.usage_limits 
-    SET used_storage_bytes = used_storage_bytes + (row_size - old_size),
-        last_update = now()
-    WHERE user_id = NEW.user_id;
-    
   ELSIF (TG_OP = 'DELETE') THEN
     old_size := pg_column_size(OLD);
-    
     UPDATE public.usage_limits 
     SET used_storage_bytes = GREATEST(0, used_storage_bytes - old_size),
         last_update = now()
     WHERE user_id = OLD.user_id;
   END IF;
-  
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS on_petition_created ON petitions;
-DROP TRIGGER IF EXISTS on_petition_storage_change ON petitions;
 DROP TRIGGER IF EXISTS on_petition_hybrid_usage ON petitions;
-
 CREATE TRIGGER on_petition_hybrid_usage
-AFTER INSERT OR UPDATE OR DELETE ON petitions
+AFTER INSERT OR DELETE ON petitions
 FOR EACH ROW EXECUTE FUNCTION update_hybrid_usage();
-
-GRANT EXECUTE ON FUNCTION public.is_admin TO authenticated, service_role;
 `;
 
 const BlockedScreen = ({ reason }: { reason: string }) => (
@@ -347,14 +395,14 @@ function App() {
                       <div className="bg-red-100 p-4 rounded-full mb-4">
                           <Database size={48} className="text-red-600" />
                       </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Atualização de Regras de Negócio</h2>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Configuração Inicial do Banco de Dados</h2>
                       <p className="text-gray-600 mb-6">
-                          O sistema de limites (Híbrido) foi atualizado. Execute o script abaixo.
+                          O banco de dados Supabase precisa ser configurado. Execute o script SQL abaixo para criar as tabelas e permissões.
                       </p>
                       
                       <div className="bg-gray-50 p-5 rounded-lg border border-gray-200 text-left w-full mb-6 relative">
                           <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                              <AlertTriangle size={18} className="text-amber-500" /> Script SQL:
+                              <AlertTriangle size={18} className="text-amber-500" /> Script SQL de Instalação:
                           </h4>
                           <div className="relative group">
                               <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto h-48 border border-gray-700 whitespace-pre-wrap">

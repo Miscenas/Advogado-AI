@@ -193,6 +193,14 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             const base64String = event.target?.result as string;
             const base64Data = base64String.split(',')[1];
             const analysis = await extractDataFromDocument(base64Data, file.type);
+            
+            // ERROR CHECKING: If docType suggests an error, don't proceed with success
+            if (analysis.docType === 'Erro' || analysis.summary.includes('Erro de Configuração')) {
+               alert(`Falha na análise: ${analysis.summary}`);
+               setIsExtracting(false);
+               return;
+            }
+
             setFormData(prev => {
               const newPlaintiffs = analysis.extractedData.plaintiffs?.map((p: any) => ({...p, id: Math.random().toString()})) || [];
               const newDefendants = analysis.extractedData.defendants?.map((p: any) => ({...p, id: Math.random().toString()})) || [];
