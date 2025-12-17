@@ -21,7 +21,8 @@ import {
   BookOpen,
   Globe,
   HardDrive,
-  ShieldCheck
+  ShieldCheck,
+  Calendar
 } from 'lucide-react';
 import { Button } from './ui/Button';
 
@@ -95,13 +96,12 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
           .order('created_at', { ascending: false })
           .limit(5);
 
-        const today = new Date().toISOString().split('T')[0];
+        // Fetch pending deadlines, ordered by due date
         const { data: deadlineData } = await supabase
           .from('deadlines')
           .select('*')
           .eq('user_id', profile.id)
           .eq('status', 'pending')
-          .gte('due_date', today)
           .order('due_date', { ascending: true })
           .limit(5);
 
@@ -128,6 +128,41 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
     if (bytes === 0) return '0 MB';
     const mb = bytes / (1024 * 1024);
     return mb.toFixed(2) + ' MB';
+  };
+
+  const getDeadlineStyle = (dateStr: string) => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const due = new Date(dateStr);
+    due.setHours(0,0,0,0);
+    
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Vencido
+    if (diffDays < 0) return { 
+        style: 'bg-red-50 border-red-200 text-red-900', 
+        icon: <AlertTriangle size={14} className="text-red-600" />,
+        label: 'Vencido'
+    };
+    // Urgente (Hoje, Amanhã, Depois de Amanhã)
+    if (diffDays <= 2) return { 
+        style: 'bg-red-50 border-red-200 text-red-900', 
+        icon: <Flame size={14} className="text-red-600 animate-pulse" />,
+        label: diffDays === 0 ? 'Hoje' : diffDays === 1 ? 'Amanhã' : '2 dias'
+    };
+    // Atenção (3 a 5 dias)
+    if (diffDays <= 5) return { 
+        style: 'bg-amber-50 border-amber-200 text-amber-900', 
+        icon: <Clock size={14} className="text-amber-600" />,
+        label: `${diffDays} dias`
+    };
+    // Normal
+    return { 
+        style: 'bg-gray-50 border-gray-200 text-gray-700', 
+        icon: <Calendar size={14} className="text-gray-400" />,
+        label: new Date(dateStr).toLocaleDateString('pt-BR').slice(0, 5) // dd/mm
+    };
   };
 
   // --- Renderers for Each Widget Type ---
@@ -305,14 +340,30 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
                 <div className="flex-1 overflow-y-auto max-h-[300px] p-4">
                     {upcomingDeadlines.length > 0 ? (
                         <div className="space-y-2">
-                            {upcomingDeadlines.map(d => (
-                                <div key={d.id} className="p-2 bg-gray-50 rounded border flex justify-between">
-                                    <span className="text-sm truncate w-24">{d.title}</span>
-                                    <span className="text-xs text-gray-500">{new Date(d.due_date).toLocaleDateString()}</span>
-                                </div>
-                            ))}
+                            {upcomingDeadlines.map(d => {
+                                const info = getDeadlineStyle(d.due_date);
+                                return (
+                                    <div key={d.id} className={`p-3 rounded-lg border flex justify-between items-center transition-colors ${info.style}`}>
+                                        <div className="flex flex-col min-w-0 mr-2">
+                                            <span className="text-sm font-semibold truncate">{d.title}</span>
+                                            <span className="text-[10px] opacity-80 flex items-center gap-1 mt-0.5">
+                                                {new Date(d.due_date).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 shrink-0 bg-white/50 px-2 py-1 rounded text-xs font-bold">
+                                            {info.icon}
+                                            <span>{info.label}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    ) : <p className="text-xs text-center text-gray-400">Sem prazos urgentes.</p>}
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                             <CheckCircle2 size={32} className="mb-2 opacity-20" />
+                             <p className="text-xs">Tudo em dia!</p>
+                        </div>
+                    )}
                 </div>
             </div>
         );

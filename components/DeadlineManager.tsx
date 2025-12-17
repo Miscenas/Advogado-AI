@@ -32,7 +32,6 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
         .order('due_date', { ascending: true });
 
       if (error) {
-          // Silent fail on fetch if table doesn't exist yet, just log
           console.warn('Error fetching deadlines (Table might not exist):', error);
           return;
       }
@@ -80,19 +79,36 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este prazo?')) return;
+    if (!confirm('Tem certeza que deseja excluir este prazo permanentemente?')) return;
+    
     try {
-        await supabase.from('deadlines').delete().eq('id', id);
+        const { error } = await supabase.from('deadlines').delete().eq('id', id);
+        
+        if (error) {
+            console.error('Erro Supabase Delete:', error);
+            throw error;
+        }
+
+        // Atualiza UI apenas se não houve erro
         setDeadlines(prev => prev.filter(d => d.id !== id));
-    } catch (e) {
-        alert('Erro ao excluir');
+    } catch (e: any) {
+        console.error('Erro ao excluir:', e);
+        alert(`Não foi possível excluir o prazo. Detalhe: ${e.message || e.error_description || 'Erro desconhecido'}`);
     }
   };
 
   const toggleStatus = async (id: string, currentStatus: 'pending' | 'completed') => {
       const newStatus = currentStatus === 'pending' ? 'completed' : 'pending';
+      // Optimistic update
       setDeadlines(prev => prev.map(d => d.id === id ? { ...d, status: newStatus } : d));
-      await supabase.from('deadlines').update({ status: newStatus }).eq('id', id);
+      
+      const { error } = await supabase.from('deadlines').update({ status: newStatus }).eq('id', id);
+      if (error) {
+          console.error('Erro ao atualizar status:', error);
+          // Revert on error
+          setDeadlines(prev => prev.map(d => d.id === id ? { ...d, status: currentStatus } : d));
+          alert('Erro ao atualizar status do prazo.');
+      }
   };
 
   const getUrgencyColor = (dateString: string, status: string) => {
@@ -108,8 +124,8 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
 
     if (diffDays < 0) return 'bg-red-50 border-red-200 text-red-800'; // Vencido
     
-    // ATUALIZAÇÃO: 2 dias ou menos (inclui hoje e amanhã) fica VERMELHO
-    if (diffDays <= 2) return 'bg-red-50 border-red-200 text-red-800 font-medium'; 
+    // 2 dias ou menos (inclui hoje e amanhã) fica VERMELHO com destaque
+    if (diffDays <= 2) return 'bg-red-50 border-red-300 text-red-900 font-medium shadow-sm ring-1 ring-red-100'; 
     
     // Entre 3 e 5 dias fica Amarelo/Laranja
     if (diffDays <= 5) return 'bg-amber-50 border-amber-200 text-amber-800'; 
@@ -118,7 +134,7 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -176,7 +192,6 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                 const statusColor = getUrgencyColor(deadline.due_date, deadline.status);
                 const isCompleted = deadline.status === 'completed';
                 
-                // Calculate diff for icon logic
                 const today = new Date();
                 today.setHours(0,0,0,0);
                 const due = new Date(deadline.due_date);
@@ -189,7 +204,8 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                         <div className="flex items-center gap-4">
                             <button 
                                onClick={() => toggleStatus(deadline.id, deadline.status)}
-                               className={`rounded-full p-1 transition-colors ${isCompleted ? 'text-green-600 bg-green-100' : 'text-gray-300 hover:bg-gray-200'}`}
+                               className={`rounded-full p-1 transition-colors ${isCompleted ? 'text-green-600 bg-green-100' : 'text-gray-400 hover:bg-gray-200'}`}
+                               title={isCompleted ? "Marcar como pendente" : "Marcar como concluído"}
                             >
                                 <CheckCircle2 size={24} className={isCompleted ? "fill-current" : ""} />
                             </button>
@@ -198,7 +214,7 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                                 <h4 className="font-semibold text-sm md:text-base flex items-center gap-2">
                                   {deadline.title}
                                   {/* Mostrar ícone de fogo se for muito urgente (<= 2 dias) e não completado */}
-                                  {!isCompleted && diffDays <= 2 && diffDays >= 0 && (
+                                  {!isCompleted && diffDays <= 2 && (
                                     <Flame size={14} className="text-red-600 animate-pulse" />
                                   )}
                                 </h4>
@@ -214,21 +230,22 @@ export const DeadlineManager: React.FC<DeadlineManagerProps> = ({ userId }) => {
                         <div className="flex items-center gap-2">
                            {/* Badge Vencido */}
                            {deadline.status === 'pending' && diffDays < 0 && (
-                               <span className="hidden md:flex items-center gap-1 text-red-600 text-xs font-bold bg-red-100 px-2 py-1 rounded-full">
+                               <span className="hidden md:flex items-center gap-1 text-red-700 text-xs font-bold bg-white/60 px-2 py-1 rounded-full border border-red-200">
                                    <AlertTriangle size={12} /> Vencido
                                </span>
                            )}
                            {/* Badge Urgente (0 a 2 dias) */}
                            {deadline.status === 'pending' && diffDays >= 0 && diffDays <= 2 && (
-                               <span className="hidden md:flex items-center gap-1 text-red-600 text-xs font-bold bg-white/50 px-2 py-1 rounded-full border border-red-200">
+                               <span className="hidden md:flex items-center gap-1 text-red-700 text-xs font-bold bg-white/60 px-2 py-1 rounded-full border border-red-200">
                                    Urgente
                                </span>
                            )}
                            
                            <button 
+                             type="button"
                              onClick={() => handleDelete(deadline.id)}
                              className="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
-                             title="Excluir"
+                             title="Excluir Prazo"
                            >
                              <Trash2 size={18} />
                            </button>

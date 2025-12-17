@@ -342,11 +342,6 @@ if (isConfigured) {
                        }));
                        mockPetitions = [...mockPetitions, ...newItems];
                        localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
-                       
-                       // Note: We don't need to manually update usage here because 
-                       // the 'select' query for 'usage_limits' recalculates it dynamically 
-                       // based on mockPetitions array length.
-                       
                        return { data: newItems[0], error: null };
                     }
 
@@ -372,12 +367,35 @@ if (isConfigured) {
             return {
                 eq: async (column: string, value: any) => {
                     await new Promise(resolve => setTimeout(resolve, 300));
+                    
                     if (table === 'deadlines') {
+                        // Filtra a lista removendo o item
+                        const originalLength = mockDeadlines.length;
                         mockDeadlines = mockDeadlines.filter(d => d[column] !== value);
+                        
+                        // Persiste no storage
                         localStorage.setItem(mockDeadlinesKey, JSON.stringify(mockDeadlines));
-                        return { error: null };
+                        
+                        // Se não removeu nada (ID não encontrado), pode retornar erro ou sucesso vazio
+                        if (mockDeadlines.length === originalLength) {
+                            // console.warn('Mock Delete: Item not found');
+                        }
+                        
+                        return { data: null, error: null };
                     }
-                    return { error: null };
+                    
+                    if (table === 'petitions') {
+                        mockPetitions = mockPetitions.filter(p => p[column] !== value);
+                        localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
+                        return { data: null, error: null };
+                    }
+                    
+                    if (table === 'saved_jurisprudence') {
+                        // Simulação para jurisprudência (não implementada no mock completo acima, mas seguro adicionar)
+                        return { data: null, error: null };
+                    }
+
+                    return { data: null, error: null };
                 }
             }
         }
