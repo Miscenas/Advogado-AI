@@ -378,15 +378,34 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
                    ) : recentPetitions.length > 0 ? (
                        <div className="divide-y divide-gray-100">
                           {recentPetitions.map((petition) => (
-                              <div key={petition.id} className="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between group cursor-pointer" onClick={() => onNavigate('my-petitions')}>
+                              <div 
+                                key={petition.id} 
+                                className={`p-4 transition-all flex items-center justify-between group cursor-pointer border-l-4 ${
+                                    petition.filed 
+                                      ? 'bg-green-50 border-green-500 hover:bg-green-100' // Estilo Peticionado
+                                      : 'bg-white border-transparent hover:bg-gray-50' // Estilo Padrão
+                                }`} 
+                                onClick={() => onNavigate('my-petitions')}
+                              >
                                   <div className="flex items-center gap-4">
-                                      <div className={`p-2 rounded-lg ${petition.filed ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'}`}><FileText size={20} /></div>
+                                      <div className={`p-2 rounded-lg ${petition.filed ? 'bg-green-200 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
+                                        <FileText size={20} />
+                                      </div>
                                       <div>
-                                          <p className="font-medium text-gray-900 text-sm">{petition.action_type || 'Petição'}</p>
-                                          <div className="flex items-center gap-2 text-xs text-gray-500 mt-1"><span>{new Date(petition.created_at).toLocaleDateString('pt-BR')}</span></div>
+                                          <p className={`font-medium text-sm ${petition.filed ? 'text-green-900' : 'text-gray-900'}`}>
+                                            {petition.action_type || 'Petição'}
+                                          </p>
+                                          <div className={`flex items-center gap-2 text-xs mt-1 ${petition.filed ? 'text-green-700' : 'text-gray-500'}`}>
+                                            <span>{new Date(petition.created_at).toLocaleDateString('pt-BR')}</span>
+                                            {petition.filed && (
+                                                <span className="font-bold flex items-center gap-1">
+                                                    • Peticionado
+                                                </span>
+                                            )}
+                                          </div>
                                       </div>
                                   </div>
-                                  <ChevronRight size={16} className="text-gray-300 group-hover:text-juris-500" />
+                                  <ChevronRight size={16} className={`${petition.filed ? 'text-green-400' : 'text-gray-300'} group-hover:text-juris-500`} />
                               </div>
                           ))}
                        </div>
