@@ -483,10 +483,11 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   };
 
   const handleBackToEditing = () => {
-      if(confirm('Isso descartará a petição gerada para que você possa editar os dados. Deseja continuar?')) {
+      if(window.confirm('Isso descartará a petição gerada para que você possa editar os dados. Deseja continuar?')) {
           setGeneratedContent(null);
           setIsFullScreen(false);
-          // Current step is already correct (Step 4/5 depending on flow)
+          // Volta um passo para exibir os inputs, ao invés de ficar na tela de "Gerar"
+          setCurrentStep(prev => Math.max(1, prev - 1));
       }
   };
 

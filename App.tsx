@@ -10,7 +10,7 @@ import { PetitionList } from './components/PetitionList';
 import { AdminPanel } from './components/AdminPanel';
 import { UserProfileView } from './components/UserProfile';
 import { DeadlineManager } from './components/DeadlineManager';
-import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw } from 'lucide-react';
+import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw, Info } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
 // Script SQL para correção disponível diretamente na UI em caso de erro
@@ -95,22 +95,31 @@ function App() {
   const [currentRoute, setCurrentRoute] = useState('dashboard');
   const [dbError, setDbError] = useState<{isError: boolean, code?: string, message?: string}>({ isError: false });
   const [copied, setCopied] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   useEffect(() => {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthState((prev) => ({ ...prev, session, user: session?.user ?? null }));
-      if (session?.user) fetchData(session.user.id, session.user);
-      else setAuthState(prev => ({ ...prev, loading: false }));
+      if (session?.user) {
+          fetchData(session.user.id, session.user);
+          // Check disclaimer only on initial load or login
+          checkDisclaimer();
+      } else {
+          setAuthState(prev => ({ ...prev, loading: false }));
+      }
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setAuthState((prev) => ({ ...prev, session, user: session?.user ?? null }));
       if (session?.user) {
         fetchData(session.user.id, session.user);
+        if (event === 'SIGNED_IN') {
+             checkDisclaimer();
+        }
       } else {
         setAuthState(prev => ({ ...prev, profile: null, usage: null, loading: false }));
       }
@@ -118,6 +127,19 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const checkDisclaimer = () => {
+      // Use SessionStorage so it persists on reload (F5) but clears on new tab/close
+      const seen = sessionStorage.getItem('disclaimer_seen');
+      if (!seen) {
+          setShowDisclaimer(true);
+      }
+  };
+
+  const handleAcceptDisclaimer = () => {
+      sessionStorage.setItem('disclaimer_seen', 'true');
+      setShowDisclaimer(false);
+  };
 
   const fetchData = async (userId: string, userObject: any) => {
     setAuthState(prev => ({ ...prev, loading: true }));
@@ -283,7 +305,7 @@ function App() {
           <DashboardHome 
             profile={authState.profile} 
             usage={authState.usage} 
-            onNewPetition={() => setCurrentRoute('new-petition')} 
+            onNavigate={setCurrentRoute} 
           />
         );
       case 'new-petition':
@@ -325,7 +347,7 @@ function App() {
       case 'admin':
         return <AdminPanel />;
       default:
-        return <DashboardHome profile={authState.profile} usage={authState.usage} onNewPetition={() => setCurrentRoute('new-petition')} />;
+        return <DashboardHome profile={authState.profile} usage={authState.usage} onNavigate={setCurrentRoute} />;
     }
   };
 
@@ -336,6 +358,30 @@ function App() {
       userEmail={authState.user?.email}
       isAdmin={authState.profile?.role === 'admin'}
     >
+      {/* Global Disclaimer Modal */}
+      {showDisclaimer && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 border border-gray-100 animate-in zoom-in-95">
+                <div className="flex flex-col items-center text-center">
+                    <div className="bg-blue-100 p-3 rounded-full mb-4">
+                        <Info className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Aviso de Responsabilidade</h3>
+                    <p className="text-gray-600 mb-6 text-sm leading-relaxed">
+                        O conteúdo gerado por esta Inteligência Artificial serve como <strong>minuta sugestiva</strong>. 
+                        É imprescindível que todo material seja revisado, validado e assinado por um advogado antes de qualquer utilização processual.
+                    </p>
+                    <Button 
+                        onClick={handleAcceptDisclaimer} 
+                        className="w-full bg-juris-900 hover:bg-juris-800"
+                    >
+                        Li e concordo, prosseguir
+                    </Button>
+                </div>
+            </div>
+        </div>
+      )}
+      
       {renderContent()}
     </Layout>
   );
