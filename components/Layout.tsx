@@ -10,15 +10,9 @@ import {
   Scale,
   ShieldCheck,
   CalendarDays,
-  Wifi,
-  WifiOff,
-  Settings,
-  Database,
   ShieldAlert
 } from 'lucide-react';
-import { supabase, isLive, updateConnection, disconnectCustom } from '../services/supabaseClient';
-import { Button } from './ui/Button';
-import { Input } from './ui/Input';
+import { supabase } from '../services/supabaseClient';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -36,32 +30,15 @@ export const Layout: React.FC<LayoutProps> = ({
   isAdmin = false
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [showConnectionModal, setShowConnectionModal] = useState(false);
   
-  // Connection Form State
-  const [dbUrl, setDbUrl] = useState('');
-  const [dbKey, setDbKey] = useState('');
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
-  };
-
-  const handleSaveConnection = () => {
-      if (dbUrl && dbKey) {
-          updateConnection(dbUrl, dbKey);
-      }
-  };
-
-  const handleDisconnect = () => {
-      if(confirm('Isso desconectará o banco de dados atual e voltará para o modo simulação (ou variáveis de ambiente se existirem). Continuar?')) {
-          disconnectCustom();
-      }
   };
 
   const navItems = [
     { id: 'dashboard', label: 'Painel do Advogado', icon: LayoutDashboard },
     { id: 'new-petition', label: 'Criar Petição', icon: FileText },
-    { id: 'new-defense', label: 'Criar Contestação', icon: ShieldAlert }, // Added New Defense
+    { id: 'new-defense', label: 'Criar Contestação', icon: ShieldAlert },
     { id: 'my-petitions', label: 'Minhas Petições', icon: Files },
     { id: 'deadlines', label: 'Prazos & Agenda', icon: CalendarDays },
     { id: 'profile', label: 'Perfil & Senha', icon: User },
@@ -73,12 +50,14 @@ export const Layout: React.FC<LayoutProps> = ({
 
   const NavContent = () => (
     <>
-      <div className="flex items-center gap-2 px-6 py-6 border-b border-juris-800">
-        <Scale className="h-8 w-8 text-sky-400" />
+      <div className="flex items-center gap-3 px-6 py-6 border-b border-juris-800">
+        <div className="bg-sky-500/10 p-2 rounded-lg">
+            <Scale className="h-6 w-6 text-sky-400 flex-shrink-0" />
+        </div>
         <span className="text-xl font-bold text-white tracking-tight">Advogado AI</span>
       </div>
       
-      <nav className="flex-1 px-4 py-6 space-y-1">
+      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeRoute === item.id;
@@ -89,47 +68,37 @@ export const Layout: React.FC<LayoutProps> = ({
                 onNavigate(item.id);
                 setIsMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 group ${
                 isActive 
-                  ? 'bg-juris-800 text-white shadow-md' 
-                  : 'text-juris-100 hover:bg-juris-800 hover:text-white'
+                  ? 'bg-juris-800 text-white shadow-md border-l-4 border-sky-400' 
+                  : 'text-juris-100 hover:bg-juris-800 hover:text-white border-l-4 border-transparent'
               }`}
             >
-              <Icon size={20} />
-              {item.label}
+              <Icon size={20} className={`flex-shrink-0 transition-colors ${isActive ? 'text-sky-400' : 'text-juris-300 group-hover:text-white'}`} />
+              <span className="truncate">{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-juris-800">
-         {/* Database Connection Status Indicator */}
-        <button 
-            onClick={() => setShowConnectionModal(true)}
-            className={`w-full mb-4 px-3 py-2 rounded border flex items-center justify-between text-xs font-medium transition-all hover:bg-opacity-80 ${
-                isLive 
-                ? 'bg-green-900/40 border-green-800 text-green-200 cursor-pointer hover:bg-green-900/60' 
-                : 'bg-amber-900/40 border-amber-800 text-amber-200 cursor-pointer hover:bg-amber-900/60'
-            }`}
-            title="Clique para configurar a conexão com o banco de dados"
-        >
-            <span className="flex items-center gap-2">
-                {isLive ? <Wifi size={14} /> : <WifiOff size={14} />}
-                {isLive ? 'Conectado (Live)' : 'Modo Simulação'}
-            </span>
-            <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`}></div>
-        </button>
-
+      <div className="p-4 border-t border-juris-800 bg-juris-950/30">
         <div className="mb-4 px-2">
-          <p className="text-xs text-juris-400 uppercase font-semibold">Conta</p>
-          <p className="text-sm text-juris-100 truncate">{userEmail}</p>
-          {isAdmin && <span className="text-xs bg-sky-500 text-white px-2 py-0.5 rounded-full inline-block mt-1">Admin</span>}
+          <p className="text-xs text-juris-400 uppercase font-semibold tracking-wider mb-1">Conta Conectada</p>
+          <div className="flex items-center gap-2">
+             <div className="w-8 h-8 rounded-full bg-juris-700 flex items-center justify-center text-xs font-bold text-white">
+                {userEmail?.charAt(0).toUpperCase() || 'U'}
+             </div>
+             <div className="flex-1 min-w-0">
+                <p className="text-sm text-white truncate font-medium" title={userEmail}>{userEmail}</p>
+                {isAdmin && <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded border border-sky-500/30">Administrador</span>}
+             </div>
+          </div>
         </div>
         <button 
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-900/20 hover:text-red-200 rounded-lg transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-900/20 hover:text-red-200 rounded-lg transition-colors border border-transparent hover:border-red-900/30"
         >
-          <LogOut size={18} />
+          <LogOut size={18} className="flex-shrink-0" />
           Sair do Sistema
         </button>
       </div>
@@ -139,7 +108,7 @@ export const Layout: React.FC<LayoutProps> = ({
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-juris-900 text-white flex-shrink-0 h-screen sticky top-0">
+      <aside className="hidden md:flex flex-col w-64 bg-juris-900 text-white flex-shrink-0 h-screen sticky top-0 shadow-xl z-20">
         <NavContent />
       </aside>
 
@@ -147,14 +116,14 @@ export const Layout: React.FC<LayoutProps> = ({
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div 
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm" 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          <div className="fixed inset-y-0 left-0 w-64 bg-juris-900 text-white flex flex-col shadow-xl animate-in slide-in-from-left duration-200">
+          <div className="fixed inset-y-0 left-0 w-72 bg-juris-900 text-white flex flex-col shadow-2xl animate-in slide-in-from-left duration-300">
             <div className="absolute top-4 right-4">
               <button 
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-1 rounded-md hover:bg-juris-800 text-juris-300 hover:text-white"
+                className="p-2 rounded-md hover:bg-juris-800 text-juris-300 hover:text-white transition-colors"
               >
                 <X size={24} />
               </button>
@@ -167,82 +136,25 @@ export const Layout: React.FC<LayoutProps> = ({
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile Header */}
-        <header className="md:hidden bg-juris-900 text-white p-4 flex items-center justify-between shadow-sm sticky top-0 z-40">
+        <header className="md:hidden bg-juris-900 text-white p-4 flex items-center justify-between shadow-md sticky top-0 z-40">
           <div className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-sky-400" />
-            <span className="font-bold">Advogado AI</span>
+            <span className="font-bold text-lg tracking-tight">Advogado AI</span>
           </div>
           <button 
             onClick={() => setIsMobileMenuOpen(true)}
-            className="p-2 rounded-md hover:bg-juris-800"
+            className="p-2 rounded-md hover:bg-juris-800 transition-colors"
           >
             <Menu size={24} />
           </button>
         </header>
 
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          <div className="max-w-6xl mx-auto w-full">
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto overflow-x-hidden">
+          <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>
         </main>
       </div>
-
-      {/* Database Connection Modal */}
-      {showConnectionModal && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-200 animate-in zoom-in-95 duration-200">
-                  <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
-                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                          <Database size={20} className="text-juris-600" /> Configuração do Banco
-                      </h3>
-                      <button onClick={() => setShowConnectionModal(false)} className="text-gray-400 hover:text-gray-600">
-                          <X size={20} />
-                      </button>
-                  </div>
-                  
-                  <div className="p-6 space-y-4">
-                      {isLive ? (
-                          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                              <Wifi size={32} className="text-green-600 mx-auto mb-2" />
-                              <h4 className="font-bold text-green-800">Conectado ao Supabase</h4>
-                              <p className="text-sm text-green-700 mt-1">O sistema está operando em modo real.</p>
-                              <Button variant="danger" className="mt-4 w-full" onClick={handleDisconnect}>
-                                  Desconectar / Resetar
-                              </Button>
-                          </div>
-                      ) : (
-                          <>
-                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex items-start gap-2">
-                                <WifiOff size={16} className="mt-0.5 flex-shrink-0" />
-                                <p>
-                                    As variáveis de ambiente não foram detectadas. Insira suas credenciais do Supabase abaixo para conectar manualmente.
-                                </p>
-                            </div>
-
-                            <div className="space-y-3">
-                                <Input 
-                                    label="Project URL (VITE_SUPABASE_URL)" 
-                                    placeholder="https://xyz.supabase.co"
-                                    value={dbUrl}
-                                    onChange={(e) => setDbUrl(e.target.value)}
-                                />
-                                <Input 
-                                    label="Anon Key (VITE_SUPABASE_ANON_KEY)" 
-                                    placeholder="eyJxh..."
-                                    value={dbKey}
-                                    onChange={(e) => setDbKey(e.target.value)}
-                                />
-                            </div>
-
-                            <Button className="w-full mt-2" onClick={handleSaveConnection}>
-                                Salvar e Conectar
-                            </Button>
-                          </>
-                      )}
-                  </div>
-              </div>
-          </div>
-      )}
     </div>
   );
 };
