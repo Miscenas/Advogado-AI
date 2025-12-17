@@ -244,11 +244,13 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
             {/* Main Content */}
             <div 
               id="petition-detail-content"
-              className={`${selectedPetition.analyzed_documents && selectedPetition.analyzed_documents.length > 0 ? 'lg:col-span-3' : 'lg:col-span-4'} p-8 overflow-y-auto bg-gray-100`}
+              className={`${selectedPetition.analyzed_documents && selectedPetition.analyzed_documents.length > 0 ? 'lg:col-span-3' : 'lg:col-span-4'} p-8 overflow-y-auto bg-gray-100 flex justify-center`}
             >
               <div 
-                  className="bg-white shadow-lg mx-auto p-[2.5cm] max-w-[21cm] min-h-[800px]"
+                  className="bg-white shadow-lg p-[3cm_2cm_2cm_3cm]"
                   style={{
+                      width: '21cm', // Fixed A4 width
+                      minHeight: '29.7cm', // Min A4 height
                       fontFamily: '"Times New Roman", Times, serif',
                       fontSize: '12pt',
                       lineHeight: '1.5',

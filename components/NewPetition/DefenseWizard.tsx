@@ -448,14 +448,21 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
            </div>
 
            <div className="flex-1 overflow-y-auto p-8 relative">
-               <div className="max-w-[23cm] mx-auto flex gap-6 items-start">
+               <div className="w-full max-w-[1400px] mx-auto flex gap-8 items-start justify-center">
                    <div 
                       ref={contentRef}
-                      className="flex-1 bg-white shadow-2xl min-h-[1123px] p-[2.5cm] text-black focus:outline-none focus:ring-1 focus:ring-red-200"
+                      className="flex-shrink-0 bg-white shadow-2xl p-[3cm_2cm_2cm_3cm] text-black focus:outline-none focus:ring-1 focus:ring-red-200"
                       contentEditable={true}
                       suppressContentEditableWarning={true}
                       onBlur={(e) => setGeneratedContent(e.currentTarget.innerHTML)}
-                      style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '12pt', lineHeight: '1.5', maxWidth: '21cm', outline: 'none' }}
+                      style={{ 
+                          width: '21cm', // Fixed A4 width
+                          minHeight: '29.7cm', // Min A4 height
+                          fontFamily: '"Times New Roman", Times, serif', 
+                          fontSize: '12pt', 
+                          lineHeight: '1.5', 
+                          outline: 'none' 
+                      }}
                    />
                    {/* Refinement Panel */}
                    <div className="w-80 hidden xl:flex flex-col gap-4 sticky top-0">

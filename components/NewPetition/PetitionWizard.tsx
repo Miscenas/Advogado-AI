@@ -533,20 +533,21 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
            {/* Main Content Area (Scrollable) */}
            <div className="flex-1 overflow-y-auto p-8 relative">
-               <div className="max-w-[23cm] mx-auto flex gap-6 items-start">
+               <div className="w-full max-w-[1400px] mx-auto flex gap-8 items-start justify-center">
                    {/* Paper Document (Editable) */}
                    <div 
                       id="petition-fullscreen-view"
                       ref={contentRef}
-                      className="flex-1 bg-white shadow-2xl min-h-[1123px] p-[2.5cm] text-black focus:outline-none focus:ring-1 focus:ring-juris-200 transition-shadow"
+                      className="flex-shrink-0 bg-white shadow-2xl p-[3cm_2cm_2cm_3cm] text-black focus:outline-none focus:ring-1 focus:ring-juris-200 transition-shadow"
                       contentEditable={true}
                       suppressContentEditableWarning={true}
                       onBlur={(e) => setGeneratedContent(e.currentTarget.innerHTML)}
                       style={{
+                          width: '21cm', // Width A4 fixed
+                          minHeight: '29.7cm', // Height A4 min
                           fontFamily: '"Times New Roman", Times, serif',
                           fontSize: '12pt',
                           lineHeight: '1.5',
-                          maxWidth: '21cm', // A4 width approx
                           outline: 'none'
                       }}
                    />
