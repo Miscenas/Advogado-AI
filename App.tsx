@@ -17,10 +17,10 @@ import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw, Info }
 import { Button } from './components/ui/Button';
 
 // Script SQL para correção disponível diretamente na UI em caso de erro
-const SQL_FIX_SCRIPT = `-- CORREÇÃO E ATUALIZAÇÃO DO BANCO DE DADOS
--- Copie e execute TUDO no SQL Editor do Supabase para corrigir recursão e criar tabelas novas.
+const SQL_FIX_SCRIPT = `-- CORREÇÃO COMPLETA DE SEGURANÇA E ESTRUTURA
+-- Execute este script no SQL Editor do Supabase para blindar sua aplicação.
 
--- 1. PREVENÇÃO DE RECURSÃO (Loop Infinito 42P17)
+-- 1. FUNÇÕES AUXILIARES DE SEGURANÇA (Evita erro 42P17 - Recursão Infinita)
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -30,7 +30,6 @@ BEGIN
   IF auth.uid() IS NULL THEN
     RETURN FALSE;
   END IF;
-  
   RETURN EXISTS (
     SELECT 1 FROM profiles
     WHERE id = auth.uid()
@@ -39,24 +38,109 @@ BEGIN
 END;
 $$;
 
+-- 2. TABELA DE PERFIS (PROFILES)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id uuid REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  full_name text,
+  email text,
+  account_status text DEFAULT 'trial' CHECK (account_status IN ('trial', 'active', 'blocked')),
+  role text DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
+-- Limpeza de políticas antigas para evitar conflitos
 DO $$ 
-DECLARE 
-    pol record; 
+DECLARE pol record; 
 BEGIN 
-    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'profiles' 
-    LOOP 
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'profiles' LOOP 
         EXECUTE format('DROP POLICY IF EXISTS %I ON profiles', pol.policyname); 
     END LOOP; 
 END $$;
 
-CREATE POLICY "Profiles View Policy" ON profiles FOR SELECT USING ( (auth.uid() = id) OR (is_admin()) );
-CREATE POLICY "Profiles Update Policy" ON profiles FOR UPDATE USING ( (auth.uid() = id) OR (is_admin()) );
-CREATE POLICY "Profiles Insert Policy" ON profiles FOR INSERT WITH CHECK ( auth.uid() = id );
-GRANT EXECUTE ON FUNCTION public.is_admin TO authenticated, service_role;
+-- Políticas Profiles:
+-- Todos podem ver perfis (necessário para admin ver users)
+CREATE POLICY "Profiles are viewable by users and admins" ON profiles FOR SELECT USING ( (auth.uid() = id) OR (is_admin()) );
+-- Usuários só podem inserir seu próprio perfil
+CREATE POLICY "Users can insert their own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+-- Usuários podem editar seu próprio perfil
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 
--- 2. TABELA DE JURISPRUDÊNCIA SALVA
+-- 3. TABELA DE PETIÇÕES (PETITIONS)
+CREATE TABLE IF NOT EXISTS public.petitions (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id) NOT NULL,
+  area text,
+  action_type text,
+  content text,
+  plaintiff_name text,
+  defendant_name text,
+  filed boolean DEFAULT false,
+  analyzed_documents jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE petitions ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN 
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'petitions' LOOP 
+        EXECUTE format('DROP POLICY IF EXISTS %I ON petitions', pol.policyname); 
+    END LOOP; 
+END $$;
+
+CREATE POLICY "Users can CRUD own petitions" ON petitions
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+-- 4. TABELA DE PRAZOS (DEADLINES)
+CREATE TABLE IF NOT EXISTS public.deadlines (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id) NOT NULL,
+  title text NOT NULL,
+  description text,
+  due_date timestamp with time zone NOT NULL,
+  status text DEFAULT 'pending',
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE deadlines ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN 
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'deadlines' LOOP 
+        EXECUTE format('DROP POLICY IF EXISTS %I ON deadlines', pol.policyname); 
+    END LOOP; 
+END $$;
+
+CREATE POLICY "Users can CRUD own deadlines" ON deadlines
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+-- 5. TABELA DE LIMITES DE USO (USAGE_LIMITS)
+CREATE TABLE IF NOT EXISTS public.usage_limits (
+  user_id uuid REFERENCES auth.users(id) PRIMARY KEY,
+  monthly_limit int DEFAULT 5,
+  used_this_month int DEFAULT 0,
+  last_reset timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE usage_limits ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN 
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'usage_limits' LOOP 
+        EXECUTE format('DROP POLICY IF EXISTS %I ON usage_limits', pol.policyname); 
+    END LOOP; 
+END $$;
+
+CREATE POLICY "Users can view own usage" ON usage_limits FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own usage" ON usage_limits FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- Update permitido para o MVP. Em produção real, use SECURITY DEFINER functions.
+CREATE POLICY "Users can update own usage" ON usage_limits FOR UPDATE USING (auth.uid() = user_id);
+
+-- 6. JURISPRUDÊNCIA SALVA
 CREATE TABLE IF NOT EXISTS saved_jurisprudence (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid REFERENCES auth.users(id) NOT NULL,
@@ -69,14 +153,16 @@ ALTER TABLE saved_jurisprudence ENABLE ROW LEVEL SECURITY;
 
 DO $$ 
 BEGIN 
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'saved_jurisprudence' AND policyname = 'Users manage own jurisprudence') THEN
-        CREATE POLICY "Users manage own jurisprudence" ON saved_jurisprudence
-        USING (auth.uid() = user_id)
-        WITH CHECK (auth.uid() = user_id);
-    END IF;
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'saved_jurisprudence' LOOP 
+        EXECUTE format('DROP POLICY IF EXISTS %I ON saved_jurisprudence', pol.policyname); 
+    END LOOP; 
 END $$;
 
--- 3. TABELA DE TENTATIVAS DE PAGAMENTO (Mercado Pago)
+CREATE POLICY "Users manage own jurisprudence" ON saved_jurisprudence
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+-- 7. TENTATIVAS DE PAGAMENTO
 CREATE TABLE IF NOT EXISTS payment_attempts (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid REFERENCES auth.users(id) NOT NULL,
@@ -88,11 +174,34 @@ ALTER TABLE payment_attempts ENABLE ROW LEVEL SECURITY;
 
 DO $$ 
 BEGIN 
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'payment_attempts' AND policyname = 'Users insert payment attempts') THEN
-        CREATE POLICY "Users insert payment attempts" ON payment_attempts
-        FOR INSERT WITH CHECK (auth.uid() = user_id);
-    END IF;
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'payment_attempts' LOOP 
+        EXECUTE format('DROP POLICY IF EXISTS %I ON payment_attempts', pol.policyname); 
+    END LOOP; 
 END $$;
+
+CREATE POLICY "Users insert payment attempts" ON payment_attempts
+FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- 8. TRIGGER PARA INCREMENTAR USO AUTOMATICAMENTE
+-- Isso garante que o limite seja contado no servidor, não no cliente
+CREATE OR REPLACE FUNCTION increment_usage() 
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.usage_limits (user_id, monthly_limit, used_this_month)
+  VALUES (NEW.user_id, 5, 1)
+  ON CONFLICT (user_id) DO UPDATE 
+  SET used_this_month = usage_limits.used_this_month + 1;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_petition_created ON petitions;
+CREATE TRIGGER on_petition_created
+AFTER INSERT ON petitions
+FOR EACH ROW EXECUTE FUNCTION increment_usage();
+
+-- Permissões Finais
+GRANT EXECUTE ON FUNCTION public.is_admin TO authenticated, service_role;
 `;
 
 const BlockedScreen = () => (
@@ -272,7 +381,7 @@ function App() {
                       </div>
                       <h2 className="text-2xl font-bold text-gray-900 mb-2">Atualização de Banco de Dados Necessária</h2>
                       <p className="text-gray-600 mb-6">
-                          Para ativar a <strong>Pesquisa de Jurisprudência</strong> e corrigir permissões, execute o script abaixo.
+                          Para garantir a segurança dos dados e corrigir permissões, execute o script abaixo no Supabase.
                       </p>
                       
                       <div className="bg-gray-50 p-5 rounded-lg border border-gray-200 text-left w-full mb-6 relative">
