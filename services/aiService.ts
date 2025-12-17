@@ -1,21 +1,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
-// Helper para obter a chave de API de forma segura em diferentes ambientes (Vite/Node)
-const getApiKey = (): string => {
-  // Tenta acessar via process.env (Node.js / Webpack / Algumas configs de CI)
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-    return process.env.API_KEY;
+// Helper para garantir que pegamos a chave atualizada no momento da execução
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey || apiKey.includes('YOUR_API_KEY')) {
+    throw new Error("Chave de API (API_KEY) não configurada ou inválida no ambiente.");
   }
-  // Tenta acessar via import.meta.env (Vite Padrão)
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-    return (import.meta as any).env.VITE_API_KEY || (import.meta as any).env.API_KEY || '';
-  }
-  return '';
+  
+  return new GoogleGenAI({ apiKey });
 };
-
-// Inicializa AI client com a chave recuperada de forma segura
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
   docType: string;
@@ -23,6 +18,7 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   extractedData: Partial<PetitionFormData>;
 }> => {
   try {
+    const ai = getAiClient();
     const prompt = `
       Analise o documento jurídico anexo. 
       
@@ -103,11 +99,22 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
     const jsonStr = response.text || "{}";
     return JSON.parse(jsonStr);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error extracting document data:", error);
+    let errorMsg = "Falha ao processar o documento.";
+    
+    // Better error handling for UI
+    if (error.message && error.message.includes("API_KEY")) {
+        errorMsg = "Erro de Configuração: Chave de API ausente.";
+    } else if (error.status === 400) {
+        errorMsg = "Erro 400: O formato do arquivo pode não ser suportado ou estar corrompido.";
+    } else if (error.status === 403 || error.status === 401) {
+        errorMsg = "Erro de Permissão: Verifique sua Chave de API.";
+    }
+
     return {
-      docType: "Erro na Leitura",
-      summary: "Falha ao processar o documento ou chave de API inválida.",
+      docType: "Erro",
+      summary: errorMsg,
       extractedData: {}
     };
   }
@@ -115,6 +122,7 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
 
 export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
   try {
+    const ai = getAiClient();
     const prompt = `
       Você é um assistente jurídico. 
       Transcreva o áudio anexo fielmente para texto. 
@@ -133,14 +141,16 @@ export const transcribeAudio = async (base64Data: string, mimeType: string): Pro
     });
 
     return response.text || "";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error transcribing audio:", error);
-    throw new Error("Falha na transcrição do áudio. Verifique a chave de API.");
+    if (error.message?.includes("API_KEY")) throw new Error("Chave de API não configurada.");
+    throw new Error("Falha na transcrição do áudio. Tente um arquivo menor ou outro formato.");
   }
 };
 
 export const searchJurisprudence = async (query: string, scope: string): Promise<string> => {
   try {
+    const ai = getAiClient();
     const prompt = `
       ATUE COMO UM PESQUISADOR JURÍDICO ESPECIALISTA.
       O usuário busca jurisprudência sobre: "${query}".
@@ -175,7 +185,7 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
 
   } catch (error: any) {
     console.error("Error searching jurisprudence:", error);
-    return `<p class="text-red-500">Erro ao buscar jurisprudência. (${error.message})</p>`;
+    return `<p class="text-red-500">Erro ao buscar jurisprudência: ${error.message || 'Erro na API'}</p>`;
   }
 };
 
@@ -185,6 +195,7 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
   const defendantsText = data.defendants.map((d, i) => `RÉU ${i+1}: ${formatParty(d)}`).join('\n');
 
   try {
+    const ai = getAiClient();
     const prompt = `
       ATUE COMO UM JURISTA SÊNIOR DE ELITE (20+ ANOS DE EXPERIÊNCIA EM DIREITO BRASILEIRO).
       OBJETIVO: Criar uma Petição Inicial IMPECÁVEL, ROBUSTA, ARGUMENTATIVA e DETALHADA.
@@ -228,7 +239,7 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
   } catch (error: any) {
     console.error("Error calling Gemini API:", error);
-    return mockGeneration(data) + "<br><br><p style='color:red; text-align:center;'><b>[Erro: Falha na conexão com a IA.]</b></p>";
+    return mockGeneration(data) + `<br><br><p style='color:red; text-align:center;'><b>[Erro: ${error.message || 'Falha na conexão com a IA'}]</b></p>`;
   }
 };
 
@@ -246,6 +257,7 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
   }
 
   try {
+    const ai = getAiClient();
     const prompt = `
       ATUE COMO UM ADVOGADO DE DEFESA BRILHANTE E COMBATIVO.
       OBJETIVO: Criar uma CONTESTAÇÃO técnica e robusta.
@@ -289,12 +301,13 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
 
   } catch (error: any) {
     console.error("Error generating defense:", error);
-    return mockGeneration(data) + "<br><br><p style='color:red; text-align:center;'><b>[Erro: Falha na conexão com a IA.]</b></p>";
+    return mockGeneration(data) + `<br><br><p style='color:red; text-align:center;'><b>[Erro: ${error.message || 'Falha na conexão com a IA'}]</b></p>`;
   }
 };
 
 export const suggestFilingMetadata = async (data: PetitionFormData): Promise<PetitionFilingMetadata> => {
   try {
+    const ai = getAiClient();
     const prompt = `
       Analise os dados desta petição e sugira metadados para o PJe (TPU CNJ).
       Ação: ${data.actionType}
@@ -337,6 +350,7 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
 
 export const refineLegalPetition = async (currentContent: string, instructions: string): Promise<string> => {
   try {
+    const ai = getAiClient();
     const prompt = `
       Atue como um advogado sênior revisando uma peça jurídica (HTML).
       CONTEÚDO ORIGINAL: ${currentContent}
@@ -355,7 +369,7 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
     return text;
 
   } catch (error) {
-    throw new Error("Não foi possível refinar a petição.");
+    throw new Error("Não foi possível refinar a petição. Verifique a conexão.");
   }
 };
 
