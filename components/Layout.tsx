@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -13,9 +13,14 @@ import {
   ShieldAlert,
   BookOpen,
   Globe,
-  CreditCard
+  CreditCard,
+  Database,
+  Save,
+  Unplug
 } from 'lucide-react';
-import { supabase } from '../services/supabaseClient';
+import { supabase, isLive, updateConnection, disconnectCustom } from '../services/supabaseClient';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -33,9 +38,36 @@ export const Layout: React.FC<LayoutProps> = ({
   isAdmin = false
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
+  
+  // Connection Form State
+  const [customUrl, setCustomUrl] = useState('');
+  const [customKey, setCustomKey] = useState('');
+
+  useEffect(() => {
+     // Pre-fill if exists in local storage
+     const storedUrl = localStorage.getItem('custom_supabase_url');
+     const storedKey = localStorage.getItem('custom_supabase_key');
+     if (storedUrl) setCustomUrl(storedUrl);
+     if (storedKey) setCustomKey(storedKey);
+  }, []);
   
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  const handleSaveConnection = () => {
+      if (!customUrl || !customKey) {
+          alert("Preencha ambos os campos.");
+          return;
+      }
+      updateConnection(customUrl, customKey);
+  };
+
+  const handleDisconnect = () => {
+      if(confirm("Deseja desconectar do banco personalizado e voltar ao modo Mock/Demo?")) {
+          disconnectCustom();
+      }
   };
 
   const navItems = [
@@ -89,7 +121,21 @@ export const Layout: React.FC<LayoutProps> = ({
 
       <div className="p-4 border-t border-juris-800 bg-juris-950/30">
         <div className="mb-4 px-2">
-          <p className="text-xs text-juris-400 uppercase font-semibold tracking-wider mb-1">Conta Conectada</p>
+          {/* Status Indicator - Clickable to open Modal */}
+          <div 
+            className="flex items-center justify-between mb-2 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors group"
+            onClick={() => setShowConnectionModal(true)}
+            title="Clique para configurar conexão"
+          >
+             <p className="text-xs text-juris-400 uppercase font-semibold tracking-wider group-hover:text-juris-200 transition-colors">Conta Conectada</p>
+             <div className="flex items-center gap-2">
+                <Database size={12} className="text-juris-500 group-hover:text-juris-300" />
+                <div 
+                  className={`h-2.5 w-2.5 rounded-full ${isLive ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} 
+                />
+             </div>
+          </div>
+
           <div className="flex items-center gap-2">
              <div className="w-8 h-8 rounded-full bg-juris-700 flex items-center justify-center text-xs font-bold text-white">
                 {userEmail?.charAt(0).toUpperCase() || 'U'}
@@ -136,6 +182,63 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
             <NavContent />
           </div>
+        </div>
+      )}
+
+      {/* Connection Config Modal */}
+      {showConnectionModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 relative">
+                <button 
+                    onClick={() => setShowConnectionModal(false)}
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                >
+                    <X size={20} />
+                </button>
+                
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="bg-juris-100 p-3 rounded-full text-juris-700">
+                        <Database size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-900">Conexão do Banco</h3>
+                        <p className="text-sm text-gray-500">Configure seu projeto Supabase</p>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div className="bg-blue-50 p-3 rounded-md border border-blue-100 text-xs text-blue-800 mb-4">
+                        Conecte seu próprio projeto para persistir dados reais. 
+                        Dados atuais: <strong>{isLive ? 'Conectado (Ao Vivo)' : 'Modo Demonstração (Local)'}</strong>
+                    </div>
+
+                    <Input 
+                        label="Project URL" 
+                        placeholder="https://xyz.supabase.co" 
+                        value={customUrl}
+                        onChange={(e) => setCustomUrl(e.target.value)}
+                    />
+                    
+                    <Input 
+                        label="Anon Public Key" 
+                        placeholder="eyJhbGciOiJIUzI1NiIsInR..." 
+                        value={customKey}
+                        onChange={(e) => setCustomKey(e.target.value)}
+                    />
+
+                    <div className="flex flex-col gap-3 mt-6">
+                        <Button onClick={handleSaveConnection} className="w-full">
+                            <Save size={16} className="mr-2" /> Salvar e Conectar
+                        </Button>
+                        
+                        {localStorage.getItem('custom_supabase_url') && (
+                            <Button variant="outline" onClick={handleDisconnect} className="w-full text-red-600 border-red-200 hover:bg-red-50">
+                                <Unplug size={16} className="mr-2" /> Desconectar (Voltar ao Mock)
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
       )}
 
