@@ -17,9 +17,12 @@ import {
   Database,
   Save,
   Unplug,
-  Sparkles
+  Sparkles,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase, isLive, updateConnection, disconnectCustom } from '../services/supabaseClient';
+import { hasAiKey } from '../services/aiService';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 
@@ -45,6 +48,9 @@ export const Layout: React.FC<LayoutProps> = ({
   const [customUrl, setCustomUrl] = useState('');
   const [customKey, setCustomKey] = useState('');
   const [customAiKey, setCustomAiKey] = useState('');
+  
+  // Status Local State
+  const [aiConnected, setAiConnected] = useState(false);
 
   useEffect(() => {
      // Pre-fill if exists in local storage
@@ -54,6 +60,9 @@ export const Layout: React.FC<LayoutProps> = ({
      if (storedUrl) setCustomUrl(storedUrl);
      if (storedKey) setCustomKey(storedKey);
      if (storedAiKey) setCustomAiKey(storedAiKey);
+     
+     // Check AI status
+     setAiConnected(hasAiKey());
   }, []);
   
   const handleLogout = async () => {
@@ -61,16 +70,22 @@ export const Layout: React.FC<LayoutProps> = ({
   };
 
   const handleSaveConnection = () => {
-      // Permitir salvar apenas a chave de IA se o banco estiver vazio, ou ambos
-      if (!customAiKey && (!customUrl || !customKey)) {
-          alert("Preencha as configurações que deseja salvar (Banco de Dados ou IA).");
-          return;
+      // Salva chaves individualmente se preenchidas
+      if (customUrl && customKey) {
+          localStorage.setItem('custom_supabase_url', customUrl);
+          localStorage.setItem('custom_supabase_key', customKey);
       }
-      updateConnection(customUrl, customKey, customAiKey);
+      
+      if (customAiKey && customAiKey.length > 5) {
+          localStorage.setItem('custom_gemini_api_key', customAiKey);
+      }
+
+      // Reload para aplicar
+      window.location.reload();
   };
 
   const handleDisconnect = () => {
-      if(confirm("Deseja desconectar e limpar todas as chaves (Supabase e IA)?")) {
+      if(confirm("Deseja desconectar e limpar todas as chaves salvas neste navegador?")) {
           disconnectCustom();
       }
   };
@@ -130,14 +145,14 @@ export const Layout: React.FC<LayoutProps> = ({
           <div 
             className="flex items-center justify-between mb-2 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors group"
             onClick={() => setShowConnectionModal(true)}
-            title="Clique para configurar conexão e chaves de API"
+            title="Clique para configurar conexões"
           >
-             <p className="text-xs text-juris-400 uppercase font-semibold tracking-wider group-hover:text-juris-200 transition-colors">Configurações</p>
-             <div className="flex items-center gap-2">
-                <Database size={12} className={isLive ? "text-green-500" : "text-juris-500"} />
-                <div 
-                  className={`h-2.5 w-2.5 rounded-full ${isLive ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} 
-                />
+             <p className="text-xs text-juris-400 uppercase font-semibold tracking-wider group-hover:text-juris-200 transition-colors">Conexões</p>
+             <div className="flex items-center gap-1.5">
+                {/* DB Status */}
+                <div title={isLive ? "DB Conectado" : "DB Local (Mock)"} className={`h-2.5 w-2.5 rounded-full ${isLive ? 'bg-green-500' : 'bg-amber-500'}`} />
+                {/* AI Status */}
+                <div title={aiConnected ? "IA Conectada" : "IA Desconectada"} className={`h-2.5 w-2.5 rounded-full ${aiConnected ? 'bg-blue-400' : 'bg-red-500'}`} />
              </div>
           </div>
 
@@ -207,63 +222,76 @@ export const Layout: React.FC<LayoutProps> = ({
                     </div>
                     <div>
                         <h3 className="text-lg font-bold text-gray-900">Configurações</h3>
-                        <p className="text-sm text-gray-500">Banco de Dados e Inteligência Artificial</p>
+                        <p className="text-sm text-gray-500">Conectividade do Sistema</p>
                     </div>
                 </div>
 
                 <div className="space-y-6">
-                    {/* Database Section */}
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                            <Database size={16} /> Supabase (Banco de Dados)
+                    
+                    {/* AI Section */}
+                    <div className={`p-4 rounded-lg border ${aiConnected ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'}`}>
+                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center justify-between">
+                            <span className="flex items-center gap-2"><Sparkles size={16} className="text-amber-500" /> Google Gemini AI</span>
+                            {aiConnected 
+                                ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={10}/> Conectado</span> 
+                                : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full flex items-center gap-1"><AlertTriangle size={10}/> Desconectado</span>
+                            }
                         </h4>
-                        <div className="text-xs text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mb-3">
-                            Status: <strong>{isLive ? 'Conectado (Ao Vivo)' : 'Modo Demonstração (Local)'}</strong>
+                        
+                        {!aiConnected && (
+                            <p className="text-xs text-red-600 mb-3 font-medium">
+                                A geração de petições está em MODO SIMULAÇÃO. Insira uma chave válida abaixo.
+                            </p>
+                        )}
+
+                        <Input 
+                            label="API Key (Cole aqui sua chave Google)" 
+                            placeholder="Ex: AIzaSy..." 
+                            value={customAiKey}
+                            onChange={(e) => setCustomAiKey(e.target.value)}
+                            type="password"
+                        />
+                        <div className="text-right mt-1">
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">
+                                Obter chave gratuita no Google AI Studio
+                            </a>
                         </div>
+                    </div>
+
+                    {/* Database Section */}
+                    <div className={`p-4 rounded-lg border ${isLive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center justify-between">
+                            <span className="flex items-center gap-2"><Database size={16} /> Banco de Dados</span>
+                            {isLive 
+                                ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={10}/> Online</span> 
+                                : <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1"><Database size={10}/> Local (Mock)</span>
+                            }
+                        </h4>
                         <div className="space-y-3">
                             <Input 
-                                label="Project URL" 
+                                label="Supabase URL" 
                                 placeholder="https://xyz.supabase.co" 
                                 value={customUrl}
                                 onChange={(e) => setCustomUrl(e.target.value)}
                             />
                             <Input 
-                                label="Anon Public Key" 
+                                label="Supabase Anon Key" 
                                 placeholder="eyJhbGciOiJIUzI1NiIsInR..." 
                                 value={customKey}
                                 onChange={(e) => setCustomKey(e.target.value)}
+                                type="password"
                             />
                         </div>
                     </div>
 
-                    {/* AI Section */}
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                            <Sparkles size={16} className="text-amber-500" /> Google Gemini API
-                        </h4>
-                        <p className="text-xs text-gray-500 mb-3">
-                            Necessário para geração de petições e análise de documentos. 
-                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
-                                Obter chave aqui
-                            </a>.
-                        </p>
-                        <Input 
-                            label="API Key (Começa com AIza...)" 
-                            placeholder="AIzaSy..." 
-                            value={customAiKey}
-                            onChange={(e) => setCustomAiKey(e.target.value)}
-                            type="password"
-                        />
-                    </div>
-
-                    <div className="flex flex-col gap-3 mt-2">
+                    <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-gray-100">
                         <Button onClick={handleSaveConnection} className="w-full">
-                            <Save size={16} className="mr-2" /> Salvar Configurações
+                            <Save size={16} className="mr-2" /> Salvar e Recarregar
                         </Button>
                         
                         {(localStorage.getItem('custom_supabase_url') || localStorage.getItem('custom_gemini_api_key')) && (
                             <Button variant="outline" onClick={handleDisconnect} className="w-full text-red-600 border-red-200 hover:bg-red-50">
-                                <Unplug size={16} className="mr-2" /> Limpar Tudo (Resetar)
+                                <Unplug size={16} className="mr-2" /> Limpar Configurações
                             </Button>
                         )}
                     </div>

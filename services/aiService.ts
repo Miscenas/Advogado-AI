@@ -1,21 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
-// --- CONFIGURAÇÃO MANUAL (OPCIONAL) ---
-// Se não conseguir configurar variáveis de ambiente, cole sua chave aqui.
+// --- CONFIGURAÇÃO MANUAL (MÉTODO INFALÍVEL) ---
+// Se a configuração via menu não funcionar, cole sua chave entre as aspas abaixo:
 const FIXED_API_KEY = ""; 
 
 const getEnv = (key: string) => {
   // 1. Tenta pegar de import.meta.env (Vite)
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
       const env = (import.meta as any).env;
-      // Tenta variações comuns de nomes de variáveis
       const candidates = [
           key, 
           `VITE_${key}`, 
           'VITE_GOOGLE_API_KEY', 
           'VITE_GEMINI_API_KEY', 
-          'GOOGLE_API_KEY'
+          'GOOGLE_API_KEY',
+          'GEMINI_API_KEY'
       ];
       for (const candidate of candidates) {
           if (env[candidate]) return env[candidate];
@@ -23,7 +23,7 @@ const getEnv = (key: string) => {
   }
   // 2. Tenta pegar de process.env (Node/Legacy)
   if (typeof process !== 'undefined' && process.env) {
-      const candidates = [key, `VITE_${key}`, 'GOOGLE_API_KEY'];
+      const candidates = [key, `VITE_${key}`, 'GOOGLE_API_KEY', 'GEMINI_API_KEY'];
       for (const candidate of candidates) {
           if (process.env[candidate]) return process.env[candidate];
       }
@@ -38,15 +38,25 @@ const getStored = (key: string) => {
   return null;
 };
 
+// Verifica se existe uma chave configurada (para uso na UI)
+export const hasAiKey = (): boolean => {
+    const key = FIXED_API_KEY || getStored('custom_gemini_api_key') || getEnv('API_KEY');
+    return !!(key && key.length > 10 && !key.includes('YOUR_API_KEY'));
+};
+
 // Retorna o cliente ou NULL se não houver chave (para ativar modo Mock)
 const getAiClient = (): GoogleGenAI | null => {
   // Prioridade: Chave Fixa > LocalStorage (Configurada na UI) > Variáveis de Ambiente
   const apiKey = FIXED_API_KEY || getStored('custom_gemini_api_key') || getEnv('API_KEY');
   
-  if (!apiKey || apiKey.includes('YOUR_API_KEY')) {
-    console.warn("Advogado IA: API Key não detectada. Ativando Modo Demonstração (Mock AI).");
+  if (!apiKey || apiKey.length < 10 || apiKey.includes('YOUR_API_KEY')) {
+    console.warn("Advogado IA: API Key não detectada ou inválida. Ativando Modo Demonstração (Mock AI).");
+    console.log("Dica: Vá em Configurações no menu lateral e cole sua chave API.");
     return null;
   }
+  
+  // Debug (sem expor a chave inteira)
+  // console.log("Advogado IA: Chave API detectada (inicia com " + apiKey.substring(0, 4) + "...)");
   
   return new GoogleGenAI({ apiKey });
 };
@@ -54,20 +64,20 @@ const getAiClient = (): GoogleGenAI | null => {
 // --- FUNÇÕES MOCK (SIMULAÇÃO QUANDO SEM CHAVE) ---
 
 const mockAnalysisResult = (filename?: string) => ({
-    docType: "Petição Inicial (Simulado)",
-    summary: "Este é um resumo simulado pelo Modo Demo. O sistema detectou que não há chave de API configurada. Para obter uma análise real, clique em 'Configurações' no menu lateral e insira sua Google Gemini API Key.",
+    docType: "Petição (Simulado - Falta Chave API)",
+    summary: "O SISTEMA ESTÁ EM MODO DEMONSTRAÇÃO. Configure a 'Google Gemini API Key' no menu lateral para usar a IA real.",
     extractedData: {
         area: "civel",
-        actionType: "Ação de Indenização (Demo)",
+        actionType: "Ação de Indenização (Exemplo)",
         jurisdiction: "São Paulo/SP",
-        plaintiffs: [{ name: "João da Silva (Demo)", doc: "123.456.789-00", type: "pf" as const }],
-        defendants: [{ name: "Empresa X (Demo)", doc: "00.000.000/0001-00", type: "pj" as const }],
-        facts: "O autor alega falha na prestação de serviço. (Texto gerado automaticamente pelo Modo Demo - Configure a API Key para análise real)",
+        plaintiffs: [{ name: "Cliente Exemplo (Demo)", doc: "000.000.000-00", type: "pf" as const }],
+        defendants: [{ name: "Empresa Ré (Demo)", doc: "00.000.000/0001-00", type: "pj" as const }],
+        facts: "Este texto é um exemplo fictício gerado porque a Chave de API da Inteligência Artificial não foi encontrada. Por favor, insira sua chave nas Configurações.",
         value: "R$ 10.000,00"
     }
 });
 
-const mockTranscription = "Transcrição simulada: Configure a chave de API para obter transcrições reais de áudio.";
+const mockTranscription = "Transcrição indisponível: Chave de API não configurada. Vá em Configurações > Google Gemini API.";
 
 // --- FUNÇÕES PRINCIPAIS ---
 
@@ -81,13 +91,14 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
     
     // FALLBACK: Se não tem AI, retorna Mock
     if (!ai) {
-        await new Promise(r => setTimeout(r, 1500)); // Fake delay
+        await new Promise(r => setTimeout(r, 1000));
         return mockAnalysisResult();
     }
 
     const prompt = `
       Analise o documento jurídico anexo. 
-      Retorne um JSON com: docType (Classificação), summary (Resumo 1 linha) e extractedData (Objeto com area, actionType, jurisdiction, plaintiffs, defendants, facts, value).
+      Retorne um JSON com: docType (Classificação ex: "Petição Inicial", "Contestação", "Sentença"), summary (Resumo 1 linha) e extractedData (Objeto com area, actionType, jurisdiction, plaintiffs, defendants, facts, value).
+      Se for imagem ilegível, retorne docType: "Erro".
     `;
 
     const response = await ai.models.generateContent({
@@ -127,8 +138,10 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
 
   } catch (error: any) {
     console.error("Error extracting document data:", error);
-    // Se erro for de API, retorna mock para não travar
-    return mockAnalysisResult();
+    // Se erro for de API (403, 400), retorna mock com aviso
+    const mock = mockAnalysisResult();
+    mock.summary = `Erro na API: ${error.message || 'Chave inválida ou cota excedida'}`;
+    return mock;
   }
 };
 
@@ -140,7 +153,7 @@ export const transcribeAudio = async (base64Data: string, mimeType: string): Pro
         return mockTranscription;
     }
 
-    const prompt = "Transcreva o áudio anexo para texto corrido em português.";
+    const prompt = "Transcreva o áudio anexo para texto corrido em português. Ignore ruídos.";
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
@@ -163,22 +176,21 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
     const ai = getAiClient();
     if (!ai) {
         return `
-        <div class="p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 mb-4 text-sm">
-           <strong>Modo Demonstração:</strong> Exibindo resultados simulados pois a Chave de API não foi detectada.
-           <br>Para ver resultados reais, configure sua chave no menu lateral > Configurações.
+        <div class="p-4 bg-red-50 border border-red-200 rounded text-red-800 mb-4 text-sm">
+           <strong>IA Desconectada:</strong> Insira sua API Key nas Configurações para realizar pesquisas reais.
         </div>
-        <div class="juris-card">
-            <h4>TJSP - APELAÇÃO CÍVEL nº 1000000-00.2023.8.26.0000 (Simulado)</h4>
-            <p><strong>Relator:</strong> Des. Exemplo Júnior</p>
-            <p><strong>Data:</strong> 15/05/2024</p>
-            <p class="ementa"><strong>Ementa:</strong> APELAÇÃO. DIREITO DO CONSUMIDOR. RESULTADO FICTÍCIO GERADO PELO SISTEMA PARA DEMONSTRAÇÃO DE LAYOUT. AÇÃO DE INDENIZAÇÃO.</p>
+        <div class="juris-card opacity-50">
+            <h4>RESULTADO EXEMPLO (MODO DEMO)</h4>
+            <p><strong>Relator:</strong> IA JurisPet</p>
+            <p class="ementa"><strong>Ementa:</strong> Este resultado é fictício porque o sistema não detectou uma chave de API válida.</p>
         </div>`;
     }
 
     const prompt = `
       ATUE COMO UM PESQUISADOR JURÍDICO.
-      Busque jurisprudência sobre: "${query}". Escopo: ${scope}.
-      Retorne 3 julgados em HTML com a classe 'juris-card'.
+      Busque jurisprudência real e recente sobre: "${query}". Escopo: ${scope}.
+      Retorne 3 julgados formatados em HTML, cada um dentro de uma div com a classe 'juris-card'.
+      Inclua: Tribunal, Número do Processo (invente se não achar real), Relator, Data e Ementa Resumida.
     `;
 
     const response = await ai.models.generateContent({
@@ -200,24 +212,40 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
   const ai = getAiClient();
   
   if (!ai) {
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1500));
       return mockGeneration(data, true);
   }
 
   try {
-    // ... Código original de geração ...
-    const prompt = `ATUE COMO UM JURISTA SÊNIOR... (Prompt completo omitido para brevidade, usando lógica original)`;
-    // Reconstruindo prompt básico para garantir funcionamento se chave existir
-    const basicPrompt = `
-      Escreva uma petição inicial completa em HTML.
-      Ação: ${data.actionType}
-      Fatos: ${data.facts}
-      Pedidos: ${data.requests.join('; ')}
+    const prompt = `
+      ATUE COMO UM ADVOGADO SÊNIOR ESPECIALISTA.
+      Redija uma PETIÇÃO INICIAL completa e bem fundamentada em formato HTML (sem tags html/body/head externas, apenas o conteúdo).
+      
+      DADOS DO CASO:
+      - Área: ${data.area}
+      - Ação: ${data.actionType}
+      - Foro: ${data.jurisdiction}
+      - Autores: ${data.plaintiffs.map(p => `${p.name} (${p.type}, Doc: ${p.doc})`).join(', ')}
+      - Réus: ${data.defendants.map(d => `${d.name} (${d.type}, Doc: ${d.doc})`).join(', ')}
+      - Fatos: ${data.facts}
+      - Pedidos Específicos: ${data.requests.join('; ')}
+      - Valor da Causa: ${data.value}
+      
+      ESTRUTURA:
+      1. Endereçamento (Excelentíssimo...)
+      2. Qualificação das partes
+      3. Dos Fatos (Narrativa persuasiva)
+      4. Do Direito (Fundamentação legal e jurisprudencial breve)
+      5. Dos Pedidos (Lista numerada)
+      6. Fechamento (Valor, data, local, assinatura)
+
+      Use tags <h3> para títulos, <p> para parágrafos, <ul>/<li> para listas.
+      Formatação limpa e profissional.
     `;
     
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: basicPrompt
+        contents: prompt
     });
     
     let text = response.text || "";
@@ -226,7 +254,7 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
   } catch (error) {
     console.error("Generation error", error);
-    return mockGeneration(data, true); // Fallback para mock em caso de erro da API
+    return mockGeneration(data, true); 
   }
 };
 
@@ -235,7 +263,15 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
     if (!ai) return mockGeneration(data, true);
     
     try {
-        const prompt = `Escreva uma contestação jurídica em HTML para a ação ${data.actionType}. Tese: ${data.facts}.`;
+        const prompt = `
+          ATUE COMO UM ADVOGADO DE DEFESA.
+          Redija uma CONTESTAÇÃO em HTML.
+          Ação Originária: ${data.actionType}
+          Tese de Defesa/Fatos: ${data.facts}
+          Pedidos da Defesa: ${data.requests.join('; ')}
+          
+          Estruture com Preliminares (se houver), Mérito e Pedidos.
+        `;
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt
@@ -251,7 +287,7 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
   try {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Sugira metadados JSON (competence, class, subject) para petição de ${data.actionType}`,
+        contents: `Analise esta ação: "${data.actionType}". Retorne JSON: { "competence": "X", "class": "Y", "subject": "Z" } (Baseado nas tabelas do CNJ)`,
         config: { responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "{}");
@@ -260,12 +296,21 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
 
 export const refineLegalPetition = async (currentContent: string, instructions: string): Promise<string> => {
     const ai = getAiClient();
-    if (!ai) return currentContent + "<br><p><strong>[IA Indisponível]</strong> Alteração simulada: " + instructions + "</p>";
+    if (!ai) return currentContent + "<br><p style='color:red;'><strong>[IA Offline]</strong> Não foi possível processar a alteração: " + instructions + "</p>";
     
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: `Reescreva este HTML aplicando a alteração: "${instructions}". HTML: ${currentContent}`
+            contents: `
+              Você é um editor jurídico.
+              O usuário quer alterar a seguinte petição HTML.
+              Instrução de alteração: "${instructions}".
+              
+              Retorne APENAS o HTML atualizado, mantendo a formatação original.
+              
+              HTML Original:
+              ${currentContent}
+            `
         });
         return response.text.replace(/```html/g, '').replace(/```/g, '');
     } catch (e) { return currentContent; }
@@ -275,10 +320,10 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
 
 const mockGeneration = (data: PetitionFormData, showWarning = false) => {
   const warning = showWarning ? 
-    `<div style="background:#fff7ed; border:1px solid #fdba74; color:#9a3412; padding:15px; margin-bottom:20px; border-radius:8px; text-align:center;">
-        <strong>MODO DEMONSTRAÇÃO ATIVO</strong><br>
-        Esta petição foi gerada localmente porque a Chave de API da IA não foi configurada.
-        <br><small>Vá em "Configurações" no menu lateral e insira sua Google Gemini API Key.</small>
+    `<div style="background:#fef2f2; border:1px solid #fee2e2; color:#991b1b; padding:20px; margin-bottom:20px; border-radius:8px; text-align:center;">
+        <h3 style="margin:0 0 10px 0;">⚠️ MODO DEMONSTRAÇÃO (IA DESCONECTADA)</h3>
+        <p style="margin:0;">Esta petição é apenas um modelo genérico.</p>
+        <p style="margin:5px 0 0 0; font-size:0.9em;">Para gerar conteúdo real, insira sua <strong>API Key</strong> no menu Configurações.</p>
     </div>` : '';
 
   return `
@@ -290,7 +335,7 @@ ${warning}
 <p>em face de <b>${data.defendants[0]?.name || 'NOME DO RÉU'}</b>, pelos motivos de fato e de direito a seguir aduzidos.</p>
 <br>
 <h3 style="text-align: center;">I - DOS FATOS</h3>
-<p>${data.facts || 'O autor alega que os fatos ocorreram conforme narrativa inserida no formulário. (Texto placeholder do modo demonstração).'}</p>
+<p>${data.facts || 'O autor alega que os fatos ocorreram conforme narrativa inserida no formulário. (Texto placeholder do modo demonstração - A IA não processou os fatos reais pois a chave não foi detectada).'}</p>
 <p>Diante do exposto, resta evidente o direito pleiteado.</p>
 <br>
 <h3 style="text-align: center;">II - DOS PEDIDOS</h3>
@@ -310,8 +355,8 @@ ${warning}
 
 const mockMetadata = (data: PetitionFormData): PetitionFilingMetadata => {
   return {
-    competence: 'Vara Cível (Sugestão Demo)',
-    class: 'Procedimento Comum',
+    competence: 'Configurar API Key',
+    class: 'Modo Demo',
     subject: data.actionType || 'Direito Civil'
   };
 };
