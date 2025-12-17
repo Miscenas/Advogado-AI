@@ -1,12 +1,39 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
+// --- CONFIGURAÇÃO FIXA (PARA CORREÇÃO RÁPIDA) ---
+// Se o ambiente não estiver passando a chave, cole sua API Key do Google AI Studio aqui.
+// Obtenha em: https://aistudio.google.com/app/apikey
+const FIXED_API_KEY = ""; 
+
+const getEnv = (key: string) => {
+  // 1. Tenta pegar de import.meta.env (Vite Standard)
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+      // Verifica VITE_API_KEY, VITE_GOOGLE_API_KEY, ou apenas API_KEY
+      const env = (import.meta as any).env;
+      if (env[key]) return env[key];
+      if (env[`VITE_${key}`]) return env[`VITE_${key}`];
+      if (env.VITE_API_KEY) return env.VITE_API_KEY;
+      if (env.API_KEY) return env.API_KEY;
+  }
+  
+  // 2. Tenta pegar de process.env (Node/Legacy/Webpack)
+  if (typeof process !== 'undefined' && process.env) {
+      if (process.env[key]) return process.env[key];
+      if (process.env.API_KEY) return process.env.API_KEY;
+  }
+
+  return undefined;
+};
+
 // Helper para garantir que pegamos a chave atualizada no momento da execução
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
+  // Prioridade: Chave Fixa no Código > Variável de Ambiente (VITE_API_KEY ou API_KEY)
+  const apiKey = FIXED_API_KEY || getEnv('API_KEY');
   
   if (!apiKey || apiKey.includes('YOUR_API_KEY')) {
-    throw new Error("Chave de API (API_KEY) não configurada ou inválida no ambiente.");
+    console.error("Advogado IA: API Key não encontrada. Verifique FIXED_API_KEY em services/aiService.ts ou as variáveis de ambiente.");
+    throw new Error("Erro de Configuração: Chave de API ausente.");
   }
   
   return new GoogleGenAI({ apiKey });
@@ -104,8 +131,8 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
     let errorMsg = "Falha ao processar o documento.";
     
     // Better error handling for UI
-    if (error.message && error.message.includes("API_KEY")) {
-        errorMsg = "Erro de Configuração: Chave de API ausente.";
+    if (error.message && (error.message.includes("API_KEY") || error.message.includes("Chave de API"))) {
+        errorMsg = "Erro de Configuração: Chave de API da IA ausente ou inválida.";
     } else if (error.status === 400) {
         errorMsg = "Erro 400: O formato do arquivo pode não ser suportado ou estar corrompido.";
     } else if (error.status === 403 || error.status === 401) {
@@ -143,7 +170,9 @@ export const transcribeAudio = async (base64Data: string, mimeType: string): Pro
     return response.text || "";
   } catch (error: any) {
     console.error("Error transcribing audio:", error);
-    if (error.message?.includes("API_KEY")) throw new Error("Chave de API não configurada.");
+    if (error.message?.includes("API_KEY") || error.message?.includes("Chave de API")) {
+        throw new Error("Chave de API não configurada.");
+    }
     throw new Error("Falha na transcrição do áudio. Tente um arquivo menor ou outro formato.");
   }
 };
@@ -239,7 +268,10 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
   } catch (error: any) {
     console.error("Error calling Gemini API:", error);
-    return mockGeneration(data) + `<br><br><p style='color:red; text-align:center;'><b>[Erro: ${error.message || 'Falha na conexão com a IA'}]</b></p>`;
+    let msg = error.message || 'Falha na conexão com a IA';
+    if(msg.includes('API_KEY')) msg = "Erro: Chave de API inválida ou ausente.";
+    
+    return mockGeneration(data) + `<br><br><div style="border:1px solid red; padding:10px; background:#fff0f0; color:red; text-align:center;"><b>[ERRO NO SERVIÇO DE IA]</b><br>${msg}<br><small>Verifique o console do navegador e o arquivo services/aiService.ts</small></div>`;
   }
 };
 
@@ -301,7 +333,10 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
 
   } catch (error: any) {
     console.error("Error generating defense:", error);
-    return mockGeneration(data) + `<br><br><p style='color:red; text-align:center;'><b>[Erro: ${error.message || 'Falha na conexão com a IA'}]</b></p>`;
+    let msg = error.message || 'Falha na conexão com a IA';
+    if(msg.includes('API_KEY')) msg = "Erro: Chave de API inválida ou ausente.";
+    
+    return mockGeneration(data) + `<br><br><div style="border:1px solid red; padding:10px; background:#fff0f0; color:red; text-align:center;"><b>[ERRO NO SERVIÇO DE IA]</b><br>${msg}</div>`;
   }
 };
 
@@ -369,7 +404,7 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
     return text;
 
   } catch (error) {
-    throw new Error("Não foi possível refinar a petição. Verifique a conexão.");
+    throw new Error("Não foi possível refinar a petição. Verifique a chave de API.");
   }
 };
 
