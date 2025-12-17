@@ -157,6 +157,18 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
             </div>
          </div>
       </div>
+      
+      <div className="bg-gray-50 rounded-xl p-6 mt-12 flex flex-col md:flex-row items-center gap-6">
+          <div className="bg-white p-4 rounded-full shadow-sm">
+             <Zap className="h-8 w-8 text-yellow-500" />
+          </div>
+          <div className="flex-1">
+             <h4 className="font-bold text-gray-900 text-lg">Garantia de Satisfação</h4>
+             <p className="text-gray-600 text-sm mt-1">
+               Teste o Advogado IA PRO sem riscos. Se não aumentar sua produtividade nos primeiros 7 dias, devolvemos seu dinheiro.
+             </p>
+          </div>
+      </div>
     </div>
   );
 };
@@ -168,7 +180,7 @@ export const PaymentSuccess: React.FC<{ onNavigate: (r: string) => void }> = ({ 
         </div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Pagamento Recebido!</h2>
         <p className="text-gray-500 max-w-md mb-8">
-            Sua assinatura do Advogado AI PRO foi confirmada.
+            Sua assinatura do Advogado IA PRO foi confirmada.
         </p>
         <Button size="lg" onClick={() => onNavigate('dashboard')}>
             Voltar ao Dashboard

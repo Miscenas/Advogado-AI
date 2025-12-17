@@ -60,7 +60,7 @@ export const Layout: React.FC<LayoutProps> = ({
         <div className="bg-sky-500/10 p-2 rounded-lg">
             <Scale className="h-6 w-6 text-sky-400 flex-shrink-0" />
         </div>
-        <span className="text-xl font-bold text-white tracking-tight">Advogado AI</span>
+        <span className="text-xl font-bold text-white tracking-tight">Advogado IA</span>
       </div>
       
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
@@ -145,7 +145,7 @@ export const Layout: React.FC<LayoutProps> = ({
         <header className="md:hidden bg-juris-900 text-white p-4 flex items-center justify-between shadow-md sticky top-0 z-40">
           <div className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-sky-400" />
-            <span className="font-bold text-lg tracking-tight">Advogado AI</span>
+            <span className="font-bold text-lg tracking-tight">Advogado IA</span>
           </div>
           <button 
             onClick={() => setIsMobileMenuOpen(true)}

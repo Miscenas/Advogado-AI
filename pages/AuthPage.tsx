@@ -51,7 +51,7 @@ export const AuthPage: React.FC = () => {
             <div className="bg-juris-900 p-3 rounded-lg mb-4">
               <Scale className="h-8 w-8 text-sky-400" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">Advogado AI</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Advogado IA</h2>
             <p className="text-gray-500 text-sm mt-1">
               {isLogin ? 'Acesse sua conta' : 'Crie sua conta para começar'}
             </p>

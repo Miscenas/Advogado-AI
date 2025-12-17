@@ -256,7 +256,7 @@ function App() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center gap-4">
            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-juris-900"></div>
-           <p className="text-juris-700 font-medium animate-pulse">Carregando Advogado AI...</p>
+           <p className="text-juris-700 font-medium animate-pulse">Carregando Advogado IA...</p>
         </div>
       </div>
     );

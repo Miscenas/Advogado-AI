@@ -41,10 +41,10 @@ const isConfigured =
 let client;
 
 if (isConfigured) {
-  console.log('Advogado AI: Connecting to Live Supabase Database...');
+  console.log('Advogado IA: Connecting to Live Supabase Database...');
   client = createClient(supabaseUrl, supabaseAnonKey);
 } else {
-  console.warn('Advogado AI: Backend keys not found. Using Mock Client for demonstration.');
+  console.warn('Advogado IA: Backend keys not found. Using Mock Client for demonstration.');
   
   // --- MOCK IMPLEMENTATION START ---
   // This block runs ONLY if you haven't set up your Vercel/Supabase Environment Variables yet.
