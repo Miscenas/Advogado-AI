@@ -55,6 +55,14 @@ export interface Deadline {
   created_at: string;
 }
 
+export interface SavedJurisprudence {
+  id: string;
+  user_id: string;
+  query: string;
+  result: string; // HTML/Markdown content
+  created_at: string;
+}
+
 // Advanced Form Types
 export interface PetitionParty {
   id?: string; // temporary UI id

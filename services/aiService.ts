@@ -158,6 +158,49 @@ export const transcribeAudio = async (base64Data: string, mimeType: string): Pro
   }
 };
 
+export const searchJurisprudence = async (query: string, scope: string): Promise<string> => {
+  try {
+    if (!apiKey) throw new Error("Chave de API não configurada.");
+
+    const prompt = `
+      ATUE COMO UM PESQUISADOR JURÍDICO ESPECIALISTA.
+      O usuário busca jurisprudência sobre: "${query}".
+      
+      FILTRO/ESCOPO: ${scope === 'federal' ? 'Tribunais Federais (TRF, STJ, STF)' : scope === 'estadual' ? 'Tribunais de Justiça Estaduais (TJ)' : 'Todos os Tribunais Brasileiros'}.
+      
+      TAREFA:
+      1. Encontre/Gere 3 Ementas de julgados relevantes e recentes (preferencialmente últimos 5 anos) que se encaixem no tema.
+      2. Formate a saída em HTML limpo, usando cartões para cada julgado.
+      
+      FORMATO DE CADA JULGADO (HTML):
+      <div class="juris-card">
+        <h4>[TRIBUNAL] - [TIPO DO RECURSO] nº [NÚMERO FICTÍCIO SE NÃO TIVER ACESSO WEB]</h4>
+        <p><strong>Relator:</strong> [Nome]</p>
+        <p><strong>Data de Julgamento:</strong> [Data Recente]</p>
+        <p class="ementa"><strong>Ementa:</strong> [Texto da Ementa...]</p>
+      </div>
+
+      IMPORTANTE:
+      - Se você não tiver acesso à internet em tempo real, use seu conhecimento da base de dados para gerar jurisprudência REAL ou SIMULADA baseada no entendimento majoritário atual.
+      - Adicione um aviso no final se os números dos processos forem ilustrativos.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: { temperature: 0.4 }
+    });
+
+    let text = response.text || "Nenhum resultado encontrado.";
+    text = text.replace(/```html/g, '').replace(/```/g, '');
+    return text;
+
+  } catch (error: any) {
+    console.error("Error searching jurisprudence:", error);
+    return `<p class="text-red-500">Erro ao buscar jurisprudência. Verifique sua conexão. (${error.message})</p>`;
+  }
+};
+
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
   const formatParty = (p: PetitionParty) => `Nome: ${p.name}, Doc: ${p.doc}, Endereço: ${p.address}, Qualificação: ${p.qualification}`;
   const plaintiffsText = data.plaintiffs.map((p, i) => `AUTOR ${i+1}: ${formatParty(p)}`).join('\n');

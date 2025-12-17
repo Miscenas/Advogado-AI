@@ -10,15 +10,15 @@ import { PetitionList } from './components/PetitionList';
 import { AdminPanel } from './components/AdminPanel';
 import { UserProfileView } from './components/UserProfile';
 import { DeadlineManager } from './components/DeadlineManager';
+import { JurisprudenceSearch } from './components/JurisprudenceSearch';
 import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw, Info } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
 // Script SQL para correção disponível diretamente na UI em caso de erro
-const SQL_FIX_SCRIPT = `-- CORREÇÃO DEFINITIVA PARA ERRO 42P17 (RECURSÃO INFINITA)
--- Execute este script no SQL Editor do Supabase.
+const SQL_FIX_SCRIPT = `-- CORREÇÃO E ATUALIZAÇÃO DO BANCO DE DADOS
+-- Copie e execute TUDO no SQL Editor do Supabase para corrigir recursão e criar tabelas novas.
 
--- 1. Função segura para verificar se é admin
--- SECURITY DEFINER: roda com permissões do dono (postgres), ignorando o RLS da tabela profiles para evitar o loop.
+-- 1. PREVENÇÃO DE RECURSÃO (Loop Infinito 42P17)
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -37,11 +37,8 @@ BEGIN
 END;
 $$;
 
--- 2. Habilitar RLS
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
--- 3. Remover TODAS as políticas existentes da tabela profiles para limpar conflitos
--- Isso garante que nenhuma política antiga continue causando recursão.
 DO $$ 
 DECLARE 
     pol record; 
@@ -52,25 +49,31 @@ BEGIN
     END LOOP; 
 END $$;
 
--- 4. Criar Políticas Seguras
-
--- Leitura: Usuário vê o próprio perfil OU Admin vê todos
-CREATE POLICY "Profiles View Policy" 
-ON profiles FOR SELECT 
-USING ( (auth.uid() = id) OR (is_admin()) );
-
--- Atualização: Usuário edita o próprio OU Admin edita todos
-CREATE POLICY "Profiles Update Policy" 
-ON profiles FOR UPDATE 
-USING ( (auth.uid() = id) OR (is_admin()) );
-
--- Inserção: Usuário pode criar seu próprio perfil (ao se cadastrar)
-CREATE POLICY "Profiles Insert Policy" 
-ON profiles FOR INSERT 
-WITH CHECK ( auth.uid() = id );
-
--- 5. Garantir permissões na função
+CREATE POLICY "Profiles View Policy" ON profiles FOR SELECT USING ( (auth.uid() = id) OR (is_admin()) );
+CREATE POLICY "Profiles Update Policy" ON profiles FOR UPDATE USING ( (auth.uid() = id) OR (is_admin()) );
+CREATE POLICY "Profiles Insert Policy" ON profiles FOR INSERT WITH CHECK ( auth.uid() = id );
 GRANT EXECUTE ON FUNCTION public.is_admin TO authenticated, service_role;
+
+-- 2. TABELA DE JURISPRUDÊNCIA SALVA (Nova Funcionalidade)
+CREATE TABLE IF NOT EXISTS saved_jurisprudence (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id) NOT NULL,
+  query text NOT NULL,
+  result text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Políticas RLS para Jurisprudência
+ALTER TABLE saved_jurisprudence ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'saved_jurisprudence' AND policyname = 'Users manage own jurisprudence') THEN
+        CREATE POLICY "Users manage own jurisprudence" ON saved_jurisprudence
+        USING (auth.uid() = user_id)
+        WITH CHECK (auth.uid() = user_id);
+    END IF;
+END $$;
 `;
 
 const BlockedScreen = () => (
@@ -248,10 +251,9 @@ function App() {
                       <div className="bg-red-100 p-4 rounded-full mb-4">
                           <Database size={48} className="text-red-600" />
                       </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Correção Crítica Necessária</h2>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Atualização de Banco de Dados Necessária</h2>
                       <p className="text-gray-600 mb-6">
-                          O sistema detectou um erro de <strong>Recursão Infinita (42P17)</strong> nas políticas de segurança.
-                          <br/>Isso ocorre quando a verificação de permissão entra em loop.
+                          Para ativar a <strong>Pesquisa de Jurisprudência</strong> e corrigir permissões, execute o script abaixo.
                       </p>
                       
                       <div className="bg-gray-50 p-5 rounded-lg border border-gray-200 text-left w-full mb-6 relative">
@@ -340,6 +342,8 @@ function App() {
         );
       case 'my-petitions':
         return <PetitionList userId={authState.user?.id} />;
+      case 'jurisprudence':
+        return <JurisprudenceSearch userId={authState.user?.id} />;
       case 'deadlines':
         return <DeadlineManager userId={authState.user?.id} />;
       case 'profile':

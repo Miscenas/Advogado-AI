@@ -17,7 +17,8 @@ import {
   Settings2,
   Layout,
   Undo2,
-  ChevronRight
+  ChevronRight,
+  BookOpen
 } from 'lucide-react';
 import { Button } from './ui/Button';
 
@@ -27,7 +28,7 @@ interface DashboardHomeProps {
   onNavigate: (route: string) => void;
 }
 
-type WidgetType = 'actions' | 'subscription' | 'deadlines' | 'recents';
+type WidgetType = 'actions' | 'subscription' | 'deadlines' | 'recents' | 'jurisprudence';
 
 interface DashboardWidget {
   id: WidgetType;
@@ -37,6 +38,7 @@ interface DashboardWidget {
 
 const ALL_WIDGETS: DashboardWidget[] = [
   { id: 'actions', title: 'Ações Rápidas', defaultColSpan: 1 },
+  { id: 'jurisprudence', title: 'Jurisprudência Rápida', defaultColSpan: 1 },
   { id: 'subscription', title: 'Status da Assinatura', defaultColSpan: 1 },
   { id: 'deadlines', title: 'Próximos Prazos', defaultColSpan: 1 },
   { id: 'recents', title: 'Últimas Petições', defaultColSpan: 3 }, // Full width usually
@@ -52,7 +54,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
   
   // Customization State
   const [isCustomizing, setIsCustomizing] = useState(false);
-  const [activeWidgets, setActiveWidgets] = useState<WidgetType[]>(['actions', 'subscription', 'deadlines', 'recents']);
+  const [activeWidgets, setActiveWidgets] = useState<WidgetType[]>(['actions', 'jurisprudence', 'subscription', 'deadlines', 'recents']);
   const [hiddenWidgets, setHiddenWidgets] = useState<WidgetType[]>([]);
 
   // Drag & Drop Refs
@@ -63,7 +65,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
 
   // Load Layout Preference
   useEffect(() => {
-    const savedLayout = localStorage.getItem('dashboard_layout_v1');
+    const savedLayout = localStorage.getItem('dashboard_layout_v2'); // bumped version
     if (savedLayout) {
       try {
         const parsed = JSON.parse(savedLayout);
@@ -112,7 +114,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
   // --- Layout Management ---
 
   const saveLayout = (active: WidgetType[], hidden: WidgetType[]) => {
-    localStorage.setItem('dashboard_layout_v1', JSON.stringify({ active, hidden }));
+    localStorage.setItem('dashboard_layout_v2', JSON.stringify({ active, hidden }));
     setActiveWidgets(active);
     setHiddenWidgets(hidden);
   };
@@ -155,7 +157,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
   };
 
   const resetLayout = () => {
-    saveLayout(['actions', 'subscription', 'deadlines', 'recents'], []);
+    saveLayout(['actions', 'jurisprudence', 'subscription', 'deadlines', 'recents'], []);
   };
 
   // --- Renderers for Each Widget Type ---
@@ -201,6 +203,35 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
                 </div>
              </button>
           </div>
+        );
+
+      case 'jurisprudence':
+        return (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col relative overflow-hidden h-full group">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <BookOpen size={100} className="text-blue-900" />
+                </div>
+                <div className="relative z-10 flex-1 flex flex-col">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="bg-blue-100 p-2 rounded-lg text-blue-700">
+                             <BookOpen size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900">Pesquisa de Jurisprudência</h3>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-4">
+                        Busque julgados em tribunais Federais (TRF, STJ) e Estaduais com auxílio da IA.
+                    </p>
+                    <div className="mt-auto">
+                        <Button 
+                            onClick={() => onNavigate('jurisprudence')} 
+                            variant="outline"
+                            className="w-full bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 justify-between"
+                        >
+                            Pesquisar Agora <ChevronRight size={16} />
+                        </Button>
+                    </div>
+                </div>
+            </div>
         );
 
       case 'subscription':
