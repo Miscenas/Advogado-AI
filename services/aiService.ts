@@ -60,21 +60,33 @@ const getAiClient = (): GoogleGenAI | null => {
 
 // --- FUNÇÕES MOCK (SIMULAÇÃO QUANDO SEM CHAVE) ---
 
-const mockAnalysisResult = (filename?: string) => ({
-    docType: "Petição (Simulado - Falta Chave API)",
-    summary: "O SISTEMA ESTÁ EM MODO DEMONSTRAÇÃO. Configure a 'Google Gemini API Key' no menu lateral para usar a IA real.",
-    extractedData: {
-        area: "civel",
-        actionType: "Ação de Indenização (Exemplo)",
-        jurisdiction: "São Paulo/SP",
-        plaintiffs: [{ name: "Cliente Exemplo (Demo)", doc: "000.000.000-00", type: "pf" as const }],
-        defendants: [{ name: "Empresa Ré (Demo)", doc: "00.000.000/0001-00", type: "pj" as const }],
-        facts: "Este texto é um exemplo fictício gerado porque a Chave de API da Inteligência Artificial não foi encontrada. Por favor, insira sua chave nas Configurações.",
-        value: "R$ 10.000,00"
-    }
-});
+const mockAnalysisResult = (reason: 'missing_key' | 'api_error' = 'missing_key', errorMessage?: string) => {
+    const isKeyError = reason === 'missing_key';
+    
+    const summaryMsg = isKeyError 
+        ? "IA DESCONECTADA: Configure sua API Key no menu lateral para analisar documentos reais."
+        : `FALHA NA LEITURA: Ocorreu um erro ao processar o arquivo. (${errorMessage || 'Formato inválido'})`;
 
-const mockTranscription = "Transcrição indisponível: Chave de API não configurada. Vá em Configurações > Google Gemini API.";
+    const factsMsg = isKeyError
+        ? "⚠️ **Atenção: Leitura Automática Indisponível**\n\nO sistema não conseguiu ler o conteúdo do seu arquivo porque a Inteligência Artificial não está conectada.\n\n**COMO RESOLVER:**\n1. No menu lateral esquerdo, clique em 'Painel' ou no ícone de engrenagem.\n2. Cole sua chave Google Gemini API.\n3. Salve e tente enviar o arquivo novamente.\n\nAlternativamente, você pode apagar este texto e preencher os fatos manualmente."
+        : `⚠️ **Atenção: Erro na Leitura do Arquivo**\n\nA IA não conseguiu extrair dados deste documento.\n\n**Motivo Provável:**\n- O arquivo pode ser uma imagem de baixa qualidade ou manuscrito ilegível.\n- O arquivo está corrompido ou protegido por senha.\n- Erro técnico: ${errorMessage}\n\nPor favor, preencha os dados manualmente abaixo.`;
+
+    return {
+        docType: isKeyError ? "Aviso: Falta Configuração" : "Erro de Leitura",
+        summary: summaryMsg,
+        extractedData: {
+            area: "civel",
+            actionType: "",
+            jurisdiction: "",
+            plaintiffs: [],
+            defendants: [],
+            facts: factsMsg,
+            value: ""
+        }
+    };
+};
+
+const mockTranscription = "Transcrição indisponível: Chave de API não configurada. Vá em Configurações > Google Gemini API para ativar este recurso.";
 
 // --- FUNÇÕES PRINCIPAIS ---
 
@@ -86,10 +98,10 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   try {
     const ai = getAiClient();
     
-    // FALLBACK: Se não tem AI, retorna Mock
+    // FALLBACK: Se não tem AI, retorna Mock Instrutivo
     if (!ai) {
         await new Promise(r => setTimeout(r, 1000));
-        return mockAnalysisResult();
+        return mockAnalysisResult('missing_key');
     }
 
     const prompt = `
@@ -135,10 +147,8 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
 
   } catch (error: any) {
     console.error("Error extracting document data:", error);
-    // Se erro for de API (403, 400), retorna mock com aviso
-    const mock = mockAnalysisResult();
-    mock.summary = `Erro na API: ${error.message || 'Chave inválida ou cota excedida'}`;
-    return mock;
+    // Retorna Mock Instrutivo de Erro
+    return mockAnalysisResult('api_error', error.message || 'Chave inválida ou arquivo ilegível');
   }
 };
 

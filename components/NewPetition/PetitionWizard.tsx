@@ -225,11 +225,14 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             const base64Data = base64String.split(',')[1];
             const analysis = await extractDataFromDocument(base64Data, file.type);
             
-            // ERROR CHECKING: If docType suggests an error, don't proceed with success
-            if (analysis.docType === 'Erro' || analysis.summary.includes('Erro de Configuração')) {
-               alert(`Falha na análise: ${analysis.summary}`);
-               setIsExtracting(false);
-               return;
+            // TRATAMENTO DE ERROS / FALTA DE CHAVE
+            if (analysis.docType.includes('Aviso') || analysis.docType.includes('Erro')) {
+               alert(`⚠️ ${analysis.summary}\n\nPor favor, preencha os dados manualmente.`);
+               
+               // Se for falta de chave, tenta abrir o modal de conexões (se implementado) ou apenas alerta
+               if (analysis.summary.includes('API Key')) {
+                   // Opcional: Adicionar lógica para destacar onde configurar
+               }
             }
 
             setFormData(prev => {
