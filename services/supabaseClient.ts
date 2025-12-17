@@ -1,5 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
+// --- CONFIGURAÇÃO FIXA (SOLUÇÃO DEFINITIVA) ---
+// Preencha estas duas variáveis com os dados do seu Supabase.
+// Ao fazer isso, você não precisará mais configurar via navegador e não perderá acesso ao limpar cache.
+const FIXED_SUPABASE_URL = ""; // Ex: "https://sdufhsdifuh.supabase.co"
+const FIXED_SUPABASE_KEY = ""; // Ex: "eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+
 // Helper to safely get env vars in Vite/Browser or Node environments
 const getEnv = (key: string) => {
   // Check Import Meta (Vite standard)
@@ -21,15 +27,19 @@ const getStored = (key: string) => {
   return null;
 };
 
-// 1. Attempt to load keys from Env OR LocalStorage
+// 1. Attempt to load keys from: Fixed Code > Env Vars > LocalStorage
 const envUrl = getEnv('VITE_SUPABASE_URL');
 const envKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
 const storedUrl = getStored('custom_supabase_url');
 const storedKey = getStored('custom_supabase_key');
 
-const supabaseUrl = envUrl || storedUrl;
-const supabaseAnonKey = envKey || storedKey;
+// A ordem de prioridade agora é: 
+// 1. Chave Fixa no código (Nunca desconecta)
+// 2. Variável de Ambiente (.env)
+// 3. LocalStorage (Configuração manual via UI)
+const supabaseUrl = FIXED_SUPABASE_URL || envUrl || storedUrl;
+const supabaseAnonKey = FIXED_SUPABASE_KEY || envKey || storedKey;
 
 // Check if variables are valid
 const isConfigured = 
