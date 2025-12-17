@@ -12,6 +12,7 @@ import { UserProfileView } from './components/UserProfile';
 import { DeadlineManager } from './components/DeadlineManager';
 import { JurisprudenceSearch } from './components/JurisprudenceSearch';
 import { CourtPortals } from './components/CourtPortals';
+import { SubscriptionPage, PaymentSuccess, PaymentFailure } from './components/SubscriptionPage';
 import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw, Info } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
@@ -55,7 +56,7 @@ CREATE POLICY "Profiles Update Policy" ON profiles FOR UPDATE USING ( (auth.uid(
 CREATE POLICY "Profiles Insert Policy" ON profiles FOR INSERT WITH CHECK ( auth.uid() = id );
 GRANT EXECUTE ON FUNCTION public.is_admin TO authenticated, service_role;
 
--- 2. TABELA DE JURISPRUDÊNCIA SALVA (Nova Funcionalidade)
+-- 2. TABELA DE JURISPRUDÊNCIA SALVA
 CREATE TABLE IF NOT EXISTS saved_jurisprudence (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid REFERENCES auth.users(id) NOT NULL,
@@ -64,7 +65,6 @@ CREATE TABLE IF NOT EXISTS saved_jurisprudence (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Políticas RLS para Jurisprudência
 ALTER TABLE saved_jurisprudence ENABLE ROW LEVEL SECURITY;
 
 DO $$ 
@@ -73,6 +73,24 @@ BEGIN
         CREATE POLICY "Users manage own jurisprudence" ON saved_jurisprudence
         USING (auth.uid() = user_id)
         WITH CHECK (auth.uid() = user_id);
+    END IF;
+END $$;
+
+-- 3. TABELA DE TENTATIVAS DE PAGAMENTO (Mercado Pago)
+CREATE TABLE IF NOT EXISTS payment_attempts (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES auth.users(id) NOT NULL,
+  plan text NOT NULL,
+  status text DEFAULT 'initiated',
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE payment_attempts ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'payment_attempts' AND policyname = 'Users insert payment attempts') THEN
+        CREATE POLICY "Users insert payment attempts" ON payment_attempts
+        FOR INSERT WITH CHECK (auth.uid() = user_id);
     END IF;
 END $$;
 `;
@@ -349,6 +367,12 @@ function App() {
         return <DeadlineManager userId={authState.user?.id} />;
       case 'portals':
         return <CourtPortals />;
+      case 'subscription':
+        return <SubscriptionPage user={authState.profile} onNavigate={setCurrentRoute} />;
+      case 'payment_success':
+        return <PaymentSuccess onNavigate={setCurrentRoute} />;
+      case 'payment_failure':
+        return <PaymentFailure onNavigate={setCurrentRoute} />;
       case 'profile':
         return <UserProfileView profile={authState.profile} />;
       case 'admin':

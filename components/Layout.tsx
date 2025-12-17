@@ -12,7 +12,8 @@ import {
   CalendarDays,
   ShieldAlert,
   BookOpen,
-  Globe
+  Globe,
+  CreditCard
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
@@ -45,6 +46,7 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'jurisprudence', label: 'Pesquisa Jurídica', icon: BookOpen },
     { id: 'deadlines', label: 'Prazos & Agenda', icon: CalendarDays },
     { id: 'portals', label: 'Portais da Justiça', icon: Globe },
+    { id: 'subscription', label: 'Assinatura & Planos', icon: CreditCard },
     { id: 'profile', label: 'Perfil & Senha', icon: User },
   ];
 

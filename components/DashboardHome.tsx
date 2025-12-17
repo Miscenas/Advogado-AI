@@ -285,7 +285,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
                                 <p className="font-bold text-amber-900 text-sm">Seja Premium</p>
                                 <p className="text-xs text-amber-800">Geração ilimitada de peças.</p>
                             </div>
-                            <Button className="w-full bg-juris-900 hover:bg-juris-800 h-9 text-sm">Assinar Agora</Button>
+                            <Button className="w-full bg-juris-900 hover:bg-juris-800 h-9 text-sm" onClick={() => onNavigate('subscription')}>Assinar Agora</Button>
                         </div>
                     ) : (
                         <div className="mt-auto flex items-center gap-2 text-green-700 bg-green-50 p-3 rounded-lg border border-green-100">
