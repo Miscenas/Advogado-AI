@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Crown, ShieldCheck, Zap, HelpCircle } from 'lucide-react';
+import { CheckCircle2, Crown, ShieldCheck, Zap, HelpCircle, AlertCircle } from 'lucide-react';
 import { Button } from './ui/Button';
 import { createCheckoutPreference, recordPaymentAttempt } from '../services/paymentService';
 import { UserProfile } from '../types';
@@ -24,24 +24,29 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
   ];
 
   const handleSubscribe = async () => {
-    if (!user) return;
+    if (!user) {
+        alert("Erro: Usuário não identificado.");
+        return;
+    }
     setLoading(true);
 
     try {
         await recordPaymentAttempt(user.id, billingCycle);
         const { initPoint } = await createCheckoutPreference(billingCycle, user.id, user.email || '');
         
-        // Como estamos simulando, vamos alertar.
-        // Em produção: window.location.href = initPoint;
-        alert(`INTEGRAÇÃO MERCADO PAGO:\n\nEm um ambiente de produção, você seria redirecionado agora para o Checkout do Mercado Pago.\n\nPlano: ${billingCycle === 'monthly' ? 'Mensal' : 'Anual'}\nValor: R$ ${billingCycle === 'monthly' ? '97,00' : '970,00'}`);
+        // Simulação de redirecionamento
+        const valor = billingCycle === 'monthly' ? '97,00' : '970,00';
+        const msg = `INTEGRAÇÃO MERCADO PAGO (Simulação):\n\nEm produção, você seria redirecionado para:\n${initPoint}\n\nPlano: ${billingCycle === 'monthly' ? 'Mensal' : 'Anual'}\nValor: R$ ${valor}`;
         
-        // Simular sucesso para UX
-        onNavigate('payment_success');
+        // Timeout para simular processamento
+        setTimeout(() => {
+            alert(msg);
+            onNavigate('payment_success');
+        }, 1000);
 
     } catch (error) {
         console.error(error);
-        alert("Erro ao iniciar pagamento.");
-    } finally {
+        alert("Erro ao iniciar processo de pagamento.");
         setLoading(false);
     }
   };
@@ -55,7 +60,6 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
         </p>
       </div>
 
-      {/* Toggle Mensal/Anual */}
       <div className="flex justify-center">
         <div className="bg-gray-100 p-1 rounded-lg flex items-center relative">
           <button
@@ -82,7 +86,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
-         {/* Free Tier Info */}
+         {/* Free Tier */}
          <div className="bg-white rounded-2xl p-8 border border-gray-200 opacity-80 hover:opacity-100 transition-opacity">
             <h3 className="text-lg font-semibold text-gray-900">Gratuito (Trial)</h3>
             <div className="mt-4 flex items-baseline text-gray-900">
@@ -90,11 +94,9 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
                <span className="ml-1 text-xl font-semibold text-gray-500">/mês</span>
             </div>
             <p className="mt-2 text-sm text-gray-500">Para testar a plataforma.</p>
-            
             <ul className="mt-6 space-y-4">
                <li className="flex items-start"><CheckCircle2 className="h-5 w-5 text-gray-400 shrink-0 mr-2"/> <span className="text-sm text-gray-600">5 Petições/mês</span></li>
                <li className="flex items-start"><CheckCircle2 className="h-5 w-5 text-gray-400 shrink-0 mr-2"/> <span className="text-sm text-gray-600">Pesquisa Básica</span></li>
-               <li className="flex items-start"><CheckCircle2 className="h-5 w-5 text-gray-400 shrink-0 mr-2"/> <span className="text-sm text-gray-600">Sem suporte prioritário</span></li>
             </ul>
          </div>
 
@@ -143,35 +145,17 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
             </ul>
          </div>
 
-         {/* Enterprise Info */}
+         {/* Enterprise */}
          <div className="bg-white rounded-2xl p-8 border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Escritórios</h3>
             <div className="mt-4 flex items-baseline text-gray-900">
                <span className="text-3xl font-bold tracking-tight">Sob Consulta</span>
             </div>
             <p className="mt-2 text-sm text-gray-500">Para equipes grandes.</p>
-            
-            <ul className="mt-6 space-y-4">
-               <li className="flex items-start"><CheckCircle2 className="h-5 w-5 text-juris-600 shrink-0 mr-2"/> <span className="text-sm text-gray-600">Múltiplos Usuários</span></li>
-               <li className="flex items-start"><CheckCircle2 className="h-5 w-5 text-juris-600 shrink-0 mr-2"/> <span className="text-sm text-gray-600">Gestão de Equipe</span></li>
-               <li className="flex items-start"><CheckCircle2 className="h-5 w-5 text-juris-600 shrink-0 mr-2"/> <span className="text-sm text-gray-600">API Personalizada</span></li>
-            </ul>
             <div className="mt-8">
                <Button variant="outline" className="w-full">Falar com Vendas</Button>
             </div>
          </div>
-      </div>
-
-      <div className="bg-gray-50 rounded-xl p-6 mt-12 flex flex-col md:flex-row items-center gap-6">
-          <div className="bg-white p-4 rounded-full shadow-sm">
-             <Zap className="h-8 w-8 text-yellow-500" />
-          </div>
-          <div className="flex-1">
-             <h4 className="font-bold text-gray-900 text-lg">Garantia de Satisfação</h4>
-             <p className="text-gray-600 text-sm mt-1">
-               Teste o Advogado AI PRO sem riscos. Se não aumentar sua produtividade nos primeiros 7 dias, devolvemos seu dinheiro.
-             </p>
-          </div>
       </div>
     </div>
   );
@@ -184,9 +168,9 @@ export const PaymentSuccess: React.FC<{ onNavigate: (r: string) => void }> = ({ 
         </div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Pagamento Recebido!</h2>
         <p className="text-gray-500 max-w-md mb-8">
-            Sua assinatura do Advogado AI PRO foi confirmada. Seu acesso ilimitado já está liberado.
+            Sua assinatura do Advogado AI PRO foi confirmada.
         </p>
-        <Button size="lg" onClick={() => onNavigate('dashboard')} className="px-8">
+        <Button size="lg" onClick={() => onNavigate('dashboard')}>
             Voltar ao Dashboard
         </Button>
     </div>
@@ -195,19 +179,14 @@ export const PaymentSuccess: React.FC<{ onNavigate: (r: string) => void }> = ({ 
 export const PaymentFailure: React.FC<{ onNavigate: (r: string) => void }> = ({ onNavigate }) => (
     <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-8">
         <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-6">
-            <HelpCircle size={48} className="text-red-600" />
+            <AlertCircle size={48} className="text-red-600" />
         </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Pagamento Pendente ou Cancelado</h2>
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Pagamento Pendente</h2>
         <p className="text-gray-500 max-w-md mb-8">
-            Houve um problema ao processar seu pagamento. Nenhuma cobrança foi realizada.
+            Houve um problema ao processar seu pagamento.
         </p>
-        <div className="flex gap-4">
-            <Button variant="outline" onClick={() => onNavigate('dashboard')}>
-                Voltar
-            </Button>
-            <Button onClick={() => onNavigate('subscription')}>
-                Tentar Novamente
-            </Button>
-        </div>
+        <Button onClick={() => onNavigate('subscription')}>
+            Tentar Novamente
+        </Button>
     </div>
 );

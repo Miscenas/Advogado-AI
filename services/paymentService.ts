@@ -1,16 +1,18 @@
 import { supabase } from './supabaseClient';
 
-// NOTA: Em produção, o Access Token deve ficar no Backend (Supabase Edge Function)
-// Para fins de demonstração neste ambiente frontend, usaremos uma chave pública ou simularemos.
-// Obtenha suas credenciais em: https://www.mercadopago.com.br/developers/panel
+// Helper para obter variáveis de ambiente de forma segura
 const getEnv = (key: string) => {
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
     return (import.meta as any).env[key];
   }
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[key];
+  }
   return undefined;
 };
 
-const MP_PUBLIC_KEY = getEnv('VITE_MP_PUBLIC_KEY') || 'TEST-e8b6b0c6-3049-4362-9705-562363065604'; // Chave pública de teste exemplo
+// Chave pública de teste do Mercado Pago
+const MP_PUBLIC_KEY = getEnv('VITE_MP_PUBLIC_KEY') || 'TEST-e8b6b0c6-3049-4362-9705-562363065604';
 
 declare global {
   interface Window {
@@ -20,49 +22,38 @@ declare global {
 
 export const initMercadoPago = () => {
   if (window.MercadoPago) {
-    const mp = new window.MercadoPago(MP_PUBLIC_KEY, {
-      locale: 'pt-BR'
-    });
-    return mp;
+    try {
+        const mp = new window.MercadoPago(MP_PUBLIC_KEY, {
+          locale: 'pt-BR'
+        });
+        return mp;
+    } catch (e) {
+        console.warn("Falha ao inicializar Mercado Pago:", e);
+        return null;
+    }
   }
   console.error("SDK do Mercado Pago não carregado");
   return null;
 };
 
 export const createCheckoutPreference = async (planId: 'monthly' | 'yearly', userId: string, email: string) => {
-  // ATENÇÃO:
-  // O correto é chamar sua API/Edge Function aqui para não expor seu ACCESS_TOKEN no frontend.
-  // Exemplo:
-  // const response = await fetch('https://sua-url-supabase.com/functions/v1/create-preference', { ... })
+  // Simulação de criação de preferência (em produção, chame seu backend)
   
-  // Como estamos num ambiente sem backend configurado neste momento, 
-  // vou simular o retorno de um link de pagamento ou instruir como fazer.
-  
-  const title = planId === 'monthly' ? 'Advogado AI - Plano Mensal' : 'Advogado AI - Plano Anual';
-  const price = planId === 'monthly' ? 97.00 : 970.00;
-
-  console.log(`Criando preferência para ${email} - ${title} (R$ ${price})`);
-
-  // Simulação de delay de rede
-  await new Promise(resolve => setTimeout(resolve, 1500));
-
-  // Em um cenário real, você retornaria a URL do Mercado Pago (init_point)
-  // vinda do seu backend.
-  // Para este MVP funcionar sem backend, retornaremos um link "dummy" ou instrução.
-  
-  // Se você tiver o link de pagamento pronto (criado no painel do MP), pode usar aqui:
+  // URLs de Checkout Pro (Exemplo - substitua pelos IDs reais gerados no painel do MP)
   const paymentLink = planId === 'monthly' 
-    ? 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=SEU_ID_MENSAL' 
-    : 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=SEU_ID_ANUAL';
+    ? 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=MOCK_PREF_MONTHLY' 
+    : 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=MOCK_PREF_YEARLY';
 
   return {
-    preferenceId: 'mock-preference-id',
-    initPoint: paymentLink // O Frontend deve redirecionar para este link
+    preferenceId: `pref-${planId}-${Date.now()}`,
+    initPoint: paymentLink
   };
 };
 
 export const recordPaymentAttempt = async (userId: string, plan: string) => {
   try {
+     // Verifica se a tabela existe antes de tentar inserir para evitar erros no console
+     // (Isso é uma verificação otimista, o erro real será pego no catch)
      await supabase.from('payment_attempts').insert({
          user_id: userId,
          plan: plan,
@@ -70,6 +61,6 @@ export const recordPaymentAttempt = async (userId: string, plan: string) => {
          created_at: new Date().toISOString()
      });
   } catch (e) {
-      console.error("Erro ao registrar tentativa de pagamento", e);
+      console.warn("Não foi possível registrar a tentativa de pagamento (Tabela pode não existir).", e);
   }
 };

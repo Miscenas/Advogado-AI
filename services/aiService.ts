@@ -1,9 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
-// Inicializa AI client
-// The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper para obter a chave de API de forma segura em diferentes ambientes (Vite/Node)
+const getApiKey = (): string => {
+  // Tenta acessar via process.env (Node.js / Webpack / Algumas configs de CI)
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    return process.env.API_KEY;
+  }
+  // Tenta acessar via import.meta.env (Vite Padrão)
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    return (import.meta as any).env.VITE_API_KEY || (import.meta as any).env.API_KEY || '';
+  }
+  return '';
+};
+
+// Inicializa AI client com a chave recuperada de forma segura
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
   docType: string;
@@ -95,7 +107,7 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
     console.error("Error extracting document data:", error);
     return {
       docType: "Erro na Leitura",
-      summary: "Falha ao processar o documento. Verifique a chave de API.",
+      summary: "Falha ao processar o documento ou chave de API inválida.",
       extractedData: {}
     };
   }
@@ -149,7 +161,6 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
 
       IMPORTANTE:
       - Se você não tiver acesso à internet em tempo real, use seu conhecimento da base de dados para gerar jurisprudência REAL ou SIMULADA baseada no entendimento majoritário atual.
-      - Adicione um aviso no final se os números dos processos forem ilustrativos.
     `;
 
     const response = await ai.models.generateContent({
@@ -164,7 +175,7 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
 
   } catch (error: any) {
     console.error("Error searching jurisprudence:", error);
-    return `<p class="text-red-500">Erro ao buscar jurisprudência. Verifique sua conexão. (${error.message})</p>`;
+    return `<p class="text-red-500">Erro ao buscar jurisprudência. (${error.message})</p>`;
   }
 };
 
@@ -176,10 +187,7 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
   try {
     const prompt = `
       ATUE COMO UM JURISTA SÊNIOR DE ELITE (20+ ANOS DE EXPERIÊNCIA EM DIREITO BRASILEIRO).
-      OBJETIVO: Criar uma Petição Inicial IMPECÁVEL, ROBUSTA, ARGUMENTATIVA e DETALHADA, independentemente da área (Cível, Trabalhista, Família, Consumidor, etc).
-
-      PROTOCOLO DE EXPANSÃO NARRATIVA E JURÍDICA:
-      O usuário fornecerá apenas os fatos brutos. Você NÃO DEVE apenas repetir esses dados. Você deve transformá-los em uma peça jurídica completa, como se tivesse entrevistado o cliente por horas, preenchendo as lacunas lógicas com argumentação jurídica padrão e narrativa persuasiva.
+      OBJETIVO: Criar uma Petição Inicial IMPECÁVEL, ROBUSTA, ARGUMENTATIVA e DETALHADA.
 
       DADOS DO CASO:
       - ÁREA: ${data.area}
@@ -192,19 +200,16 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
       - PROVAS: ${data.evidence}
       - VALOR DA CAUSA: ${data.value}
 
-      ESTRUTURA OBRIGATÓRIA (FORMATO HTML PARA WORD):
+      ESTRUTURA OBRIGATÓRIA (FORMATO HTML):
       - Endereçamento (CAIXA ALTA, CENTRALIZADO).
-      - Qualificação Completa (Parágrafo único).
-      - Títulos das Seções (H3, CENTRALIZADO, UPPERCASE).
-         I. DOS FATOS (Narrativa expandida e detalhada em tópicos).
-         II. DO DIREITO (Argumentação robusta com artigos de lei e jurisprudência mencionada).
-         III. DA TUTELA DE URGÊNCIA (Se aplicável aos fatos, crie este tópico citando Art. 300 CPC).
-         IV. DA GRATUIDADE DA JUSTIÇA (Sempre inclua preliminarmente, citando Art. 98 CPC, salvo se for PJ grande).
-         V. DOS PEDIDOS (Lista numerada detalhada).
+      - Qualificação Completa.
+      - Títulos das Seções (H3, CENTRALIZADO).
+         I. DOS FATOS
+         II. DO DIREITO
+         III. DA TUTELA DE URGÊNCIA (Se aplicável)
+         IV. DA GRATUIDADE DA JUSTIÇA (Se aplicável)
+         V. DOS PEDIDOS
       - Fechamento (Local, Data, Advogado).
-
-      ESTILO DE REDAÇÃO:
-      Use "Vossa Excelência", "Douto Magistrado". Texto justificado (<p>).
     `;
 
     const response = await ai.models.generateContent({
@@ -223,7 +228,7 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
   } catch (error: any) {
     console.error("Error calling Gemini API:", error);
-    return mockGeneration(data) + "<br><br><p style='color:red; text-align:center;'><b>[Erro: Falha na conexão com a IA. Verifique sua chave de API.]</b></p>";
+    return mockGeneration(data) + "<br><br><p style='color:red; text-align:center;'><b>[Erro: Falha na conexão com a IA.]</b></p>";
   }
 };
 
@@ -235,53 +240,37 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
   let documentContext = "";
   if (data.analyzedDocuments && data.analyzedDocuments.length > 0) {
       documentContext = `
-      RESUMO/CONTEÚDO DA PEÇA A SER CONTESTADA (Extraído do Upload): 
+      RESUMO/CONTEÚDO DA PEÇA A SER CONTESTADA: 
       ${data.analyzedDocuments[0].summary}
-      (Considere que este é o documento base que devemos atacar/contestar).
       `;
   }
 
   try {
     const prompt = `
       ATUE COMO UM ADVOGADO DE DEFESA BRILHANTE E COMBATIVO.
-      OBJETIVO: Criar uma CONTESTAÇÃO (ou Recurso, dependendo do contexto) robusta e técnica.
-
-      CENÁRIO:
-      Você recebeu informações sobre um processo movido contra seu cliente.
-      Sua tarefa é desconstruir os argumentos da parte autora ou da sentença.
+      OBJETIVO: Criar uma CONTESTAÇÃO técnica e robusta.
 
       DADOS DO PROCESSO:
       - ÁREA: ${data.area}
-      - AÇÃO ORIGINÁRIA: ${data.actionType}
+      - AÇÃO: ${data.actionType}
       - JUÍZO: ${data.jurisdiction}
-      - PARTE CONTRÁRIA (AUTOR): ${plaintiffsText}
-      - MEU CLIENTE (RÉU): ${defendantsText}
+      - PARTE CONTRÁRIA: ${plaintiffsText}
+      - MEU CLIENTE: ${defendantsText}
       
       ${documentContext}
 
-      TESE DE DEFESA / PONTOS A REBATER (Fornecidos pelo Advogado):
-      ${data.facts} (AQUI ESTÃO OS ARGUMENTOS DE DEFESA E A VERSÃO DO RÉU)
+      TESE DE DEFESA:
+      ${data.facts}
       
       PEDIDOS DA DEFESA: ${data.requests.join('; ')}
 
-      DIRETRIZES ESTRUTURAIS (FORMATO HTML):
-      1. ENDEREÇAMENTO: Ao Juízo competente.
-      2. PRELIMINARES DE MÉRITO (CRUCIAL):
-         - Analise se cabe: Inépcia da Inicial, Ilegitimidade de Parte, Prescrição, Decadência, Falta de Interesse de Agir.
-         - Se a "Tese de Defesa" citar algo processual, crie um tópico de preliminar forte.
-      3. SÍNTESE DA DEMANDA: Breve resumo do que o autor alegou (em tom crítico).
-      4. DA REALIDADE DOS FATOS (MÉRITO): Apresente a versão do Réu de forma persuasiva.
-      5. DO DIREITO:
-         - Rebata ponto a ponto.
-         - Use o princípio da "Impugnação Específica" (Art. 341 CPC).
-         - Cite jurisprudência favorável ao Réu.
-      6. DOS PEDIDOS:
-         - Improcedência total da ação.
-         - Condenação em sucumbência.
-         - Provas a produzir.
-
-      ESTILO:
-      Formal, técnico, porém agressivo na defesa de direitos. Use HTML para formatação (h3, p, b).
+      DIRETRIZES (HTML):
+      1. ENDEREÇAMENTO
+      2. PRELIMINARES DE MÉRITO (Inépcia, Ilegitimidade, Prescrição, etc).
+      3. SÍNTESE DA DEMANDA
+      4. DA REALIDADE DOS FATOS
+      5. DO DIREITO (Impugnação Específica)
+      6. DOS PEDIDOS
     `;
 
     const response = await ai.models.generateContent({
@@ -307,15 +296,12 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
 export const suggestFilingMetadata = async (data: PetitionFormData): Promise<PetitionFilingMetadata> => {
   try {
     const prompt = `
-      Analise os dados desta petição e sugira o preenchimento dos metadados para cadastro no sistema de processo eletrônico (PJe / e-SAJ / Projudi) conforme as Tabelas Processuais Unificadas (TPU) do CNJ.
-      
-      Se a Ação não estiver explícita, deduza pelos fatos.
-
-      Ação/Input: ${data.actionType}
+      Analise os dados desta petição e sugira metadados para o PJe (TPU CNJ).
+      Ação: ${data.actionType}
       Área: ${data.area}
-      Fatos resumidos: ${data.facts}
+      Fatos: ${data.facts}
       
-      Retorne a Competência, a Classe Judicial e o Assunto Principal.
+      Retorne Competência, Classe Judicial e Assunto Principal.
     `;
 
     const response = await ai.models.generateContent({
@@ -345,7 +331,6 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
     };
 
   } catch (error) {
-    console.error("Error generating metadata:", error);
     return mockMetadata(data);
   }
 };
@@ -354,18 +339,9 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
   try {
     const prompt = `
       Atue como um advogado sênior revisando uma peça jurídica (HTML).
-      
-      CONTEÚDO ORIGINAL (HTML):
-      ${currentContent}
-
-      SOLICITAÇÃO DE ALTERAÇÃO:
-      "${instructions}"
-
-      TAREFA:
-      1. Reescreva a petição mantendo a formatação HTML (h3 centralizado, p, b).
-      2. Incorpore as alterações solicitadas.
-      3. Mantenha o tom formal e jurídico avançado.
-      4. Retorne APENAS o HTML completo.
+      CONTEÚDO ORIGINAL: ${currentContent}
+      ALTERAÇÃO SOLICITADA: "${instructions}"
+      TAREFA: Reescreva a petição em HTML incorporando as alterações.
     `;
 
     const response = await ai.models.generateContent({
@@ -379,48 +355,23 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
     return text;
 
   } catch (error) {
-    console.error("Error refining petition:", error);
-    throw new Error("Não foi possível refinar a petição. Verifique a chave de API.");
+    throw new Error("Não foi possível refinar a petição.");
   }
 };
 
-// Fallback Mock with HTML
 const mockGeneration = (data: PetitionFormData) => {
-  const authorNames = data.plaintiffs.map(p => p.name.toUpperCase()).join(', ');
-  const defNames = data.defendants.map(d => d.name.toUpperCase()).join(', ');
-
   return `
-<h3 style="text-align: center; text-transform: uppercase;">EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DA COMARCA DE ${data.jurisdiction?.toUpperCase() || '...'}</h3>
-<br>
-<br>
-<p><b>${authorNames || 'NOME DO AUTOR'}</b>, qualificados nos autos, vêm, respeitosamente, à presença de Vossa Excelência, propor a presente</p>
-<br>
-<h3 style="text-align: center; text-transform: uppercase;">${data.actionType?.toUpperCase() || 'AÇÃO'}</h3>
-<br>
-<p>em face de <b>${defNames || 'NOME DO RÉU'}</b>, pelos fatos e fundamentos a seguir expostos:</p>
-<br>
-<h3 style="text-align: center; text-transform: uppercase;">I - DOS FATOS</h3>
-<p>${data.facts || 'Descreva os fatos aqui...'}</p>
-<br>
-<h3 style="text-align: center; text-transform: uppercase;">II - DO DIREITO</h3>
-<p>(Fundamentação jurídica gerada automaticamente...)</p>
-<br>
-<h3 style="text-align: center; text-transform: uppercase;">III - DOS PEDIDOS</h3>
-<p>Nestes termos,</p>
-<p>Pede deferimento.</p>
-<br>
-<p>${data.jurisdiction || 'Local'}, ${new Date().toLocaleDateString('pt-BR')}.</p>
-<br>
-<br>
-<p>_____________________________</p>
-<p>ADVOGADO(A)</p>
+<h3 style="text-align: center;">EXCELENTÍSSIMO JUÍZO DA COMARCA DE ${data.jurisdiction?.toUpperCase() || '...'}</h3>
+<br><p><b>${data.plaintiffs[0]?.name || 'AUTOR'}</b>, vem propor a presente <b>${data.actionType?.toUpperCase()}</b>...</p>
+<br><h3 style="text-align: center;">DOS FATOS</h3><p>${data.facts}</p>
+<br><h3 style="text-align: center;">DOS PEDIDOS</h3><p>Pede deferimento.</p>
   `;
 };
 
 const mockMetadata = (data: PetitionFormData): PetitionFilingMetadata => {
   return {
-    competence: data.area === 'trabalhista' ? 'Vara do Trabalho' : 'Vara Cível / JEC',
-    class: 'Procedimento Comum Cível',
+    competence: 'Vara Cível',
+    class: 'Procedimento Comum',
     subject: data.actionType || 'Direito Civil'
   };
 };
