@@ -41,7 +41,7 @@ export interface AnalyzedDocument {
 export interface Petition {
   id: string;
   user_id: string;
-  area: 'civel' | 'trabalhista' | 'familia' | 'outros';
+  area: 'civel' | 'trabalhista' | 'familia' | 'criminal' | 'outros';
   action_type: string;
   content: string;
   created_at: string;

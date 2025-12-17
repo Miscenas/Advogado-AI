@@ -55,9 +55,6 @@ const getAiClient = (): GoogleGenAI | null => {
     return null;
   }
   
-  // Debug (sem expor a chave inteira)
-  // console.log("Advogado IA: Chave API detectada (inicia com " + apiKey.substring(0, 4) + "...)");
-  
   return new GoogleGenAI({ apiKey });
 };
 
@@ -97,7 +94,7 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
 
     const prompt = `
       Analise o documento jurídico anexo. 
-      Retorne um JSON com: docType (Classificação ex: "Petição Inicial", "Contestação", "Sentença"), summary (Resumo 1 linha) e extractedData (Objeto com area, actionType, jurisdiction, plaintiffs, defendants, facts, value).
+      Retorne um JSON com: docType (Classificação ex: "Petição Inicial", "Contestação", "Sentença", "Inquérito"), summary (Resumo 1 linha) e extractedData (Objeto com area, actionType, jurisdiction, plaintiffs, defendants, facts, value).
       Se for imagem ilegível, retorne docType: "Erro".
     `;
 
@@ -217,30 +214,69 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
   }
 
   try {
+    const isCriminal = data.area === 'criminal';
+    
+    // Prompt Base (Comum a todas as áreas)
+    let systemRole = "ATUE COMO UM ADVOGADO SÊNIOR COM 20 ANOS DE EXPERIÊNCIA.";
+    let styleGuide = `
+      ESTILO DE REDAÇÃO:
+      - Linguagem culta, técnica, persuasiva e direta.
+      - Use termos jurídicos adequados e brocardos latinos pertinentes (ex: "fumus boni iuris", "in dubio pro reo" se criminal).
+      - CITE ARTIGOS DE LEI ESPECÍFICOS (CF/88, CP, CPP, CC, CPC, CLT).
+      - CITE JURISPRUDÊNCIA RECENTE (STF/STJ) como fundamento.
+      - Formatação HTML limpa: <h3> para títulos (centralizados), <p> justificados, <ul> para listas.
+    `;
+
+    // Prompt Específico por Área
+    let structureInstructions = "";
+
+    if (isCriminal) {
+        systemRole = "ATUE COMO UM ADVOGADO CRIMINALISTA SÊNIOR DE ALTA PERFORMANCE.";
+        structureInstructions = `
+          ESTRUTURA CRIMINAL OBRIGATÓRIA:
+          1. ENDEREÇAMENTO: Excelentíssimo Senhor Doutor Juiz de Direito da Vara Criminal da Comarca de... (ou autoridade policial/Tribunal competente).
+          2. PREÂMBULO: Qualificação completa do ${data.actionType?.includes('Queixa') ? 'Querelante' : 'Requerente/Paciente'}.
+          3. I - DOS FATOS: Narrativa cronológica, clara e objetiva do ocorrido.
+          4. II - DO DIREITO (FUNDAMENTAÇÃO ROBUSTA):
+             - Discorra sobre a Tipicidade, Ilicitude e Culpabilidade (se defesa) ou Materialidade e Autoria (se acusação).
+             - Invoque princípios constitucionais (Presunção de Inocência, Devido Processo Legal, Ampla Defesa).
+             - Cite artigos do Código Penal e Processo Penal.
+             - Cite Súmulas do STF/STJ.
+          5. III - DOS PEDIDOS: Liste os requerimentos de forma técnica (Absolvição, Relaxamento, Trancamento, Condenação, etc).
+          6. FECHAMENTO: Local, Data, Advogado OAB.
+        `;
+    } else {
+        // Cível / Trabalhista / Família
+        structureInstructions = `
+          ESTRUTURA CÍVEL/GERAL:
+          1. ENDEREÇAMENTO (Excelentíssimo...).
+          2. QUALIFICAÇÃO DAS PARTES.
+          3. I - DOS FATOS (Narrativa persuasiva).
+          4. II - DO DIREITO (Fundamentação legal e jurisprudencial).
+          5. III - DOS PEDIDOS (Lista numerada e valor da causa).
+          6. FECHAMENTO.
+        `;
+    }
+
     const prompt = `
-      ATUE COMO UM ADVOGADO SÊNIOR ESPECIALISTA.
-      Redija uma PETIÇÃO INICIAL completa e bem fundamentada em formato HTML (sem tags html/body/head externas, apenas o conteúdo).
+      ${systemRole}
+      
+      Redija uma peça processual completa: ${data.actionType?.toUpperCase() || 'PETIÇÃO INICIAL'}.
       
       DADOS DO CASO:
-      - Área: ${data.area}
-      - Ação: ${data.actionType}
+      - Área: ${data.area.toUpperCase()}
       - Foro: ${data.jurisdiction}
-      - Autores: ${data.plaintiffs.map(p => `${p.name} (${p.type}, Doc: ${p.doc})`).join(', ')}
-      - Réus: ${data.defendants.map(d => `${d.name} (${d.type}, Doc: ${d.doc})`).join(', ')}
+      - Polo Ativo: ${data.plaintiffs.map(p => `${p.name} (${p.type}, Doc: ${p.doc})`).join(', ')}
+      - Polo Passivo: ${data.defendants.map(d => `${d.name} (${d.type}, Doc: ${d.doc})`).join(', ')}
       - Fatos: ${data.facts}
       - Pedidos Específicos: ${data.requests.join('; ')}
-      - Valor da Causa: ${data.value}
+      ${isCriminal ? '' : `- Valor da Causa: ${data.value}`}
       
-      ESTRUTURA:
-      1. Endereçamento (Excelentíssimo...)
-      2. Qualificação das partes
-      3. Dos Fatos (Narrativa persuasiva)
-      4. Do Direito (Fundamentação legal e jurisprudencial breve)
-      5. Dos Pedidos (Lista numerada)
-      6. Fechamento (Valor, data, local, assinatura)
+      ${styleGuide}
+      
+      ${structureInstructions}
 
-      Use tags <h3> para títulos, <p> para parágrafos, <ul>/<li> para listas.
-      Formatação limpa e profissional.
+      Gere APENAS o HTML do conteúdo da petição (sem tags <html> ou <body> externas).
     `;
     
     const response = await ai.models.generateContent({
@@ -264,13 +300,17 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
     
     try {
         const prompt = `
-          ATUE COMO UM ADVOGADO DE DEFESA.
-          Redija uma CONTESTAÇÃO em HTML.
+          ATUE COMO UM ADVOGADO DE DEFESA SÊNIOR.
+          Redija uma CONTESTAÇÃO/DEFESA PRÉVIA em HTML.
+          Área: ${data.area}
           Ação Originária: ${data.actionType}
           Tese de Defesa/Fatos: ${data.facts}
           Pedidos da Defesa: ${data.requests.join('; ')}
           
-          Estruture com Preliminares (se houver), Mérito e Pedidos.
+          Estruture com:
+          I. Das Preliminares (Nulidades, Incompetência, Ilegitimidade).
+          II. Do Mérito (Ataque direto aos fatos e fundamentos jurídicos da acusação/inicial).
+          III. Dos Pedidos.
         `;
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
@@ -287,7 +327,7 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
   try {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Analise esta ação: "${data.actionType}". Retorne JSON: { "competence": "X", "class": "Y", "subject": "Z" } (Baseado nas tabelas do CNJ)`,
+        contents: `Analise esta ação: "${data.actionType}" na área "${data.area}". Retorne JSON: { "competence": "X", "class": "Y", "subject": "Z" } (Baseado nas tabelas do CNJ)`,
         config: { responseMimeType: "application/json" }
       });
       return JSON.parse(response.text || "{}");
@@ -302,11 +342,11 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: `
-              Você é um editor jurídico.
+              Você é um editor jurídico sênior.
               O usuário quer alterar a seguinte petição HTML.
               Instrução de alteração: "${instructions}".
               
-              Retorne APENAS o HTML atualizado, mantendo a formatação original.
+              Retorne APENAS o HTML atualizado, mantendo a formatação original e o tom formal.
               
               HTML Original:
               ${currentContent}
@@ -326,6 +366,32 @@ const mockGeneration = (data: PetitionFormData, showWarning = false) => {
         <p style="margin:5px 0 0 0; font-size:0.9em;">Para gerar conteúdo real, insira sua <strong>API Key</strong> no menu Configurações.</p>
     </div>` : '';
 
+  const isCriminal = data.area === 'criminal';
+  
+  if (isCriminal) {
+      return `
+        ${warning}
+        <h3 style="text-align: center;">EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA VARA CRIMINAL DA COMARCA DE ${data.jurisdiction?.toUpperCase() || '...'}</h3>
+        <br><br>
+        <p><b>${data.plaintiffs[0]?.name || 'NOME'}</b>, já qualificado nos autos, vem, respeitosamente, perante Vossa Excelência, por meio de seu advogado infra-assinado...</p>
+        <h3 style="text-align: center;">${data.actionType?.toUpperCase() || 'REQUERIMENTO CRIMINAL'}</h3>
+        <br>
+        <h3 style="text-align: center;">I - DOS FATOS</h3>
+        <p>${data.facts || 'Fatos não processados (Modo Demo).'}</p>
+        <br>
+        <h3 style="text-align: center;">II - DO DIREITO</h3>
+        <p>O direito assiste ao requerente, com base no princípio do <i>in dubio pro reo</i> e na legislação vigente (CP/CPP).</p>
+        <br>
+        <h3 style="text-align: center;">III - DOS PEDIDOS</h3>
+        <p>Ante o exposto, requer:</p>
+        <ul>${data.requests.map(r => `<li>${r}</li>`).join('')}</ul>
+        <br>
+        <p style="text-align: center;">Termos em que,<br>Pede deferimento.</p>
+        <p style="text-align: center;">${data.jurisdiction || 'Local'}, ${new Date().toLocaleDateString()}.</p>
+        <p style="text-align: center;"><b>ADVOGADO OAB/...</b></p>
+      `;
+  }
+
   return `
 ${warning}
 <h3 style="text-align: center;">EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA VARA CÍVEL DA COMARCA DE ${data.jurisdiction?.toUpperCase() || '...'}</h3>
@@ -335,7 +401,7 @@ ${warning}
 <p>em face de <b>${data.defendants[0]?.name || 'NOME DO RÉU'}</b>, pelos motivos de fato e de direito a seguir aduzidos.</p>
 <br>
 <h3 style="text-align: center;">I - DOS FATOS</h3>
-<p>${data.facts || 'O autor alega que os fatos ocorreram conforme narrativa inserida no formulário. (Texto placeholder do modo demonstração - A IA não processou os fatos reais pois a chave não foi detectada).'}</p>
+<p>${data.facts || 'O autor alega que os fatos ocorreram conforme narrativa inserida no formulário. (Texto placeholder do modo demonstração).'}</p>
 <p>Diante do exposto, resta evidente o direito pleiteado.</p>
 <br>
 <h3 style="text-align: center;">II - DOS PEDIDOS</h3>

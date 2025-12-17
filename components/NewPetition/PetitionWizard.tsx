@@ -35,7 +35,9 @@ import {
   Minimize2,
   ArrowLeft,
   Info,
-  Edit3
+  Edit3,
+  Briefcase,
+  AlertOctagon
 } from 'lucide-react';
 import { generateLegalPetition, refineLegalPetition, suggestFilingMetadata, extractDataFromDocument, transcribeAudio } from '../../services/aiService';
 
@@ -176,6 +178,33 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     });
   };
 
+  // Helper Labels based on Area
+  const getPartyLabels = () => {
+      switch(formData.area) {
+          case 'criminal':
+              return { 
+                  pLabel: 'Querelante / Vítima / Autoridade', 
+                  dLabel: 'Querelado / Réu / Investigado',
+                  pAdd: 'Adicionar Vítima/Autor',
+                  dAdd: 'Adicionar Acusado'
+              };
+          case 'trabalhista':
+              return { 
+                  pLabel: 'Reclamante (Trabalhador)', 
+                  dLabel: 'Reclamada (Empresa)',
+                  pAdd: 'Adicionar Reclamante',
+                  dAdd: 'Adicionar Empresa'
+              };
+          default:
+              return { 
+                  pLabel: 'Autor / Requerente', 
+                  dLabel: 'Réu / Requerido',
+                  pAdd: 'Adicionar Autor',
+                  dAdd: 'Adicionar Réu'
+              };
+      }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -206,7 +235,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
               const newDefendants = analysis.extractedData.defendants?.map((p: any) => ({...p, id: Math.random().toString()})) || [];
               return {
                 ...prev,
-                area: prev.area === 'civel' && analysis.extractedData.area ? analysis.extractedData.area : prev.area,
+                area: analysis.extractedData.area || prev.area,
                 actionType: analysis.extractedData.actionType || prev.actionType,
                 jurisdiction: analysis.extractedData.jurisdiction || prev.jurisdiction,
                 facts: (prev.facts ? prev.facts + "\n\n" : "") + (analysis.extractedData.facts || ""),
@@ -710,12 +739,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   );
 
   const renderStepContent = () => {
-    // Determine logical steps based on mode
     const isUploadStep = mode === 'upload' && currentStep === 1;
     const isPartiesStep = (mode === 'upload' && currentStep === 2) || (mode !== 'upload' && currentStep === 1);
     const isFactsStep = (mode === 'upload' && currentStep === 3) || (mode !== 'upload' && currentStep === 2);
     const isRequestsStep = (mode === 'upload' && currentStep === 4) || (mode !== 'upload' && currentStep === 3);
     const isGenerateStep = (mode === 'upload' && currentStep === 5) || (mode !== 'upload' && currentStep === 4);
+    
+    const labels = getPartyLabels();
 
     if (isUploadStep) {
         return (
@@ -742,57 +772,80 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                     </div>
                 )}
             </div>
-            {formData.analyzedDocuments && formData.analyzedDocuments.length > 0 && (
-                <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-gray-700">Documentos Analisados</h4>
-                {formData.analyzedDocuments.map((doc, idx) => (
-                    <div key={idx} className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
-                        <div className="bg-green-100 p-2 rounded-md text-green-700"><FileBadge size={20} /></div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-900">{doc.fileName}</p>
-                            <p className="text-xs font-bold text-juris-700 bg-juris-50 px-2 py-0.5 rounded-full inline-block mt-1">Tipo Identificado: {doc.docType}</p>
-                            <p className="text-xs text-gray-500 mt-1 italic">{doc.summary}</p>
-                        </div>
-                    </div>
-                ))}
-                </div>
-            )}
           </div>
         );
     }
 
-    // ... (Steps 2, 3, 4 are identical to previous) ...
     if (isPartiesStep) {
         return (
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-             {/* ... Parties JSX ... */}
-             <div className="border-b border-gray-100 pb-4 mb-2">
-                 <h2 className="text-lg font-bold text-gray-800">Dados Iniciais (Partes)</h2>
-                 <p className="text-sm text-gray-500">Informe quem são as partes envolvidas no processo.</p>
+             {/* Area Selector */}
+             <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm">
+                 <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><Briefcase size={16} /> Área do Direito & Tipo de Ação</h2>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div>
+                         <label className="block text-xs font-medium text-gray-500 mb-1">Esfera Jurídica</label>
+                         <select 
+                             className="w-full h-10 px-3 rounded-md border border-gray-300 bg-white focus:ring-2 focus:ring-juris-500 text-sm"
+                             value={formData.area}
+                             onChange={(e) => setFormData(prev => ({ ...prev, area: e.target.value }))}
+                         >
+                             <option value="civel">Cível (Geral)</option>
+                             <option value="criminal">Criminal / Penal</option>
+                             <option value="trabalhista">Trabalhista</option>
+                             <option value="familia">Família e Sucessões</option>
+                             <option value="outros">Outros</option>
+                         </select>
+                     </div>
+                     <div>
+                        <Input 
+                            label="Nome da Ação" 
+                            placeholder="Ex: Habeas Corpus, Queixa-Crime, Ação de Cobrança..." 
+                            value={formData.actionType}
+                            onChange={(e) => handleInputChange('actionType', e.target.value)}
+                        />
+                     </div>
+                     <div className="md:col-span-2">
+                        <Input 
+                            label="Foro / Jurisdição" 
+                            placeholder={formData.area === 'criminal' ? "Ex: Vara Criminal da Comarca de São Paulo/SP" : "Ex: 1ª Vara Cível de São Paulo/SP"}
+                            value={formData.jurisdiction}
+                            onChange={(e) => handleInputChange('jurisdiction', e.target.value)}
+                        />
+                     </div>
+                 </div>
              </div>
-             {/* ... (Plaintiffs and Defendants Inputs) ... */}
+
+             <div className="border-b border-gray-100 pb-2 mb-2">
+                 <h2 className="text-lg font-bold text-gray-800">Partes Envolvidas</h2>
+             </div>
+             
+             {/* Plaintiffs */}
              <div className="space-y-4">
                {formData.plaintiffs.map((party, index) => (
                  <div key={party.id || index} className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 relative">
-                    <span className="text-xs font-bold text-blue-300 absolute -top-2 left-2 bg-white px-2 border border-blue-100 rounded">Autor {index + 1}</span>
+                    <span className="text-xs font-bold text-blue-500 absolute -top-2 left-2 bg-white px-2 border border-blue-100 rounded shadow-sm">{labels.pLabel} {index + 1}</span>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                         <Input label="Nome Completo" value={party.name} onChange={(e) => updateParty('plaintiffs', party.id!, 'name', e.target.value)} />
-                        <Input label="CPF / CNPJ" value={party.doc} onChange={(e) => updateParty('plaintiffs', party.id!, 'doc', e.target.value)} />
+                        <Input label="CPF / CNPJ / RG" value={party.doc} onChange={(e) => updateParty('plaintiffs', party.id!, 'doc', e.target.value)} />
                     </div>
                  </div>
                ))}
+               <button onClick={() => addParty('plaintiffs')} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"><Plus size={12}/> {labels.pAdd}</button>
             </div>
-             {/* ... (Defendants) ... */}
-             <div className="space-y-4 pt-4">
+             
+             {/* Defendants */}
+             <div className="space-y-4 pt-4 border-t border-gray-100 mt-4">
                {formData.defendants.map((party, index) => (
                  <div key={party.id || index} className="bg-gray-50 p-4 rounded-lg border border-gray-200 relative">
-                    <span className="text-xs font-bold text-gray-400 absolute -top-2 left-2 bg-white px-2 border border-gray-200 rounded">Réu {index + 1}</span>
+                    <span className="text-xs font-bold text-gray-500 absolute -top-2 left-2 bg-white px-2 border border-gray-200 rounded shadow-sm">{labels.dLabel} {index + 1}</span>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                         <Input label="Nome / Razão Social" value={party.name} onChange={(e) => updateParty('defendants', party.id!, 'name', e.target.value)} />
                         <Input label="CPF / CNPJ" value={party.doc} onChange={(e) => updateParty('defendants', party.id!, 'doc', e.target.value)} />
                     </div>
                  </div>
                ))}
+               <button onClick={() => addParty('defendants')} className="text-xs text-gray-600 hover:text-gray-800 flex items-center gap-1"><Plus size={12}/> {labels.dAdd}</button>
             </div>
           </div>
         );
@@ -802,8 +855,14 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         return (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
               <div>
-                  <label className="block text-sm font-medium text-gray-700">Narrativa dos Fatos</label>
-                  <textarea className="w-full h-64 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-juris-500 text-sm leading-relaxed resize-none" placeholder="Descreva os fatos detalhadamente..." value={formData.facts} onChange={(e) => handleInputChange('facts', e.target.value)} />
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Narrativa dos Fatos</label>
+                  {formData.area === 'criminal' && (
+                      <div className="bg-red-50 p-2 rounded text-xs text-red-800 mb-2 border border-red-100 flex items-start gap-2">
+                          <AlertOctagon size={14} className="mt-0.5" />
+                          <span><strong>Dica Criminal:</strong> Detalhe a conduta individualizada, o dolo/culpa, o momento da consumação e provas de materialidade.</span>
+                      </div>
+                  )}
+                  <textarea className="w-full h-80 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-juris-500 text-sm leading-relaxed resize-none" placeholder="Descreva os fatos detalhadamente..." value={formData.facts} onChange={(e) => handleInputChange('facts', e.target.value)} />
                   <VoiceControls target="facts" />
               </div>
             </div>
@@ -815,16 +874,21 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
              <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Pedidos (Liste um por linha)</label>
-              <textarea className="w-full h-40 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-juris-500 text-sm" placeholder="1. A condenação ao pagamento de R$ X..." value={formData.requests.join('\n')} onChange={(e) => handleInputChange('requests', e.target.value.split('\n'))} />
+              <textarea className="w-full h-64 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-juris-500 text-sm" placeholder="1. O recebimento da denúncia/queixa..." value={formData.requests.join('\n')} onChange={(e) => handleInputChange('requests', e.target.value.split('\n'))} />
               <VoiceControls target="requests" />
             </div>
+            {formData.area !== 'criminal' && (
+                <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Valor da Causa</label>
+                     <Input value={formData.value} onChange={(e) => handleInputChange('value', e.target.value)} placeholder="R$ 0,00" />
+                </div>
+            )}
             </div>
         )
     }
 
     if (isGenerateStep) {
         if (generatedContent) {
-          // Inline success view (shown when user closes Full Screen)
           return (
             <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center justify-center py-8 text-center">
                <div className="bg-green-100 p-4 rounded-full mb-4">
@@ -860,7 +924,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                     </div>
                  </div>
                  <h3 className="text-xl font-bold text-gray-900 mb-2">Gerando sua Petição</h3>
-                 <p className="text-gray-500 max-w-md">Analisando {formData.analyzedDocuments?.length || 0} documento(s), {formData.plaintiffs.length} autor(es) e {formData.defendants.length} réu(s)...</p>
+                 <p className="text-gray-500 max-w-md">Utilizando modelo <strong>Advogado Sênior</strong> na área <strong>{formData.area.toUpperCase()}</strong>...</p>
               </>
             ) : (
               <>
@@ -872,7 +936,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                   As informações foram preenchidas. Clique abaixo para criar a minuta.
                 </p>
                 <Button size="lg" onClick={handleGenerate} className="shadow-xl px-8 h-14 text-lg">
-                  <Sparkles className="mr-2 h-5 w-5" /> Gerar Petição
+                  <Sparkles className="mr-2 h-5 w-5" /> Gerar Petição (IA Sênior)
                 </Button>
               </>
             )}
@@ -894,7 +958,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
           <div className="p-8 flex-1">
-            {/* Oculta os passos quando a petição já estiver gerada para limpar a tela de sucesso */}
             {!generatedContent && renderStepIndicator()}
             <div className={generatedContent ? "h-auto" : "min-h-[400px]"}>
               {renderStepContent()}
