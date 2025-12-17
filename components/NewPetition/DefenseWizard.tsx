@@ -215,15 +215,9 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
                  return;
             }
         } else if (accountStatus === 'active') {
-            // Paid User: Hybrid Limit Check
+            // Paid User: USO ILIMITADO DE QUANTIDADE
             
-            // 1. Check Quantity (100)
-            if (currentCount >= 100) {
-                alert("Limite mensal de segurança (100 petições) atingido. Aguarde o próximo ciclo.");
-                return;
-            }
-
-            // 2. Check Storage (50MB)
+            // 2. Check Storage (50MB) - Mantido para integridade do banco de dados
             const estimatedSize = new Blob([generatedContent]).size + 
                                   new Blob([JSON.stringify(formData.analyzedDocuments)]).size;
             const currentStorage = usage?.used_storage_bytes || 0;
@@ -271,7 +265,6 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
   // --- RENDERERS ---
 
   const renderStepContent = () => {
-    // Only implemented parts to keep code short, relying on existing logic
     if (currentStep === 1) {
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
@@ -414,12 +407,9 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
     return null;
   };
 
-  // --- MAIN LAYOUT ---
-
   if (isFullScreen && generatedContent) {
       return (
         <div className="fixed inset-0 z-[200] bg-gray-100 flex flex-col animate-in slide-in-from-bottom duration-300">
-           {/* Top Toolbar */}
            <div className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shadow-sm z-10 flex-shrink-0">
                <div className="flex items-center gap-4">
                   <button onClick={() => setIsFullScreen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 hover:text-gray-900"><X size={24} /></button>
@@ -463,7 +453,6 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
           <div className="p-8 flex-1">
-             {/* Step Indicator */}
              {!generatedContent && (
                 <div className="mb-8">
                   <div className="flex items-center justify-between relative">

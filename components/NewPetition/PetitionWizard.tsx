@@ -141,8 +141,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   
   // Sync content for editable div
   useEffect(() => {
-    // Only set content if we are in fullscreen and the ref is empty or just initialized
-    // We removed the dependency on 'generatedContent' to prevent loop-resets on blur
     if (isFullScreen && contentRef.current && generatedContent) {
         if (!contentRef.current.innerHTML || contentRef.current.innerHTML === '<br>') {
             contentRef.current.innerHTML = generatedContent;
@@ -155,7 +153,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Multiple Parties Logic
   const updateParty = (type: 'plaintiffs' | 'defendants', id: string, field: keyof PetitionParty, value: string) => {
     setFormData(prev => ({
       ...prev,
@@ -180,7 +177,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     });
   };
 
-  // Helper Labels based on Area
   const getPartyLabels = () => {
       switch(formData.area) {
           case 'criminal':
@@ -225,7 +221,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             const base64Data = base64String.split(',')[1];
             const analysis = await extractDataFromDocument(base64Data, file.type);
             
-            // LÓGICA DE FALLBACK AMIGÁVEL
             if (analysis.docType.includes('Leitura Manual') || analysis.docType.includes('Inválido')) {
                alert(`⚠️ Arquivo não identificado como petição.\n\nO sistema não conseguiu extrair os dados automaticamente. Por favor, prossiga preenchendo o formulário manualmente.`);
             }
@@ -276,7 +271,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     const files = e.target.files;
     if (!files || files.length === 0) return;
     const file = files[0];
-    // Check local limit first
     if (file.size > 25 * 1024 * 1024) {
         alert("Arquivo de áudio muito grande. Máximo 25MB.");
         return;
@@ -392,7 +386,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       ]);
       setGeneratedContent(content);
       setFilingSuggestions(metadata);
-      // AUTO ENTER FULL SCREEN ON SUCCESS
       setIsFullScreen(true);
     } catch (error) {
       alert("Erro na geração. Tente novamente.");
@@ -429,15 +422,9 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                  return;
             }
         } else if (accountStatus === 'active') {
-            // Paid User: Hybrid Limit Check
+            // Paid User: USO ILIMITADO DE QUANTIDADE (REMOVIDO CHECK DE 100)
             
-            // 1. Check Quantity (100)
-            if (currentCount >= 100) {
-                alert("Limite mensal de segurança (100 petições) atingido. Aguarde o próximo ciclo.");
-                return;
-            }
-
-            // 2. Check Storage (50MB)
+            // 2. Check Storage (50MB) - Mantido para integridade do banco de dados
             const estimatedSize = new Blob([generatedContent]).size + 
                                   new Blob([JSON.stringify(formData.analyzedDocuments)]).size;
             const currentStorage = usage?.used_storage_bytes || 0;
@@ -557,7 +544,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       }
   };
 
-  // --- FULL SCREEN PREVIEW MODE ---
   if (isFullScreen && generatedContent) {
       return (
         <div className="fixed inset-0 z-[200] bg-gray-100 flex flex-col animate-in slide-in-from-bottom duration-300">
@@ -567,7 +553,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                   <button 
                     onClick={() => setIsFullScreen(false)}
                     className="p-2 hover:bg-gray-100 rounded-full text-gray-500 hover:text-gray-900 transition-colors"
-                    title="Minimizar e Voltar para Ações"
                   >
                      <X size={24} />
                   </button>
@@ -592,16 +577,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                </div>
            </div>
 
-           {/* Info Banner */}
            <div className="bg-sky-50 border-b border-sky-100 px-4 py-2 text-center text-sm text-sky-800 flex items-center justify-center gap-2 animate-in fade-in">
                 <Info size={16} />
                 <span>Este documento é editável. A IA entende e preserva as suas edições! Clique no texto para começar.</span>
            </div>
 
-           {/* Main Content Area (Scrollable) */}
            <div className="flex-1 overflow-y-auto p-8 relative">
                <div className="w-full max-w-[1400px] mx-auto flex gap-8 items-start justify-center">
-                   {/* Paper Document (Editable) */}
                    <div 
                       id="petition-fullscreen-view"
                       ref={contentRef}
@@ -610,8 +592,8 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                       suppressContentEditableWarning={true}
                       onBlur={(e) => setGeneratedContent(e.currentTarget.innerHTML)}
                       style={{
-                          width: '21cm', // Width A4 fixed
-                          minHeight: '29.7cm', // Height A4 min
+                          width: '21cm', 
+                          minHeight: '29.7cm',
                           fontFamily: '"Times New Roman", Times, serif',
                           fontSize: '12pt',
                           lineHeight: '1.5',
@@ -619,9 +601,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                       }}
                    />
 
-                   {/* Right Floating Panel for Refinement & Info */}
                    <div className="w-80 hidden xl:flex flex-col gap-4 sticky top-0">
-                       {/* Metadata Card */}
                        {filingSuggestions && (
                            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -644,7 +624,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                            </div>
                        )}
                        
-                       {/* Refinement Card */}
                        <div className="bg-sky-50 rounded-lg shadow-sm border border-sky-100 p-4">
                            <h4 className="text-xs font-bold text-sky-800 uppercase tracking-wider mb-2 flex items-center gap-2">
                               <RefreshCw size={14} /> Refinar com IA
@@ -739,6 +718,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   );
 
   const renderStepContent = () => {
+    // Content rendering logic is unchanged, just reused
     const isUploadStep = mode === 'upload' && currentStep === 1;
     const isPartiesStep = (mode === 'upload' && currentStep === 2) || (mode !== 'upload' && currentStep === 1);
     const isFactsStep = (mode === 'upload' && currentStep === 3) || (mode !== 'upload' && currentStep === 2);
@@ -779,7 +759,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     if (isPartiesStep) {
         return (
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-             {/* Area Selector */}
              <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm">
                  <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><Briefcase size={16} /> Área do Direito & Tipo de Ação</h2>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -820,7 +799,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                  <h2 className="text-lg font-bold text-gray-800">Partes Envolvidas</h2>
              </div>
              
-             {/* Plaintiffs */}
              <div className="space-y-4">
                {formData.plaintiffs.map((party, index) => (
                  <div key={party.id || index} className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 relative">
@@ -834,7 +812,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                <button onClick={() => addParty('plaintiffs')} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"><Plus size={12}/> {labels.pAdd}</button>
             </div>
              
-             {/* Defendants */}
              <div className="space-y-4 pt-4 border-t border-gray-100 mt-4">
                {formData.defendants.map((party, index) => (
                  <div key={party.id || index} className="bg-gray-50 p-4 rounded-lg border border-gray-200 relative">

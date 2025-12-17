@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Crown, ShieldCheck, Zap, HardDrive, AlertCircle, FileText } from 'lucide-react';
+import { CheckCircle2, Crown, ShieldCheck, Zap, HardDrive, AlertCircle, FileText, Infinity } from 'lucide-react';
 import { Button } from './ui/Button';
 import { createCheckoutPreference, recordPaymentAttempt } from '../services/paymentService';
 import { UserProfile } from '../types';
@@ -21,7 +21,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
   ];
 
   const proFeatures = [
-    "100 Petições por Mês",
+    "Petições Ilimitadas",
     "50 MB de Armazenamento Dedicado",
     "Pesquisa de Jurisprudência com IA",
     "Análise de Documentos (PDF/Imagem)",
@@ -63,7 +63,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold text-gray-900">Escolha o plano ideal para seu escritório</h1>
         <p className="text-xl text-gray-500 max-w-2xl mx-auto">
-          Comece gratuitamente ou assine o plano Pro para aumentar sua produtividade com 100 petições mensais.
+          Comece gratuitamente ou assine o plano Pro para remover todos os limites de criação e armazenamento.
         </p>
       </div>
 
@@ -152,7 +152,9 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
                    <div className="rounded-full bg-sky-500/20 p-1 mr-3">
                      <CheckCircle2 className="h-4 w-4 text-sky-400" />
                    </div>
-                   <span className="text-sm text-white font-medium">{feature}</span>
+                   <span className="text-sm text-white font-medium flex items-center gap-2">
+                       {feature.includes("Ilimitadas") ? <><Infinity size={14} className="text-sky-300"/> {feature}</> : feature}
+                   </span>
                  </li>
                ))}
             </ul>
@@ -183,7 +185,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
              <div className="bg-sky-100 p-2 rounded-full"><HardDrive className="h-6 w-6 text-sky-600" /></div>
              <div>
                 <h4 className="font-bold text-gray-900">Plano Pro (R$ 60/mês)</h4>
-                <p className="text-gray-600 text-sm mt-1">Até 100 petições por mês e 50MB de armazenamento. O que for atingido primeiro limita o uso.</p>
+                <p className="text-gray-600 text-sm mt-1">Petições ilimitadas e 50MB de armazenamento para documentos e histórico.</p>
              </div>
           </div>
       </div>
@@ -198,7 +200,7 @@ export const PaymentSuccess: React.FC<{ onNavigate: (r: string) => void }> = ({ 
         </div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Pagamento Recebido!</h2>
         <p className="text-gray-500 max-w-md mb-8">
-            Sua assinatura do Advogado IA PRO foi confirmada. Limite expandido para 100 petições e 50MB.
+            Sua assinatura do Advogado IA PRO foi confirmada. Limites de uso removidos.
         </p>
         <Button size="lg" onClick={() => onNavigate('dashboard')}>
             Voltar ao Dashboard

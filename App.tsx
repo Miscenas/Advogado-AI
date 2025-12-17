@@ -356,15 +356,19 @@ function App() {
           }
       } else if (status === 'active') {
           // Paid User (Pro):
-          // Regra 1: Quantidade (100 petições/mês)
+          // REGRA DE OURO: REMOVIDO LIMITE DE QUANTIDADE PARA ASSINANTES.
+          // O cliente pediu "sem limitação de uso da IA".
+          
+          /*
+          // Regra Antiga de Quantidade (Desativada)
           const quantityLimit = 100;
           const currentQuantity = usage.petitions_this_month || 0;
-          
           if (currentQuantity >= quantityLimit) {
-              return { allowed: false, reason: `Limite mensal de segurança atingido (${currentQuantity}/${quantityLimit} petições).` };
+              return { allowed: false, reason: `Limite mensal de segurança atingido.` };
           }
+          */
 
-          // Regra 2: Armazenamento (50MB)
+          // Regra de Armazenamento (50MB) - Mantida para saúde do banco de dados, mas é muito alta.
           const storageLimit = usage.storage_limit_bytes || 52428800;
           const currentStorage = usage.used_storage_bytes || 0;
           

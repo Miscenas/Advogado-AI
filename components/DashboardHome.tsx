@@ -22,7 +22,8 @@ import {
   Globe,
   HardDrive,
   ShieldCheck,
-  Calendar
+  Calendar,
+  Infinity
 } from 'lucide-react';
 import { Button } from './ui/Button';
 
@@ -234,9 +235,8 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
             );
         }
 
-        // Lógica Híbrida de Exibição
         const count = usage?.petitions_this_month || 0;
-        const countLimit = isTrial ? (usage?.petitions_limit || 5) : 100;
+        const countLimit = isTrial ? (usage?.petitions_limit || 5) : 9999;
         const countPercent = Math.min(100, (count / countLimit) * 100);
 
         const storage = usage?.used_storage_bytes || 0;
@@ -256,16 +256,16 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
                         </h3>
                     </div>
                     
-                    {/* Barra de Quantidade (Sempre visível para todos os tipos não-admin) */}
+                    {/* Barra de Quantidade */}
                     <div className="mb-3">
                         <div className="flex justify-between text-xs font-medium text-gray-600 mb-1">
-                            <span>Petições: {count} / {countLimit}</span>
-                            <span>Mensal</span>
+                            <span>Petições: {count}</span>
+                            {isTrial ? <span>Limite: {countLimit}</span> : <span className="flex items-center gap-1 text-green-600"><Infinity size={14}/> Ilimitado</span>}
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
                             <div 
-                                className={`h-2.5 rounded-full ${countPercent > 80 ? 'bg-amber-500' : 'bg-juris-600'}`} 
-                                style={{ width: `${countPercent}%` }}
+                                className={`h-2.5 rounded-full ${isTrial ? (countPercent > 80 ? 'bg-amber-500' : 'bg-juris-600') : 'bg-green-500'}`} 
+                                style={{ width: isTrial ? `${countPercent}%` : '100%' }}
                             ></div>
                         </div>
                     </div>
@@ -285,7 +285,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
                     </div>
 
                     {/* Avisos */}
-                    {(countPercent >= 100 || storagePercent >= 100) && (
+                    {isTrial && countPercent >= 100 && (
                         <p className="text-xs text-red-500 font-semibold mb-2 flex items-center gap-1">
                             <AlertTriangle size={12} /> Limite operacional atingido!
                         </p>
