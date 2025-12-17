@@ -141,12 +141,14 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   
   // Sync content for editable div
   useEffect(() => {
+    // Only set content if we are in fullscreen and the ref is empty or just initialized
+    // We removed the dependency on 'generatedContent' to prevent loop-resets on blur
     if (isFullScreen && contentRef.current && generatedContent) {
-        if (contentRef.current.innerHTML !== generatedContent) {
+        if (!contentRef.current.innerHTML || contentRef.current.innerHTML === '<br>') {
             contentRef.current.innerHTML = generatedContent;
         }
     }
-  }, [isFullScreen, generatedContent]);
+  }, [isFullScreen]);
 
   // Helpers
   const handleInputChange = (field: keyof PetitionFormData, value: any) => {
@@ -560,7 +562,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   // --- FULL SCREEN PREVIEW MODE ---
   if (isFullScreen && generatedContent) {
       return (
-        <div className="fixed inset-0 z-[100] bg-gray-100 flex flex-col animate-in slide-in-from-bottom duration-300">
+        <div className="fixed inset-0 z-[200] bg-gray-100 flex flex-col animate-in slide-in-from-bottom duration-300">
            {/* Top Toolbar */}
            <div className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shadow-sm z-10 flex-shrink-0">
                <div className="flex items-center gap-4">

@@ -421,8 +421,8 @@ ${warning}
 
 const mockMetadata = (data: PetitionFormData): PetitionFilingMetadata => {
   return {
-    competence: 'Configurar API Key',
-    class: 'Modo Demo',
-    subject: data.actionType || 'Direito Civil'
+    competence: data.jurisdiction || (data.area === 'criminal' ? 'Juízo Criminal Competente' : 'Juízo Cível Competente'),
+    class: data.actionType || 'Procedimento Comum',
+    subject: data.area === 'criminal' ? 'Direito Penal' : 'Direito Civil / Processual'
   };
 };
