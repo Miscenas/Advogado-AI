@@ -31,9 +31,17 @@ const getEnv = (key: string) => {
   return undefined;
 };
 
+const getStored = (key: string) => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return window.localStorage.getItem(key);
+  }
+  return null;
+};
+
 // Retorna o cliente ou NULL se não houver chave (para ativar modo Mock)
 const getAiClient = (): GoogleGenAI | null => {
-  const apiKey = FIXED_API_KEY || getEnv('API_KEY');
+  // Prioridade: Chave Fixa > LocalStorage (Configurada na UI) > Variáveis de Ambiente
+  const apiKey = FIXED_API_KEY || getStored('custom_gemini_api_key') || getEnv('API_KEY');
   
   if (!apiKey || apiKey.includes('YOUR_API_KEY')) {
     console.warn("Advogado IA: API Key não detectada. Ativando Modo Demonstração (Mock AI).");
@@ -47,19 +55,19 @@ const getAiClient = (): GoogleGenAI | null => {
 
 const mockAnalysisResult = (filename?: string) => ({
     docType: "Petição Inicial (Simulado)",
-    summary: "Este é um resumo simulado pelo Modo Demo. O sistema detectou que não há chave de API configurada, então gerou este resultado fictício para não bloquear seu teste.",
+    summary: "Este é um resumo simulado pelo Modo Demo. O sistema detectou que não há chave de API configurada. Para obter uma análise real, clique em 'Configurações' no menu lateral e insira sua Google Gemini API Key.",
     extractedData: {
         area: "civel",
-        actionType: "Ação de Indenização por Danos Morais",
+        actionType: "Ação de Indenização (Demo)",
         jurisdiction: "São Paulo/SP",
         plaintiffs: [{ name: "João da Silva (Demo)", doc: "123.456.789-00", type: "pf" as const }],
-        defendants: [{ name: "Empresa Aérea X (Demo)", doc: "00.000.000/0001-00", type: "pj" as const }],
-        facts: "O autor alega que teve seu voo cancelado sem aviso prévio, perdendo compromisso profissional importante. Solicita reparação por danos materiais e morais. (Texto gerado automaticamente pelo Modo Demo)",
-        value: "R$ 15.000,00"
+        defendants: [{ name: "Empresa X (Demo)", doc: "00.000.000/0001-00", type: "pj" as const }],
+        facts: "O autor alega falha na prestação de serviço. (Texto gerado automaticamente pelo Modo Demo - Configure a API Key para análise real)",
+        value: "R$ 10.000,00"
     }
 });
 
-const mockTranscription = "Transcrição simulada: O cliente relata que comprou um veículo zero km que apresentou defeitos na primeira semana de uso. Tentou contato com a concessionária diversas vezes sem sucesso.";
+const mockTranscription = "Transcrição simulada: Configure a chave de API para obter transcrições reais de áudio.";
 
 // --- FUNÇÕES PRINCIPAIS ---
 
@@ -157,6 +165,7 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
         return `
         <div class="p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 mb-4 text-sm">
            <strong>Modo Demonstração:</strong> Exibindo resultados simulados pois a Chave de API não foi detectada.
+           <br>Para ver resultados reais, configure sua chave no menu lateral > Configurações.
         </div>
         <div class="juris-card">
             <h4>TJSP - APELAÇÃO CÍVEL nº 1000000-00.2023.8.26.0000 (Simulado)</h4>
@@ -268,8 +277,8 @@ const mockGeneration = (data: PetitionFormData, showWarning = false) => {
   const warning = showWarning ? 
     `<div style="background:#fff7ed; border:1px solid #fdba74; color:#9a3412; padding:15px; margin-bottom:20px; border-radius:8px; text-align:center;">
         <strong>MODO DEMONSTRAÇÃO ATIVO</strong><br>
-        Esta petição foi gerada localmente porque a Chave de API da IA não foi configurada ou falhou.
-        <br><small>Configure a VITE_GOOGLE_API_KEY para gerar conteúdo real com IA.</small>
+        Esta petição foi gerada localmente porque a Chave de API da IA não foi configurada.
+        <br><small>Vá em "Configurações" no menu lateral e insira sua Google Gemini API Key.</small>
     </div>` : '';
 
   return `

@@ -391,14 +391,18 @@ export const supabase = client;
 export const isLive = isConfigured;
 
 // Helper methods to configure connection from UI
-export const updateConnection = (url: string, key: string) => {
+export const updateConnection = (url: string, key: string, aiKey?: string) => {
     localStorage.setItem('custom_supabase_url', url);
     localStorage.setItem('custom_supabase_key', key);
+    if (aiKey) {
+        localStorage.setItem('custom_gemini_api_key', aiKey);
+    }
     window.location.reload();
 };
 
 export const disconnectCustom = () => {
     localStorage.removeItem('custom_supabase_url');
     localStorage.removeItem('custom_supabase_key');
+    localStorage.removeItem('custom_gemini_api_key');
     window.location.reload();
 };
