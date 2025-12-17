@@ -13,9 +13,16 @@ export interface UserProfile {
 
 export interface UsageLimit {
   user_id: string;
-  monthly_limit: number;
-  used_this_month: number;
+  // Free Tier Limit
+  petitions_limit: number; // Default 5
+  petitions_this_month: number;
   last_reset: string;
+  
+  // Paid Tier Limit
+  storage_limit_bytes: number; // Default 52428800 (50MB)
+  used_storage_bytes: number;
+  
+  last_update: string;
 }
 
 export interface PetitionFilingMetadata {

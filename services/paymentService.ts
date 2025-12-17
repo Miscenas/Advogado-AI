@@ -46,7 +46,7 @@ export const createCheckoutPreference = async (planId: 'monthly' | 'yearly', use
   // vou simular o retorno de um link de pagamento ou instruir como fazer.
   
   const title = planId === 'monthly' ? 'Advogado IA - Plano Mensal' : 'Advogado IA - Plano Anual';
-  const price = planId === 'monthly' ? 97.00 : 970.00;
+  const price = planId === 'monthly' ? 60.00 : 600.00;
 
   console.log(`Criando preferência para ${email} - ${title} (R$ ${price})`);
 

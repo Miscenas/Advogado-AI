@@ -17,114 +17,51 @@ import { Lock, Database, AlertTriangle, FileCode, Copy, Check, RefreshCw, Info }
 import { Button } from './components/ui/Button';
 
 // Script SQL para correção disponível diretamente na UI em caso de erro
-const SQL_FIX_SCRIPT = `-- CORREÇÃO COMPLETA DE SEGURANÇA E ESTRUTURA
--- Execute este script no SQL Editor do Supabase para blindar sua aplicação.
+const SQL_FIX_SCRIPT = `-- ATUALIZAÇÃO HÍBRIDA (CONTAGEM P/ FREE, ARMAZENAMENTO P/ PRO)
+-- Execute este script no SQL Editor do Supabase.
 
--- 1. FUNÇÕES AUXILIARES DE SEGURANÇA (Evita erro 42P17 - Recursão Infinita)
+-- 1. FUNÇÕES AUXILIARES DE SEGURANÇA
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
-  IF auth.uid() IS NULL THEN
-    RETURN FALSE;
-  END IF;
-  RETURN EXISTS (
-    SELECT 1 FROM profiles
-    WHERE id = auth.uid()
-    AND role = 'admin'
-  );
+  IF auth.uid() IS NULL THEN RETURN FALSE; END IF;
+  RETURN EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin');
 END;
 $$;
 
--- 2. TABELA DE PERFIS (PROFILES)
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id uuid REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  full_name text,
-  email text,
-  account_status text DEFAULT 'trial' CHECK (account_status IN ('trial', 'active', 'blocked')),
-  role text DEFAULT 'user' CHECK (role IN ('user', 'admin')),
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-
--- Limpeza de políticas antigas para evitar conflitos
-DO $$ 
-DECLARE pol record; 
-BEGIN 
-    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'profiles' LOOP 
-        EXECUTE format('DROP POLICY IF EXISTS %I ON profiles', pol.policyname); 
-    END LOOP; 
-END $$;
-
--- Políticas Profiles:
--- Todos podem ver perfis (necessário para admin ver users)
-CREATE POLICY "Profiles are viewable by users and admins" ON profiles FOR SELECT USING ( (auth.uid() = id) OR (is_admin()) );
--- Usuários só podem inserir seu próprio perfil
-CREATE POLICY "Users can insert their own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
--- Usuários podem editar seu próprio perfil
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-
--- 3. TABELA DE PETIÇÕES (PETITIONS)
-CREATE TABLE IF NOT EXISTS public.petitions (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id) NOT NULL,
-  area text,
-  action_type text,
-  content text,
-  plaintiff_name text,
-  defendant_name text,
-  filed boolean DEFAULT false,
-  analyzed_documents jsonb DEFAULT '[]'::jsonb,
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE petitions ENABLE ROW LEVEL SECURITY;
-
-DO $$ 
-BEGIN 
-    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'petitions' LOOP 
-        EXECUTE format('DROP POLICY IF EXISTS %I ON petitions', pol.policyname); 
-    END LOOP; 
-END $$;
-
-CREATE POLICY "Users can CRUD own petitions" ON petitions
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
-
--- 4. TABELA DE PRAZOS (DEADLINES)
-CREATE TABLE IF NOT EXISTS public.deadlines (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id) NOT NULL,
-  title text NOT NULL,
-  description text,
-  due_date timestamp with time zone NOT NULL,
-  status text DEFAULT 'pending',
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE deadlines ENABLE ROW LEVEL SECURITY;
-
-DO $$ 
-BEGIN 
-    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'deadlines' LOOP 
-        EXECUTE format('DROP POLICY IF EXISTS %I ON deadlines', pol.policyname); 
-    END LOOP; 
-END $$;
-
-CREATE POLICY "Users can CRUD own deadlines" ON deadlines
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
-
--- 5. TABELA DE LIMITES DE USO (USAGE_LIMITS)
+-- 2. TABELA DE LIMITES DE USO (Campos para ambos os modelos)
 CREATE TABLE IF NOT EXISTS public.usage_limits (
   user_id uuid REFERENCES auth.users(id) PRIMARY KEY,
-  monthly_limit int DEFAULT 5,
-  used_this_month int DEFAULT 0,
-  last_reset timestamp with time zone DEFAULT timezone('utc'::text, now())
+  -- Modelo Free (Contagem)
+  petitions_limit int DEFAULT 5,
+  petitions_this_month int DEFAULT 0,
+  last_reset timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  -- Modelo Pro (Armazenamento)
+  storage_limit_bytes bigint DEFAULT 52428800, -- 50 MB
+  used_storage_bytes bigint DEFAULT 0,
+  
+  last_update timestamp with time zone DEFAULT timezone('utc'::text, now())
 );
+
+-- Migração de colunas para garantir que todas existam
+DO $$ 
+BEGIN 
+    BEGIN
+        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS petitions_limit int DEFAULT 5;
+        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS petitions_this_month int DEFAULT 0;
+        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS last_reset timestamp with time zone DEFAULT timezone('utc'::text, now());
+        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS storage_limit_bytes bigint DEFAULT 52428800;
+        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS used_storage_bytes bigint DEFAULT 0;
+        ALTER TABLE usage_limits ADD COLUMN IF NOT EXISTS last_update timestamp with time zone DEFAULT timezone('utc'::text, now());
+        -- Cleanup legacy names if confusing
+        -- ALTER TABLE usage_limits DROP COLUMN IF EXISTS monthly_limit;
+    EXCEPTION
+        WHEN others THEN NULL;
+    END;
+END $$;
 
 ALTER TABLE usage_limits ENABLE ROW LEVEL SECURITY;
 
@@ -136,81 +73,82 @@ BEGIN
 END $$;
 
 CREATE POLICY "Users can view own usage" ON usage_limits FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own usage" ON usage_limits FOR INSERT WITH CHECK (auth.uid() = user_id);
--- Update permitido para o MVP. Em produção real, use SECURITY DEFINER functions.
 CREATE POLICY "Users can update own usage" ON usage_limits FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own usage" ON usage_limits FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- 6. JURISPRUDÊNCIA SALVA
-CREATE TABLE IF NOT EXISTS saved_jurisprudence (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id) NOT NULL,
-  query text NOT NULL,
-  result text NOT NULL,
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE saved_jurisprudence ENABLE ROW LEVEL SECURITY;
-
-DO $$ 
-BEGIN 
-    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'saved_jurisprudence' LOOP 
-        EXECUTE format('DROP POLICY IF EXISTS %I ON saved_jurisprudence', pol.policyname); 
-    END LOOP; 
-END $$;
-
-CREATE POLICY "Users manage own jurisprudence" ON saved_jurisprudence
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
-
--- 7. TENTATIVAS DE PAGAMENTO
-CREATE TABLE IF NOT EXISTS payment_attempts (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id) NOT NULL,
-  plan text NOT NULL,
-  status text DEFAULT 'initiated',
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-ALTER TABLE payment_attempts ENABLE ROW LEVEL SECURITY;
-
-DO $$ 
-BEGIN 
-    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'payment_attempts' LOOP 
-        EXECUTE format('DROP POLICY IF EXISTS %I ON payment_attempts', pol.policyname); 
-    END LOOP; 
-END $$;
-
-CREATE POLICY "Users insert payment attempts" ON payment_attempts
-FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- 8. TRIGGER PARA INCREMENTAR USO AUTOMATICAMENTE
--- Isso garante que o limite seja contado no servidor, não no cliente
-CREATE OR REPLACE FUNCTION increment_usage() 
+-- 3. TRIGGER HÍBRIDO
+-- Atualiza contagem (com reset mensal) e armazenamento simultaneamente
+CREATE OR REPLACE FUNCTION update_hybrid_usage() 
 RETURNS TRIGGER AS $$
+DECLARE
+  row_size bigint;
+  old_size bigint;
+  is_new_month boolean;
 BEGIN
-  INSERT INTO public.usage_limits (user_id, monthly_limit, used_this_month)
-  VALUES (NEW.user_id, 5, 1)
-  ON CONFLICT (user_id) DO UPDATE 
-  SET used_this_month = usage_limits.used_this_month + 1;
-  RETURN NEW;
+  IF (TG_OP = 'INSERT') THEN
+    row_size := pg_column_size(NEW);
+    
+    -- Verifica se mudou o mês para resetar contador
+    SELECT (EXTRACT(MONTH FROM last_reset) != EXTRACT(MONTH FROM now()) OR 
+            EXTRACT(YEAR FROM last_reset) != EXTRACT(YEAR FROM now()))
+    INTO is_new_month
+    FROM usage_limits WHERE user_id = NEW.user_id;
+
+    INSERT INTO public.usage_limits (user_id, petitions_this_month, used_storage_bytes, last_reset, last_update)
+    VALUES (NEW.user_id, 1, row_size, now(), now())
+    ON CONFLICT (user_id) DO UPDATE 
+    SET 
+      petitions_this_month = CASE 
+         WHEN (EXTRACT(MONTH FROM usage_limits.last_reset) != EXTRACT(MONTH FROM now())) THEN 1 
+         ELSE usage_limits.petitions_this_month + 1 
+      END,
+      last_reset = CASE 
+         WHEN (EXTRACT(MONTH FROM usage_limits.last_reset) != EXTRACT(MONTH FROM now())) THEN now() 
+         ELSE usage_limits.last_reset 
+      END,
+      used_storage_bytes = usage_limits.used_storage_bytes + row_size,
+      last_update = now();
+        
+  ELSIF (TG_OP = 'UPDATE') THEN
+    row_size := pg_column_size(NEW);
+    old_size := pg_column_size(OLD);
+    
+    UPDATE public.usage_limits 
+    SET used_storage_bytes = used_storage_bytes + (row_size - old_size),
+        last_update = now()
+    WHERE user_id = NEW.user_id;
+    
+  ELSIF (TG_OP = 'DELETE') THEN
+    old_size := pg_column_size(OLD);
+    
+    UPDATE public.usage_limits 
+    SET used_storage_bytes = GREATEST(0, used_storage_bytes - old_size),
+        last_update = now()
+    WHERE user_id = OLD.user_id;
+  END IF;
+  
+  RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS on_petition_created ON petitions;
-CREATE TRIGGER on_petition_created
-AFTER INSERT ON petitions
-FOR EACH ROW EXECUTE FUNCTION increment_usage();
+DROP TRIGGER IF EXISTS on_petition_storage_change ON petitions;
+DROP TRIGGER IF EXISTS on_petition_hybrid_usage ON petitions;
 
--- Permissões Finais
+CREATE TRIGGER on_petition_hybrid_usage
+AFTER INSERT OR UPDATE OR DELETE ON petitions
+FOR EACH ROW EXECUTE FUNCTION update_hybrid_usage();
+
 GRANT EXECUTE ON FUNCTION public.is_admin TO authenticated, service_role;
 `;
 
-const BlockedScreen = () => (
+const BlockedScreen = ({ reason }: { reason: string }) => (
     <div className="max-w-2xl mx-auto mt-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-8 text-center">
             <Lock className="w-16 h-16 text-red-400 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-red-900 mb-2">Conta Bloqueada ou Limite Atingido</h3>
-            <p className="text-red-700 mb-6">Sua conta está bloqueada ou atingiu o limite do plano gratuito. Entre em contato para regularizar seu acesso.</p>
-            <Button variant="danger" size="lg">Regularizar Acesso</Button>
+            <h3 className="text-xl font-bold text-red-900 mb-2">Acesso Limitado</h3>
+            <p className="text-red-700 mb-6">{reason}</p>
+            <Button variant="danger" size="lg">Fazer Upgrade / Regularizar</Button>
         </div>
     </div>
 );
@@ -260,7 +198,6 @@ function App() {
   }, []);
 
   const checkDisclaimer = () => {
-      // Use SessionStorage so it persists on reload (F5) but clears on new tab/close
       const seen = sessionStorage.getItem('disclaimer_seen');
       if (!seen) {
           setShowDisclaimer(true);
@@ -285,7 +222,6 @@ function App() {
         .single();
 
       if (profileError) {
-        // Handle "Relation does not exist" (42P01) OR "Infinite Recursion" (42P17)
         if (
             profileError.code === '42P01' || 
             profileError.code === '42P17' || 
@@ -297,9 +233,7 @@ function App() {
            return;
         }
 
-        // Handle "No rows found" (Profile missing) - Auto-create self-healing
         if (profileError.code === 'PGRST116') {
-             console.log('Profile not found. Attempting to create default profile...');
              const { data: newProfile, error: createError } = await supabase
                 .from('profiles')
                 .insert([{
@@ -314,14 +248,8 @@ function App() {
              
              if (!createError && newProfile) {
                 profileData = newProfile;
-                // Initialize usage limit too
                 await supabase.from('usage_limits').insert([{ user_id: userId }]);
-             } else {
-                console.error('Error creating profile fallback:', createError);
              }
-        } else {
-             // Log other errors clearly
-             console.error('Error fetching profile:', JSON.stringify(profileError, null, 2));
         }
       }
 
@@ -331,11 +259,6 @@ function App() {
         .select('*')
         .eq('user_id', userId)
         .single();
-
-      if (usageError && usageError.code !== 'PGRST116') {
-         // Don't alert on usage error, just log
-         console.warn('Error fetching usage:', usageError);
-      }
 
       setAuthState(prev => ({
         ...prev,
@@ -360,6 +283,51 @@ function App() {
       }
   };
 
+  // Lógica de Bloqueio baseada no Tipo de Conta
+  const checkAccess = () => {
+      if (!authState.profile || !authState.usage) return { allowed: true };
+      
+      // ADMIN: Acesso Total
+      if (authState.profile.role === 'admin') {
+          return { allowed: true };
+      }
+
+      const status = authState.profile.account_status;
+      const usage = authState.usage;
+
+      if (status === 'blocked') {
+          return { allowed: false, reason: 'Sua conta está bloqueada administrativamente.' };
+      }
+
+      if (status === 'trial') {
+          // Free User: Limitado por Quantidade (5)
+          const limit = usage.petitions_limit || 5;
+          const current = usage.petitions_this_month || 0;
+          if (current >= limit) {
+              return { allowed: false, reason: `Limite do plano Gratuito atingido (${current}/${limit} petições este mês).` };
+          }
+      } else if (status === 'active') {
+          // Paid User (Pro):
+          // Regra 1: Quantidade (100 petições/mês)
+          const quantityLimit = 100;
+          const currentQuantity = usage.petitions_this_month || 0;
+          
+          if (currentQuantity >= quantityLimit) {
+              return { allowed: false, reason: `Limite mensal de segurança atingido (${currentQuantity}/${quantityLimit} petições).` };
+          }
+
+          // Regra 2: Armazenamento (50MB)
+          const storageLimit = usage.storage_limit_bytes || 52428800;
+          const currentStorage = usage.used_storage_bytes || 0;
+          
+          if (currentStorage >= storageLimit) {
+              return { allowed: false, reason: 'Limite de armazenamento de 50MB atingido. Libere espaço excluindo petições antigas.' };
+          }
+      }
+
+      return { allowed: true };
+  };
+
   if (authState.loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -379,21 +347,15 @@ function App() {
                       <div className="bg-red-100 p-4 rounded-full mb-4">
                           <Database size={48} className="text-red-600" />
                       </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Atualização de Banco de Dados Necessária</h2>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Atualização de Regras de Negócio</h2>
                       <p className="text-gray-600 mb-6">
-                          Para garantir a segurança dos dados e corrigir permissões, execute o script abaixo no Supabase.
+                          O sistema de limites (Híbrido) foi atualizado. Execute o script abaixo.
                       </p>
                       
                       <div className="bg-gray-50 p-5 rounded-lg border border-gray-200 text-left w-full mb-6 relative">
                           <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                              <AlertTriangle size={18} className="text-amber-500" /> Como resolver:
+                              <AlertTriangle size={18} className="text-amber-500" /> Script SQL:
                           </h4>
-                          <ol className="list-decimal list-inside text-sm text-gray-700 space-y-2 mb-4">
-                              <li>Copie o script SQL abaixo.</li>
-                              <li>Abra o <strong>Supabase Dashboard</strong> &rarr; <strong>SQL Editor</strong>.</li>
-                              <li>Cole o código e clique em <strong>RUN</strong>.</li>
-                          </ol>
-
                           <div className="relative group">
                               <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs font-mono overflow-x-auto h-48 border border-gray-700 whitespace-pre-wrap">
                                   {SQL_FIX_SCRIPT}
@@ -425,9 +387,12 @@ function App() {
 
   const renderContent = () => {
     // Admin only route protection
-    if (currentRoute === 'admin' && authState.profile?.role !== 'admin') {
+    const isAdmin = authState.profile?.role === 'admin';
+    if (currentRoute === 'admin' && !isAdmin) {
        return <div className="text-center p-8 text-red-600">Acesso não autorizado.</div>;
     }
+
+    const access = checkAccess();
 
     switch (currentRoute) {
       case 'dashboard':
@@ -439,10 +404,7 @@ function App() {
           />
         );
       case 'new-petition':
-        // Check blocks/limits for new petition
-        if (authState.profile?.account_status === 'blocked' || (authState.profile?.account_status === 'trial' && (authState.usage?.used_this_month || 0) >= (authState.usage?.monthly_limit || 5))) {
-            return <BlockedScreen />;
-        }
+        if (!access.allowed) return <BlockedScreen reason={access.reason!} />;
         return (
           <PetitionWizard 
             userId={authState.user?.id}
@@ -451,13 +413,13 @@ function App() {
               if (authState.user) fetchData(authState.user.id, authState.user);
               setCurrentRoute('my-petitions');
             }}
+            usage={authState.usage}
+            accountStatus={authState.profile?.account_status || 'trial'}
+            isAdmin={isAdmin}
           />
         );
       case 'new-defense':
-        // Check blocks/limits for new defense (shares same limits)
-         if (authState.profile?.account_status === 'blocked' || (authState.profile?.account_status === 'trial' && (authState.usage?.used_this_month || 0) >= (authState.usage?.monthly_limit || 5))) {
-            return <BlockedScreen />;
-        }
+        if (!access.allowed) return <BlockedScreen reason={access.reason!} />;
         return (
             <DefenseWizard 
                 userId={authState.user?.id}
@@ -466,6 +428,9 @@ function App() {
                   if (authState.user) fetchData(authState.user.id, authState.user);
                   setCurrentRoute('my-petitions');
                 }}
+                usage={authState.usage}
+                accountStatus={authState.profile?.account_status || 'trial'}
+                isAdmin={isAdmin}
             />
         );
       case 'my-petitions':
@@ -498,7 +463,6 @@ function App() {
       userEmail={authState.user?.email}
       isAdmin={authState.profile?.role === 'admin'}
     >
-      {/* Global Disclaimer Modal */}
       {showDisclaimer && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-300">
             <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 border border-gray-100 animate-in zoom-in-95">

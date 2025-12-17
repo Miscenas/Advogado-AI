@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Crown, ShieldCheck, Zap, HelpCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Crown, ShieldCheck, Zap, HardDrive, AlertCircle, FileText } from 'lucide-react';
 import { Button } from './ui/Button';
 import { createCheckoutPreference, recordPaymentAttempt } from '../services/paymentService';
 import { UserProfile } from '../types';
@@ -14,8 +14,15 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
   const [loading, setLoading] = useState(false);
 
   const features = [
-    "Geração ilimitada de Petições",
-    "Geração ilimitada de Contestações",
+    "5 Petições por Mês",
+    "Geração de Contestações",
+    "Pesquisa Básica",
+    "Análise de Documentos",
+  ];
+
+  const proFeatures = [
+    "100 Petições por Mês",
+    "50 MB de Armazenamento Dedicado",
     "Pesquisa de Jurisprudência com IA",
     "Análise de Documentos (PDF/Imagem)",
     "Transcrição de Áudio para Texto",
@@ -35,7 +42,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
         const { initPoint } = await createCheckoutPreference(billingCycle, user.id, user.email || '');
         
         // Simulação de redirecionamento
-        const valor = billingCycle === 'monthly' ? '97,00' : '970,00';
+        const valor = billingCycle === 'monthly' ? '60,00' : '600,00';
         const msg = `INTEGRAÇÃO MERCADO PAGO (Simulação):\n\nEm produção, você seria redirecionado para:\n${initPoint}\n\nPlano: ${billingCycle === 'monthly' ? 'Mensal' : 'Anual'}\nValor: R$ ${valor}`;
         
         // Timeout para simular processamento
@@ -56,7 +63,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold text-gray-900">Escolha o plano ideal para seu escritório</h1>
         <p className="text-xl text-gray-500 max-w-2xl mx-auto">
-          Automatize sua rotina jurídica, economize horas de trabalho e entregue peças processuais de alta qualidade com IA.
+          Comece gratuitamente ou assine o plano Pro para aumentar sua produtividade com 100 petições mensais.
         </p>
       </div>
 
@@ -80,7 +87,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
                 : 'text-gray-500 hover:text-gray-900'
             }`}
           >
-            Anual <span className="text-xs text-green-600 font-bold ml-1">-15%</span>
+            Anual <span className="text-xs text-green-600 font-bold ml-1">-16%</span>
           </button>
         </div>
       </div>
@@ -95,8 +102,14 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
             </div>
             <p className="mt-2 text-sm text-gray-500">Para testar a plataforma.</p>
             <ul className="mt-6 space-y-4">
-               <li className="flex items-start"><CheckCircle2 className="h-5 w-5 text-gray-400 shrink-0 mr-2"/> <span className="text-sm text-gray-600">5 Petições/mês</span></li>
-               <li className="flex items-start"><CheckCircle2 className="h-5 w-5 text-gray-400 shrink-0 mr-2"/> <span className="text-sm text-gray-600">Pesquisa Básica</span></li>
+               {features.map((feature, idx) => (
+                 <li key={idx} className="flex items-start">
+                   <div className="rounded-full bg-gray-100 p-1 mr-3">
+                     <CheckCircle2 className="h-4 w-4 text-gray-400" />
+                   </div>
+                   <span className="text-sm text-gray-600">{feature}</span>
+                 </li>
+               ))}
             </ul>
          </div>
 
@@ -110,14 +123,14 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
             <h3 className="text-lg font-semibold text-white">Advogado PRO</h3>
             <div className="mt-4 flex items-baseline text-white">
                <span className="text-5xl font-bold tracking-tight">
-                 {billingCycle === 'monthly' ? 'R$ 97' : 'R$ 970'}
+                 {billingCycle === 'monthly' ? 'R$ 60' : 'R$ 600'}
                </span>
                <span className="ml-1 text-xl font-semibold text-juris-200">
                  /{billingCycle === 'monthly' ? 'mês' : 'ano'}
                </span>
             </div>
             <p className="mt-2 text-sm text-juris-200">
-              {billingCycle === 'monthly' ? 'Cobrado mensalmente.' : 'Cobrado anualmente (equivale a R$ 80,83/mês).'}
+              {billingCycle === 'monthly' ? 'Cobrado mensalmente.' : 'Cobrado anualmente (equivale a R$ 50,00/mês).'}
             </p>
 
             <div className="mt-8">
@@ -134,7 +147,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
             </div>
 
             <ul className="mt-8 space-y-4">
-               {features.map((feature, idx) => (
+               {proFeatures.map((feature, idx) => (
                  <li key={idx} className="flex items-start">
                    <div className="rounded-full bg-sky-500/20 p-1 mr-3">
                      <CheckCircle2 className="h-4 w-4 text-sky-400" />
@@ -158,15 +171,20 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
          </div>
       </div>
       
-      <div className="bg-gray-50 rounded-xl p-6 mt-12 flex flex-col md:flex-row items-center gap-6">
-          <div className="bg-white p-4 rounded-full shadow-sm">
-             <Zap className="h-8 w-8 text-yellow-500" />
+      <div className="bg-gray-50 rounded-xl p-6 mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex items-start gap-4 bg-white p-4 rounded-lg shadow-sm">
+             <div className="bg-gray-100 p-2 rounded-full"><FileText className="h-6 w-6 text-gray-600" /></div>
+             <div>
+                <h4 className="font-bold text-gray-900">Plano Gratuito</h4>
+                <p className="text-gray-600 text-sm mt-1">Limitado a 5 criações por mês. Ideal para experimentar a ferramenta.</p>
+             </div>
           </div>
-          <div className="flex-1">
-             <h4 className="font-bold text-gray-900 text-lg">Garantia de Satisfação</h4>
-             <p className="text-gray-600 text-sm mt-1">
-               Teste o Advogado IA PRO sem riscos. Se não aumentar sua produtividade nos primeiros 7 dias, devolvemos seu dinheiro.
-             </p>
+          <div className="flex items-start gap-4 bg-white p-4 rounded-lg shadow-sm border border-sky-100">
+             <div className="bg-sky-100 p-2 rounded-full"><HardDrive className="h-6 w-6 text-sky-600" /></div>
+             <div>
+                <h4 className="font-bold text-gray-900">Plano Pro (R$ 60/mês)</h4>
+                <p className="text-gray-600 text-sm mt-1">Até 100 petições por mês e 50MB de armazenamento. O que for atingido primeiro limita o uso.</p>
+             </div>
           </div>
       </div>
     </div>
@@ -180,7 +198,7 @@ export const PaymentSuccess: React.FC<{ onNavigate: (r: string) => void }> = ({ 
         </div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Pagamento Recebido!</h2>
         <p className="text-gray-500 max-w-md mb-8">
-            Sua assinatura do Advogado IA PRO foi confirmada.
+            Sua assinatura do Advogado IA PRO foi confirmada. Limite expandido para 100 petições e 50MB.
         </p>
         <Button size="lg" onClick={() => onNavigate('dashboard')}>
             Voltar ao Dashboard
