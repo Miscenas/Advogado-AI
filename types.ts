@@ -5,7 +5,7 @@ export type UserRole = 'admin' | 'user';
 export interface UserProfile {
   id: string;
   full_name: string | null;
-  email?: string; // Added for display in admin panel
+  email?: string; 
   account_status: AccountStatus;
   role: UserRole;
   created_at: string;
@@ -13,28 +13,25 @@ export interface UserProfile {
 
 export interface UsageLimit {
   user_id: string;
-  // Free Tier Limit
-  petitions_limit: number; // Default 5
+  petitions_limit: number; 
   petitions_this_month: number;
   last_reset: string;
-  
-  // Paid Tier Limit
-  storage_limit_bytes: number; // Default 52428800 (50MB)
+  storage_limit_bytes: number; 
   used_storage_bytes: number;
-  
   last_update: string;
 }
 
 export interface PetitionFilingMetadata {
-  competence: string; // e.g., "Vara Cível" or "Juizado Especial Cível"
-  class: string;      // e.g., "Procedimento Comum Cível"
-  subject: string;    // e.g., "Indenização por Dano Moral"
+  competence: string; 
+  class: string;      
+  subject: string;    
+  filingUrl?: string; // Novo campo para o link do tribunal
 }
 
 export interface AnalyzedDocument {
   id: string;
   fileName: string;
-  docType: string; // 'procuracao' | 'identidade' | 'contrato' | 'peticao' | 'outros'
+  docType: string; 
   summary?: string;
 }
 
@@ -48,8 +45,8 @@ export interface Petition {
   title?: string;
   plaintiff_name?: string;
   defendant_name?: string;
-  filed?: boolean; // Indicates if the petition has been filed in court
-  analyzed_documents?: AnalyzedDocument[]; // JSONB column from DB
+  filed?: boolean; 
+  analyzed_documents?: AnalyzedDocument[]; 
 }
 
 export interface Deadline {
@@ -57,7 +54,7 @@ export interface Deadline {
   user_id: string;
   title: string;
   description?: string;
-  due_date: string; // ISO Date string
+  due_date: string; 
   status: 'pending' | 'completed';
   created_at: string;
 }
@@ -66,31 +63,30 @@ export interface SavedJurisprudence {
   id: string;
   user_id: string;
   query: string;
-  result: string; // HTML/Markdown content
+  result: string; 
   created_at: string;
 }
 
-// Advanced Form Types
 export interface PetitionParty {
-  id?: string; // temporary UI id
+  id?: string; 
   name: string;
-  type: 'pf' | 'pj'; // Pessoa Física or Jurídica
-  doc: string; // CPF or CNPJ
+  type: 'pf' | 'pj'; 
+  doc: string; 
   address?: string;
-  qualification?: string; // Profession, marital status, etc.
+  qualification?: string; 
 }
 
 export interface PetitionFormData {
   area: string;
   actionType: string;
-  jurisdiction: string; // Comarca/City
-  plaintiffs: PetitionParty[]; // Lista de Autores
-  defendants: PetitionParty[]; // Lista de Réus
+  jurisdiction: string; 
+  plaintiffs: PetitionParty[]; 
+  defendants: PetitionParty[]; 
   facts: string;
-  requests: string[]; // List of specific requests
-  evidence: string; // Provas a produzir
-  value: string; // Valor da causa
-  analyzedDocuments?: AnalyzedDocument[]; // Files processed by AI
+  requests: string[]; 
+  evidence: string; 
+  value: string; 
+  analyzedDocuments?: AnalyzedDocument[]; 
 }
 
 export interface AuthState {
