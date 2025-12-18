@@ -18,10 +18,10 @@ import {
   Save,
   Unplug,
   Sparkles,
-  CheckCircle2,
-  AlertTriangle
+  Info,
+  Settings
 } from 'lucide-react';
-import { supabase, isLive, updateConnection, disconnectCustom } from '../services/supabaseClient';
+import { supabase, isLive, disconnectCustom } from '../services/supabaseClient';
 import { hasAiKey } from '../services/aiService';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -43,25 +43,15 @@ export const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
-  
-  // Connection Form State
   const [customUrl, setCustomUrl] = useState('');
   const [customKey, setCustomKey] = useState('');
-  const [customAiKey, setCustomAiKey] = useState('');
-  
-  // Status Local State
   const [aiConnected, setAiConnected] = useState(false);
 
   useEffect(() => {
-     // Pre-fill if exists in local storage
      const storedUrl = localStorage.getItem('custom_supabase_url');
      const storedKey = localStorage.getItem('custom_supabase_key');
-     const storedAiKey = localStorage.getItem('custom_gemini_api_key');
      if (storedUrl) setCustomUrl(storedUrl);
      if (storedKey) setCustomKey(storedKey);
-     if (storedAiKey) setCustomAiKey(storedAiKey);
-     
-     // Check AI status
      setAiConnected(hasAiKey());
   }, []);
   
@@ -70,52 +60,39 @@ export const Layout: React.FC<LayoutProps> = ({
   };
 
   const handleSaveConnection = () => {
-      // Salva chaves individualmente se preenchidas
       if (customUrl && customKey) {
           localStorage.setItem('custom_supabase_url', customUrl);
           localStorage.setItem('custom_supabase_key', customKey);
-      }
-      
-      if (customAiKey && customAiKey.length > 5) {
-          localStorage.setItem('custom_gemini_api_key', customAiKey);
-      }
-
-      // Reload para aplicar
-      window.location.reload();
-  };
-
-  const handleDisconnect = () => {
-      if(confirm("Deseja desconectar e limpar todas as chaves salvas neste navegador?")) {
-          disconnectCustom();
+          window.location.reload();
       }
   };
 
   const navItems = [
-    { id: 'dashboard', label: 'Painel do Advogado', icon: LayoutDashboard },
-    { id: 'new-petition', label: 'Criar Petição', icon: FileText },
-    { id: 'new-defense', label: 'Criar Contestação', icon: ShieldAlert },
-    { id: 'my-petitions', label: 'Minhas Petições', icon: Files },
-    { id: 'jurisprudence', label: 'Pesquisa Jurídica', icon: BookOpen },
-    { id: 'deadlines', label: 'Prazos & Agenda', icon: CalendarDays },
-    { id: 'portals', label: 'Portais da Justiça', icon: Globe },
-    { id: 'subscription', label: 'Assinatura & Planos', icon: CreditCard },
-    { id: 'profile', label: 'Perfil & Senha', icon: User },
+    { id: 'dashboard', label: 'Início', icon: LayoutDashboard, color: 'text-blue-500' },
+    { id: 'new-petition', label: 'Nova Petição', icon: FileText, color: 'text-indigo-500' },
+    { id: 'new-defense', label: 'Contestação', icon: ShieldAlert, color: 'text-rose-500' },
+    { id: 'my-petitions', label: 'Documentos', icon: Files, color: 'text-amber-500' },
+    { id: 'jurisprudence', label: 'Pesquisa', icon: BookOpen, color: 'text-emerald-500' },
+    { id: 'deadlines', label: 'Prazos', icon: CalendarDays, color: 'text-purple-500' },
+    { id: 'portals', label: 'Tribunais', icon: Globe, color: 'text-cyan-500' },
+    { id: 'subscription', label: 'Plano', icon: CreditCard, color: 'text-slate-500' },
+    { id: 'profile', label: 'Perfil', icon: User, color: 'text-slate-500' },
   ];
 
   if (isAdmin) {
-    navItems.push({ id: 'admin', label: 'Administração', icon: ShieldCheck });
+    navItems.push({ id: 'admin', label: 'Admin', icon: ShieldCheck, color: 'text-red-500' });
   }
 
   const NavContent = () => (
-    <>
-      <div className="flex items-center gap-3 px-6 py-6 border-b border-juris-800">
-        <div className="bg-sky-500/10 p-2 rounded-lg">
-            <Scale className="h-6 w-6 text-sky-400 flex-shrink-0" />
+    <div className="flex flex-col h-full bg-white/70 backdrop-blur-xl border-r border-slate-200/50">
+      <div className="flex items-center gap-3 px-7 py-8">
+        <div className="bg-gradient-to-br from-slate-800 to-black p-2 rounded-2xl shadow-lg">
+            <Scale className="h-6 w-6 text-white" />
         </div>
-        <span className="text-xl font-bold text-white tracking-tight">Advogado IA</span>
+        <span className="text-xl font-bold text-slate-900 tracking-tight">JurisPet AI</span>
       </div>
       
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeRoute === item.id;
@@ -126,198 +103,100 @@ export const Layout: React.FC<LayoutProps> = ({
                 onNavigate(item.id);
                 setIsMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 group ${
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold rounded-2xl transition-all duration-300 group ${
                 isActive 
-                  ? 'bg-juris-800 text-white shadow-md border-l-4 border-sky-400' 
-                  : 'text-juris-100 hover:bg-juris-800 hover:text-white border-l-4 border-transparent'
+                  ? 'bg-slate-900 text-white shadow-xl shadow-slate-200 translate-x-1' 
+                  : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-900'
               }`}
             >
-              <Icon size={20} className={`flex-shrink-0 transition-colors ${isActive ? 'text-sky-400' : 'text-juris-300 group-hover:text-white'}`} />
+              <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-white/10' : 'bg-transparent'}`}>
+                <Icon size={18} className={`${isActive ? 'text-white' : item.color}`} />
+              </div>
               <span className="truncate">{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-juris-800 bg-juris-950/30">
-        <div className="mb-4 px-2">
-          {/* Status Indicator - Clickable to open Modal */}
-          <div 
-            className="flex items-center justify-between mb-2 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors group"
+      <div className="p-6 mt-auto">
+        <div 
+            className="mb-6 p-4 rounded-3xl bg-slate-50 border border-slate-100 flex flex-col gap-3 cursor-pointer hover:bg-slate-100 transition-colors group"
             onClick={() => setShowConnectionModal(true)}
-            title="Clique para configurar conexões"
-          >
-             <p className="text-xs text-juris-400 uppercase font-semibold tracking-wider group-hover:text-juris-200 transition-colors">Conexões</p>
-             <div className="flex items-center gap-1.5">
-                {/* DB Status */}
-                <div title={isLive ? "DB Conectado" : "DB Local (Mock)"} className={`h-2.5 w-2.5 rounded-full ${isLive ? 'bg-green-500' : 'bg-amber-500'}`} />
-                {/* AI Status */}
-                <div title={aiConnected ? "IA Conectada" : "IA Desconectada"} className={`h-2.5 w-2.5 rounded-full ${aiConnected ? 'bg-blue-400' : 'bg-red-500'}`} />
-             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-             <div className="w-8 h-8 rounded-full bg-juris-700 flex items-center justify-center text-xs font-bold text-white">
-                {userEmail?.charAt(0).toUpperCase() || 'U'}
-             </div>
-             <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate font-medium" title={userEmail}>{userEmail}</p>
-                {isAdmin && <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded border border-sky-500/30">Administrador</span>}
-             </div>
-          </div>
+        >
+            <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sistema</span>
+                <div className="flex gap-1">
+                    <div className={`h-2 w-2 rounded-full ${isLive ? 'bg-green-500' : 'bg-amber-400'}`} />
+                    <div className={`h-2 w-2 rounded-full ${aiConnected ? 'bg-blue-400' : 'bg-slate-300'}`} />
+                </div>
+            </div>
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-slate-900 font-bold border border-slate-100">
+                    {userEmail?.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-900 truncate font-bold leading-tight">{userEmail?.split('@')[0]}</p>
+                    <p className="text-[10px] text-slate-400 truncate uppercase font-semibold">Online</p>
+                </div>
+            </div>
         </div>
+
         <button 
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-900/20 hover:text-red-200 rounded-lg transition-colors border border-transparent hover:border-red-900/30"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-rose-500 hover:bg-rose-50 rounded-2xl transition-all border border-transparent hover:border-rose-100"
         >
-          <LogOut size={18} className="flex-shrink-0" />
-          Sair do Sistema
+          <LogOut size={16} />
+          Encerrar Sessão
         </button>
       </div>
-    </>
+    </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-juris-900 text-white flex-shrink-0 h-screen sticky top-0 shadow-xl z-20">
+    <div className="min-h-screen bg-[#F2F2F7] flex font-sans">
+      <aside className="hidden md:flex flex-col w-72 h-screen sticky top-0 z-20">
         <NavContent />
       </aside>
 
-      {/* Mobile Sidebar (Overlay) */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <div className="fixed inset-y-0 left-0 w-72 bg-juris-900 text-white flex flex-col shadow-2xl animate-in slide-in-from-left duration-300">
-            <div className="absolute top-4 right-4">
-              <button 
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="p-2 rounded-md hover:bg-juris-800 text-juris-300 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
+          <div className="fixed inset-y-0 left-0 w-72 flex flex-col shadow-2xl animate-in slide-in-from-left duration-500">
             <NavContent />
           </div>
         </div>
       )}
 
-      {/* Connection Config Modal */}
       {showConnectionModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 relative overflow-y-auto max-h-[90vh]">
-                <button 
-                    onClick={() => setShowConnectionModal(false)}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-                >
-                    <X size={20} />
-                </button>
-                
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="bg-juris-100 p-3 rounded-full text-juris-700">
-                        <Database size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-lg font-bold text-gray-900">Configurações</h3>
-                        <p className="text-sm text-gray-500">Conectividade do Sistema</p>
-                    </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-md w-full p-8 animate-in zoom-in-95 relative">
+                <button onClick={() => setShowConnectionModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-900 bg-slate-100 p-2 rounded-full transition-colors"><X size={18} /></button>
+                <div className="flex items-center gap-4 mb-8">
+                    <div className="bg-slate-900 p-3 rounded-2xl text-white"><Settings size={24} /></div>
+                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">Preferências</h3>
                 </div>
-
                 <div className="space-y-6">
-                    
-                    {/* AI Section */}
-                    <div className={`p-4 rounded-lg border ${aiConnected ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'}`}>
-                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center justify-between">
-                            <span className="flex items-center gap-2"><Sparkles size={16} className="text-amber-500" /> Google Gemini AI</span>
-                            {aiConnected 
-                                ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={10}/> Conectado</span> 
-                                : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full flex items-center gap-1"><AlertTriangle size={10}/> Desconectado</span>
-                            }
-                        </h4>
-                        
-                        {!aiConnected && (
-                            <p className="text-xs text-red-600 mb-3 font-medium">
-                                A geração de petições está em MODO SIMULAÇÃO. Insira uma chave válida abaixo.
-                            </p>
-                        )}
-
-                        <Input 
-                            label="API Key (Cole aqui sua chave Google)" 
-                            placeholder="Ex: AIzaSy..." 
-                            value={customAiKey}
-                            onChange={(e) => setCustomAiKey(e.target.value)}
-                            type="password"
-                        />
-                        <div className="text-right mt-1">
-                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">
-                                Obter chave gratuita no Google AI Studio
-                            </a>
-                        </div>
+                    <div className="space-y-4">
+                        <Input label="Supabase URL" value={customUrl} onChange={(e) => setCustomUrl(e.target.value)} />
+                        <Input label="Supabase Anon Key" value={customKey} onChange={(e) => setCustomKey(e.target.value)} type="password" />
                     </div>
-
-                    {/* Database Section */}
-                    <div className={`p-4 rounded-lg border ${isLive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center justify-between">
-                            <span className="flex items-center gap-2"><Database size={16} /> Banco de Dados</span>
-                            {isLive 
-                                ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={10}/> Online</span> 
-                                : <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1"><Database size={10}/> Local (Mock)</span>
-                            }
-                        </h4>
-                        <div className="space-y-3">
-                            <Input 
-                                label="Supabase URL" 
-                                placeholder="https://xyz.supabase.co" 
-                                value={customUrl}
-                                onChange={(e) => setCustomUrl(e.target.value)}
-                            />
-                            <Input 
-                                label="Supabase Anon Key" 
-                                placeholder="eyJhbGciOiJIUzI1NiIsInR..." 
-                                value={customKey}
-                                onChange={(e) => setCustomKey(e.target.value)}
-                                type="password"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-gray-100">
-                        <Button onClick={handleSaveConnection} className="w-full">
-                            <Save size={16} className="mr-2" /> Salvar e Recarregar
-                        </Button>
-                        
-                        {(localStorage.getItem('custom_supabase_url') || localStorage.getItem('custom_gemini_api_key')) && (
-                            <Button variant="outline" onClick={handleDisconnect} className="w-full text-red-600 border-red-200 hover:bg-red-50">
-                                <Unplug size={16} className="mr-2" /> Limpar Configurações
-                            </Button>
-                        )}
-                    </div>
+                    <Button onClick={handleSaveConnection} className="w-full h-12 rounded-2xl text-sm font-bold bg-slate-900">Salvar Alterações</Button>
                 </div>
             </div>
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
-        <header className="md:hidden bg-juris-900 text-white p-4 flex items-center justify-between shadow-md sticky top-0 z-40">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        <header className="md:hidden bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
           <div className="flex items-center gap-2">
-            <Scale className="h-6 w-6 text-sky-400" />
-            <span className="font-bold text-lg tracking-tight">Advogado IA</span>
+            <Scale className="h-6 w-6 text-slate-900" />
+            <span className="font-bold text-lg text-slate-900 tracking-tight">JurisPet AI</span>
           </div>
-          <button 
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="p-2 rounded-md hover:bg-juris-800 transition-colors"
-          >
-            <Menu size={24} />
-          </button>
+          <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 rounded-xl bg-slate-100 text-slate-900"><Menu size={24} /></button>
         </header>
 
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto overflow-x-hidden">
-          <div className="max-w-7xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto p-4 md:p-10 lg:p-12">
+          <div className="max-w-6xl mx-auto w-full">
             {children}
           </div>
         </main>

@@ -25,7 +25,8 @@ export interface PetitionFilingMetadata {
   competence: string; 
   class: string;      
   subject: string;    
-  filingUrl?: string; // Novo campo para o link do tribunal
+  filingUrl?: string;
+  portalName?: string;
 }
 
 export interface AnalyzedDocument {
@@ -72,6 +73,7 @@ export interface PetitionParty {
   name: string;
   type: 'pf' | 'pj'; 
   doc: string; 
+  rg?: string;
   address?: string;
   qualification?: string; 
 }

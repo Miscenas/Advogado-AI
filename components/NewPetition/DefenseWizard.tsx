@@ -73,24 +73,18 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
   const [generatedContent, setGeneratedContent] = useState<string | null>(null);
   const [filingSuggestions, setFilingSuggestions] = useState<PetitionFilingMetadata | null>(null);
   
-  // Full Screen State
   const [isFullScreen, setIsFullScreen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Document Upload State
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
-  
-  // Audio/Refinement/Voice State
-  const audioInputRef = useRef<HTMLInputElement>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [transcriptionTarget, setTranscriptionTarget] = useState<'facts' | 'requests' | 'refinement'>('facts');
+  
   const [refinementText, setRefinementText] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [listeningTarget, setListeningTarget] = useState<'facts' | 'requests' | 'refinement'>('facts');
-  const [activeDictationField, setActiveDictationField] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
 
   const STEPS = [
@@ -108,15 +102,12 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
   }, []);
   
   useEffect(() => {
-    // Prevent loop-reset on blur: Only set initial content
     if (isFullScreen && contentRef.current && generatedContent) {
         if (!contentRef.current.innerHTML || contentRef.current.innerHTML === '<br>') {
             contentRef.current.innerHTML = generatedContent;
         }
     }
-  }, [isFullScreen]);
-
-  // --- HELPERS ---
+  }, [isFullScreen, generatedContent]);
 
   const handleInputChange = (field: keyof PetitionFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -133,15 +124,11 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
     const files = e.target.files;
     if (!files || files.length === 0) return;
     const file = files[0];
-    if (file.size > 10 * 1024 * 1024) { alert("Limite 10MB."); return; }
-    
     setIsExtracting(true);
-    setUploadSuccess(false);
     try {
         const reader = new FileReader();
         reader.onload = async (event) => {
-            const base64String = event.target?.result as string;
-            const base64Data = base64String.split(',')[1];
+            const base64Data = (event.target?.result as string).split(',')[1];
             const analysis = await extractDataFromDocument(base64Data, file.type);
             setFormData(prev => {
               const newPlaintiffs = analysis.extractedData.plaintiffs?.map((p: any) => ({...p, id: Math.random().toString()})) || [];
@@ -151,16 +138,10 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
                 area: analysis.extractedData.area || prev.area,
                 actionType: analysis.extractedData.actionType ? `Contestação em ${analysis.extractedData.actionType}` : prev.actionType,
                 jurisdiction: analysis.extractedData.jurisdiction || prev.jurisdiction,
-                facts: `RESUMO DA INICIAL/SENTENÇA:\n${analysis.summary || ''}\n\n${analysis.extractedData.facts || ''}\n\n--- INICIE SUA TESE DE DEFESA ABAIXO ---`,
+                facts: `RESUMO DA INICIAL:\n${analysis.summary || ''}\n\n${analysis.extractedData.facts || ''}`,
                 plaintiffs: newPlaintiffs.length > 0 ? newPlaintiffs : prev.plaintiffs,
                 defendants: newDefendants.length > 0 ? newDefendants : prev.defendants,
-                value: analysis.extractedData.value || prev.value,
-                analyzedDocuments: [{
-                    id: Math.random().toString(),
-                    fileName: file.name,
-                    docType: analysis.docType || 'Peça a Contestar',
-                    summary: analysis.summary
-                }]
+                analyzedDocuments: [{ id: Math.random().toString(), fileName: file.name, docType: analysis.docType }]
               };
             });
             setIsExtracting(false);
@@ -168,91 +149,98 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
         };
         reader.readAsDataURL(file);
     } catch (error) {
-        console.error(error);
-        alert("Erro ao processar arquivo.");
         setIsExtracting(false);
     }
+  };
+
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetField: 'facts' | 'requests') => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsTranscribing(true);
+    try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const base64Data = (event.target?.result as string).split(',')[1];
+            const transcription = await transcribeAudio(base64Data, files[0].type);
+            if (targetField === 'facts') {
+                setFormData(prev => ({ ...prev, facts: prev.facts + (prev.facts ? '\n\n' : '') + transcription }));
+            } else {
+                const current = formData.requests.join('\n');
+                setFormData(prev => ({ ...prev, requests: (current + (current ? '\n' : '') + transcription).split('\n') }));
+            }
+            setIsTranscribing(false);
+        };
+        reader.readAsDataURL(files[0]);
+    } catch (error) {
+        setIsTranscribing(false);
+        alert("Erro ao transcrever áudio.");
+    }
+  };
+
+  const toggleRecording = (targetField: 'facts' | 'requests') => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert("Sem suporte a voz.");
+    if (isListening) { recognitionRef.current?.stop(); return; }
+    
+    const rec = new SpeechRecognition();
+    rec.lang = 'pt-BR';
+    rec.continuous = true;
+    rec.onresult = (e: any) => {
+        const text = e.results[e.results.length - 1][0].transcript;
+        if (targetField === 'facts') {
+            setFormData(prev => ({ ...prev, facts: prev.facts + ' ' + text }));
+        } else {
+            setFormData(prev => {
+                const current = prev.requests.join('\n');
+                return { ...prev, requests: (current + ' ' + text).split('\n') };
+            });
+        }
+    };
+    rec.onstart = () => setIsListening(true);
+    rec.onend = () => setIsListening(false);
+    recognitionRef.current = rec;
+    rec.start();
   };
 
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const [content, metadata] = await Promise.all([
-        generateLegalDefense(formData),
-        suggestFilingMetadata(formData)
-      ]);
+      const content = await generateLegalDefense(formData);
       setGeneratedContent(content);
-      setFilingSuggestions(metadata);
       setIsFullScreen(true);
     } catch (error) {
-      alert("Erro na geração. Tente novamente.");
+      alert("Erro na geração.");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleRefine = async () => {
-    if (!generatedContent || !refinementText.trim()) return;
-    setIsRefining(true);
-    try {
-      const refinedResult = await refineLegalPetition(generatedContent, refinementText);
-      setGeneratedContent(refinedResult);
-      setRefinementText('');
-    } catch (error) { alert("Erro ao refinar."); } finally { setIsRefining(false); }
-  };
-
   const handleSave = async () => {
     if (!generatedContent || !userId) return;
-
-    // VALIDATION LOGIC BASED ON ACCOUNT TYPE (ADMIN BYPASS)
-    if (!isAdmin) {
-        const currentCount = usage?.petitions_this_month || 0;
-        
-        if (accountStatus === 'trial') {
-            const limit = usage?.petitions_limit || 5;
-            if (currentCount >= limit) {
-                 alert(`Limite do plano Gratuito atingido (${limit} petições). Faça upgrade para o plano Pro.`);
-                 return;
-            }
-        } else if (accountStatus === 'active') {
-            // Paid User: USO ILIMITADO DE QUANTIDADE
-            
-            // 2. Check Storage (50MB) - Mantido para integridade do banco de dados
-            const estimatedSize = new Blob([generatedContent]).size + 
-                                  new Blob([JSON.stringify(formData.analyzedDocuments)]).size;
-            const currentStorage = usage?.used_storage_bytes || 0;
-            const storageLimit = usage?.storage_limit_bytes || 52428800; // 50MB
-            
-            if (currentStorage + estimatedSize > storageLimit) {
-                alert("Limite de armazenamento (50MB) excedido! Libere espaço apagando petições antigas.");
-                return;
-            }
-        }
-    }
-
     setIsSaving(true);
     try {
         const { error } = await supabase.from('petitions').insert([{
             user_id: userId,
-            area: formData.area,
-            action_type: formData.actionType,
+            area: formData.area || 'civel',
+            action_type: formData.actionType || 'Contestação',
             content: generatedContent,
             created_at: new Date().toISOString(),
-            plaintiff_name: formData.plaintiffs[0]?.name,
-            defendant_name: formData.defendants[0]?.name,
-            filed: false,
-            analyzed_documents: formData.analyzedDocuments
-        }]);
+            plaintiff_name: formData.plaintiffs[0]?.name || 'Polo Ativo',
+            defendant_name: formData.defendants[0]?.name || 'Polo Passivo',
+            analyzed_documents: formData.analyzedDocuments || [],
+            filed: false
+        }]).select().single();
+
         if(error) throw error;
-        alert("Contestação salva!");
+        alert("Contestação salva com sucesso!");
         onSuccess();
     } catch(e: any) { alert("Erro ao salvar: " + e.message); } finally { setIsSaving(false); }
   };
 
   const handleDownloadDoc = () => {
     if (!generatedContent) return;
-    const blob = new Blob(['\ufeff', `<html xmlns:w='urn:schemas-microsoft-com:office:word'><body>${generatedContent}</body></html>`], { type: 'application/msword' });
-    saveAs(blob, `Contestacao_${new Date().toISOString().split('T')[0]}.doc`);
+    const blob = new Blob(['\ufeff', `<html><body>${generatedContent}</body></html>`], { type: 'application/msword' });
+    saveAs(blob, `Contestacao.doc`);
   };
 
   const handlePrint = () => {
@@ -262,142 +250,182 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
       setTimeout(()=>w?.print(), 500);
   };
 
-  // --- RENDERERS ---
-
   const renderStepContent = () => {
     if (currentStep === 1) {
         return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-             <div className="bg-red-50 border-2 border-dashed border-red-200 rounded-lg p-8 text-center">
+          <div className="space-y-6 text-center py-10">
+             <div className={`border-2 border-dashed rounded-xl p-12 transition-colors ${uploadSuccess ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf, .txt, image/*" />
                 {isExtracting ? (
-                    <div className="flex flex-col items-center gap-2">
-                        <Loader2 className="h-8 w-8 text-red-600 animate-spin" />
-                        <span className="text-sm font-medium text-red-700">Analisando a peça adversa...</span>
+                    <div className="flex flex-col items-center gap-4">
+                        <Loader2 className="h-12 w-12 text-red-600 animate-spin" />
+                        <p className="font-bold text-red-700">Analisando peça adversa e extraindo Fatos/Resumo...</p>
                     </div>
                 ) : uploadSuccess ? (
                     <div className="flex flex-col items-center gap-2">
-                        <div className="bg-green-100 p-2 rounded-full"><FileCheck className="h-6 w-6 text-green-600" /></div>
-                        <span className="text-sm font-medium text-green-700">Sentença/Inicial analisada!</span>
-                        <button onClick={() => fileInputRef.current?.click()} className="text-xs text-red-600 underline">Substituir</button>
+                        <FileCheck className="h-16 w-16 text-green-600 mb-2" />
+                        <h3 className="text-xl font-bold text-green-900">Peça Analisada!</h3>
+                        <p className="text-green-700">Dados e <strong>Resumo da Inicial</strong> extraídos para contestação.</p>
+                        <button onClick={() => fileInputRef.current?.click()} className="text-xs text-red-600 underline mt-4">Trocar Arquivo</button>
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center gap-2">
-                        <div className="bg-red-100 p-3 rounded-full mb-2"><ShieldAlert className="h-8 w-8 text-red-500" /></div>
-                        <h3 className="font-semibold text-gray-900">Upload da Peça a Contestar</h3>
-                        <p className="text-sm text-gray-500 max-w-sm">Envie a Petição Inicial, Sentença ou Decisão que você precisa atacar.</p>
-                        <Button variant="danger" onClick={() => fileInputRef.current?.click()} className="mt-2">Selecionar Documento</Button>
-                    </div>
+                    <>
+                        <ShieldAlert className="h-16 w-16 text-red-400 mx-auto mb-4" />
+                        <h3 className="text-xl font-bold text-gray-900">Upload e Análise de Fatos</h3>
+                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Envie a Inicial ou Sentença. Extrairemos os dados e o <strong>Resumo dos Fatos</strong> para gerar sua defesa.</p>
+                        <Button variant="danger" onClick={() => fileInputRef.current?.click()}>Selecionar Documento</Button>
+                    </>
                 )}
-            </div>
+             </div>
           </div>
         );
     }
-
     if (currentStep === 2) {
         return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
+          <div className="space-y-8 animate-in fade-in">
              <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
-                 <h2 className="text-sm font-bold text-blue-900 flex items-center gap-2"><User size={16}/> SEU CLIENTE (Polo Passivo/Réu)</h2>
-                 {formData.defendants.map((party, index) => (
+                 <h2 className="text-sm font-bold text-blue-900 mb-2">SEU CLIENTE (RÉU)</h2>
+                 {formData.defendants.map((party) => (
                     <div key={party.id} className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                        <Input value={party.name} onChange={(e) => updateParty('defendants', party.id!, 'name', e.target.value)} placeholder="Nome do seu cliente" />
+                        <Input value={party.name} onChange={(e) => updateParty('defendants', party.id!, 'name', e.target.value)} placeholder="Nome" />
                         <Input value={party.doc} onChange={(e) => updateParty('defendants', party.id!, 'doc', e.target.value)} placeholder="CPF/CNPJ" />
                     </div>
                  ))}
              </div>
              <div className="bg-red-50 p-4 rounded-md border border-red-200">
-                 <h2 className="text-sm font-bold text-red-900 flex items-center gap-2"><User size={16}/> PARTE ADVERSA (Autor/Exequente)</h2>
-                 {formData.plaintiffs.map((party, index) => (
+                 <h2 className="text-sm font-bold text-red-900 mb-2">PARTE CONTRÁRIA (AUTOR)</h2>
+                 {formData.plaintiffs.map((party) => (
                     <div key={party.id} className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                        <Input value={party.name} onChange={(e) => updateParty('plaintiffs', party.id!, 'name', e.target.value)} placeholder="Nome da parte contrária" />
-                        <Input value={party.doc} onChange={(e) => updateParty('plaintiffs', party.id!, 'doc', e.target.value)} placeholder="CPF/CNPJ (se souber)" />
+                        <Input value={party.name} onChange={(e) => updateParty('plaintiffs', party.id!, 'name', e.target.value)} placeholder="Nome" />
+                        <Input value={party.doc} onChange={(e) => updateParty('plaintiffs', party.id!, 'doc', e.target.value)} placeholder="CPF/CNPJ" />
                     </div>
                  ))}
              </div>
           </div>
         );
     }
-    
-    // Steps 3, 4 are identical to previous, included implicitly by structure.
     if (currentStep === 3) {
         return (
-          <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Tese de Defesa</label>
-              <textarea 
-                  className="w-full h-80 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-red-500 text-sm leading-relaxed resize-none" 
+          <div className="space-y-6 animate-in fade-in">
+              <div>
+                <label className="text-sm font-bold text-gray-700">Tese de Defesa</label>
+                <p className="text-xs text-gray-500 mb-2">Desenvolva a fundamentação jurídica de defesa.</p>
+              </div>
+              <div className="relative">
+                <textarea 
+                  className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-red-500 text-sm shadow-inner transition-all resize-none bg-red-50/10" 
                   value={formData.facts} 
                   onChange={(e) => handleInputChange('facts', e.target.value)} 
-              />
-            </div>
+                  placeholder="Escreva os argumentos de defesa ou use as ferramentas de voz abaixo..." 
+                />
+                {isTranscribing && (
+                   <div className="absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center rounded-2xl z-10">
+                      <div className="flex flex-col items-center gap-3">
+                         <div className="relative">
+                            <Loader2 className="h-8 w-8 text-red-600 animate-spin" />
+                            <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-red-400 animate-pulse" />
+                         </div>
+                         <span className="text-xs font-bold text-red-900 tracking-tight">TRANSCREVENDO ÁUDIO...</span>
+                      </div>
+                   </div>
+                )}
+              </div>
+              <div className="flex gap-4 justify-center pt-2">
+                 <input type="file" ref={audioInputRef} onChange={e => handleAudioUpload(e, 'facts')} className="hidden" accept="audio/*" />
+                 <button 
+                    onClick={() => audioInputRef.current?.click()}
+                    disabled={isTranscribing}
+                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
+                 >
+                    <FileAudio size={20} className="drop-shadow-sm" />
+                    <span className="text-sm font-bold tracking-wide uppercase">Importar Áudio</span>
+                 </button>
+                 <button 
+                    onClick={() => toggleRecording('facts')}
+                    disabled={isTranscribing}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
+                      isListening 
+                      ? 'bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-500 animate-pulse text-white shadow-rose-500/40' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                 >
+                    {isListening ? <MicOff size={20} /> : <Mic size={20} className="text-rose-500" />}
+                    <span className="text-sm font-bold tracking-wide uppercase">
+                      {isListening ? 'Parar Agora' : 'Ditar Tese'}
+                    </span>
+                 </button>
+              </div>
           </div>
         );
     }
-
     if (currentStep === 4) {
          return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pedidos da Defesa</label>
-              <textarea 
-                className="w-full h-40 rounded-md border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-red-500 text-sm" 
-                value={formData.requests.join('\n')} 
-                onChange={(e) => handleInputChange('requests', e.target.value.split('\n'))} 
-              />
-            </div>
+          <div className="space-y-6">
+              <div>
+                <label className="text-sm font-bold text-gray-700">Pedidos da Contestação</label>
+                <p className="text-xs text-gray-500 mb-2">Descreva os pedidos de improcedência.</p>
+              </div>
+              <div className="relative">
+                <textarea 
+                  className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-red-500 text-sm shadow-inner transition-all resize-none bg-red-50/10" 
+                  value={formData.requests.join('\n')} 
+                  onChange={(e) => handleInputChange('requests', e.target.value.split('\n'))} 
+                  placeholder="Liste os pedidos defensivos..." 
+                />
+                {isTranscribing && (
+                   <div className="absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center rounded-2xl z-10">
+                      <div className="flex flex-col items-center gap-3">
+                         <div className="relative">
+                            <Loader2 className="h-8 w-8 text-red-600 animate-spin" />
+                            <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-red-400 animate-pulse" />
+                         </div>
+                         <span className="text-xs font-bold text-red-900 tracking-tight">ANALISANDO FALA...</span>
+                      </div>
+                   </div>
+                )}
+              </div>
+              <div className="flex gap-4 justify-center">
+                 <input type="file" ref={audioInputRef} onChange={e => handleAudioUpload(e, 'requests')} className="hidden" accept="audio/*" />
+                 <button 
+                    onClick={() => audioInputRef.current?.click()}
+                    disabled={isTranscribing}
+                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
+                 >
+                    <FileAudio size={20} className="drop-shadow-sm" />
+                    <span className="text-sm font-bold tracking-wide uppercase">Importar Áudio</span>
+                 </button>
+                 <button 
+                    onClick={() => toggleRecording('requests')}
+                    disabled={isTranscribing}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
+                      isListening 
+                      ? 'bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-500 animate-pulse text-white shadow-rose-500/40' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                    }`}
+                 >
+                    {isListening ? <MicOff size={20} /> : <Mic size={20} className="text-rose-500" />}
+                    <span className="text-sm font-bold tracking-wide uppercase">
+                      {isListening ? 'Parar' : 'Ditar Pedidos'}
+                    </span>
+                 </button>
+              </div>
           </div>
         );
     }
-
     if (currentStep === 5) {
-        if (generatedContent) {
-           // Success State (Inline)
-           return (
-             <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center justify-center py-8 text-center">
-               <div className="bg-red-100 p-4 rounded-full mb-4">
-                  <ShieldCheck className="h-12 w-12 text-red-600" />
-               </div>
-               <h3 className="text-2xl font-bold text-gray-900 mb-2">Contestação Gerada!</h3>
-               <p className="text-gray-500 mb-8 max-w-md">A peça de defesa foi criada com contra-argumentação avançada.</p>
-               <div className="flex gap-4">
-                  <Button size="lg" onClick={() => setIsFullScreen(true)} className="bg-red-700 hover:bg-red-800">
-                     <Maximize2 size={18} className="mr-2" /> Revisar (Imersivo)
-                  </Button>
-                  <Button variant="outline" onClick={handleSave} isLoading={isSaving}>
-                     <Save size={18} className="mr-2" /> Salvar
-                  </Button>
-                  <button onClick={() => { setGeneratedContent(null); setIsFullScreen(false); }} className="text-sm text-gray-400 hover:text-gray-600 flex items-center gap-1">
-                      <Edit3 size={14} /> Editar Dados
-                  </button>
-               </div>
-             </div>
-           );
-        }
         return (
           <div className="flex flex-col items-center justify-center py-12 text-center animate-in fade-in">
             {isGenerating ? (
-              <>
-                 <div className="relative mb-6">
-                    <div className="absolute inset-0 bg-red-200 rounded-full animate-ping opacity-25"></div>
-                    <div className="relative bg-white p-4 rounded-full border-2 border-red-100 shadow-xl">
-                       <Shield className="h-10 w-10 text-red-500 animate-pulse" />
-                    </div>
-                 </div>
-                 <h3 className="text-xl font-bold text-gray-900 mb-2">Construindo Tese de Defesa</h3>
-                 <p className="text-gray-500 max-w-md">A IA está cruzando os fatos da inicial com seus argumentos para criar a contestação...</p>
-              </>
+              <div className="flex flex-col items-center gap-4">
+                 <Loader2 className="h-12 w-12 text-red-600 animate-spin" />
+                 <h3 className="text-xl font-bold">Gerando Contestação Técnica...</h3>
+              </div>
             ) : (
               <>
-                <div className="bg-red-50 p-6 rounded-full mb-6">
-                   <Shield className="h-12 w-12 text-red-800" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Gerar Contestação</h3>
-                <p className="text-gray-500 max-w-md mb-8">
-                  Tudo pronto. Clique abaixo para gerar a defesa.
-                </p>
-                <Button size="lg" onClick={handleGenerate} className="shadow-xl px-8 h-14 text-lg bg-red-700 hover:bg-red-800 border-transparent">
-                  <Sparkles className="mr-2 h-5 w-5" /> Gerar Defesa
+                <ShieldCheck className="h-16 w-16 text-red-800 mb-4" />
+                <h3 className="text-xl font-bold mb-8">Pronto para gerar a defesa técnica.</h3>
+                <Button size="lg" onClick={handleGenerate} className="bg-red-700 hover:bg-red-800">
+                  <Sparkles className="mr-2" /> Gerar Contestação
                 </Button>
               </>
             )}
@@ -407,86 +435,15 @@ export const DefenseWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucce
     return null;
   };
 
-  if (isFullScreen && generatedContent) {
-      return (
-        <div className="fixed inset-0 z-[200] bg-gray-100 flex flex-col animate-in slide-in-from-bottom duration-300">
-           <div className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shadow-sm z-10 flex-shrink-0">
-               <div className="flex items-center gap-4">
-                  <button onClick={() => setIsFullScreen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 hover:text-gray-900"><X size={24} /></button>
-                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Shield className="text-red-600 h-5 w-5" /> Revisão</h2>
-               </div>
-               <div className="flex gap-2">
-                   <Button variant="outline" onClick={handleDownloadDoc}><Download size={16} /> Word</Button>
-                   <Button variant="outline" onClick={handlePrint}><Printer size={16} /> Imprimir</Button>
-                   <Button onClick={handleSave} isLoading={isSaving} className="bg-red-700 hover:bg-red-800"><Save size={18} /> Salvar</Button>
-               </div>
-           </div>
-           
-           <div className="bg-red-50 border-b border-red-100 px-4 py-2 text-center text-sm text-red-800 flex items-center justify-center gap-2">
-                <Info size={16} /> <span>Documento editável. Clique no texto para ajustar a tese.</span>
-           </div>
-
-           <div className="flex-1 overflow-y-auto p-8 relative">
-               <div className="w-full max-w-[1400px] mx-auto flex gap-8 items-start justify-center">
-                   <div 
-                      ref={contentRef}
-                      className="flex-shrink-0 bg-white shadow-2xl p-[3cm_2cm_2cm_3cm] text-black focus:outline-none focus:ring-1 focus:ring-red-200"
-                      contentEditable={true}
-                      suppressContentEditableWarning={true}
-                      onBlur={(e) => setGeneratedContent(e.currentTarget.innerHTML)}
-                      style={{ width: '21cm', minHeight: '29.7cm', fontFamily: '"Times New Roman", Times, serif', fontSize: '12pt', lineHeight: '1.5', outline: 'none' }}
-                   />
-               </div>
-           </div>
-        </div>
-      );
-  }
-
   return (
-    <div className={`max-w-4xl mx-auto transition-all duration-500`}>
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-             <ShieldAlert className="text-red-600" /> Criar Contestação
-          </h1>
-          <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        </div>
-
+    <div className="max-w-4xl mx-auto py-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2"><ShieldAlert className="text-red-600" /> Contestação</h1>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-          <div className="p-8 flex-1">
-             {!generatedContent && (
-                <div className="mb-8">
-                  <div className="flex items-center justify-between relative">
-                    <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-gray-200 -z-10" />
-                    {STEPS.map((step) => {
-                      const isActive = step.id === currentStep;
-                      const isCompleted = step.id < currentStep;
-                      const Icon = step.icon;
-                      return (
-                        <div key={step.id} className="flex flex-col items-center bg-gray-50 px-2">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isActive ? 'bg-red-700 text-white shadow-lg scale-110' : isCompleted ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
-                            {isCompleted ? <FileCheck size={20} /> : <Icon size={20} />}
-                          </div>
-                          <span className={`text-xs mt-2 font-medium ${isActive ? 'text-red-800' : 'text-gray-400'}`}>{step.title}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-             )}
-
-             {renderStepContent()}
+          <div className="p-8">{renderStepContent()}</div>
+          <div className="bg-gray-50 px-8 py-4 border-t border-gray-200 flex justify-between">
+              <Button variant="outline" onClick={() => setCurrentStep(prev => prev - 1)} disabled={currentStep === 1}>Voltar</Button>
+              <Button onClick={() => setCurrentStep(prev => prev + 1)} disabled={currentStep === 5}>Próximo</Button>
           </div>
-          
-          {!generatedContent && (
-            <div className="bg-gray-50 px-8 py-4 border-t border-gray-200 flex justify-between items-center">
-              <Button variant="outline" onClick={() => setCurrentStep(prev => Math.max(1, prev - 1))} disabled={isGenerating || currentStep === 1}>
-                <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
-              </Button>
-              <Button onClick={() => setCurrentStep(prev => Math.min(TOTAL_STEPS, prev + 1))} disabled={isGenerating}>
-                Próximo <ChevronRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          )}
         </div>
     </div>
   );

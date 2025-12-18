@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Petition } from '../types';
 import saveAs from 'file-saver';
-import { FileText, Calendar, ChevronRight, Copy, Search, Eye, CheckSquare, Square, Printer, FileBadge, Download } from 'lucide-react';
+import { FileText, Calendar, ChevronRight, Search, Eye, CheckSquare, Square, Printer, FileBadge, Download, Trash2, Edit3, Info } from 'lucide-react';
 import { Button } from './ui/Button';
 
 interface PetitionListProps {
@@ -37,10 +37,9 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
   };
 
   const handleToggleFiled = async (e: React.MouseEvent, petitionId: string, currentStatus: boolean | undefined) => {
-    e.stopPropagation(); // Prevent opening the detail view when clicking the checkbox
+    e.stopPropagation(); 
     const newStatus = !currentStatus;
 
-    // Optimistic Update
     setPetitions(prev => prev.map(p => 
       p.id === petitionId ? { ...p, filed: newStatus } : p
     ));
@@ -53,248 +52,153 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error updating status:', error);
-      // Revert optimistic update on error
       setPetitions(prev => prev.map(p => 
         p.id === petitionId ? { ...p, filed: currentStatus } : p
       ));
-      alert('Não foi possível atualizar o status da petição.');
     }
   };
 
   const handleDownloadDoc = (content: string, title?: string) => {
     if (!content) return;
 
-    const header = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' 
-            xmlns:w='urn:schemas-microsoft-com:office:word' 
-            xmlns='http://www.w3.org/TR/REC-html40'>
+    const cleanContent = content
+        .replace(/<style([\s\S]*?)<\/style>/gi, '')
+        .replace(/<html([\s\S]*?)>/gi, '')
+        .replace(/<\/html>/gi, '')
+        .replace(/<body([\s\S]*?)>/gi, '')
+        .replace(/<\/body>/gi, '')
+        .replace(/<!DOCTYPE([\s\S]*?)>/gi, '')
+        .trim();
+
+    const blobContent = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
         <meta charset='utf-8'>
-        <title>Petição</title>
         <style>
+          @page Section1 { 
+            size: 21cm 29.7cm; 
+            margin: 2cm 2cm 2cm 3cm; 
+            mso-header-margin: 35.4pt; 
+            mso-footer-margin: 35.4pt; 
+            mso-paper-source: 0; 
+          }
+          div.Section1 { page: Section1; }
           body { 
-            font-family: 'Times New Roman', serif; 
+            font-family: "Times New Roman", serif; 
             font-size: 12pt; 
-            line-height: 1.5;
+            line-height: 1.5; 
+            text-align: justify; 
+            color: #000;
           }
           p { 
+            margin: 0; 
+            margin-bottom: 12pt; 
+            text-indent: 1.25cm; 
             text-align: justify; 
-            text-indent: 3cm; 
-            margin-bottom: 12px; 
           }
           h1, h2, h3 { 
             text-align: center; 
+            font-weight: bold; 
             text-transform: uppercase; 
-            margin-top: 24px; 
-            margin-bottom: 12px; 
-            font-weight: bold;
+            margin: 18pt 0 12pt 0; 
+            text-indent: 0; 
+            font-size: 12pt;
           }
         </style>
-      </head><body>`;
-    
-    const footer = "</body></html>";
-    const sourceHTML = header + content + footer;
+      </head>
+      <body>
+        <div class="Section1">
+          ${cleanContent}
+        </div>
+      </body>
+      </html>
+    `;
 
-    const blob = new Blob(['\ufeff', sourceHTML], {
-        type: 'application/msword'
-    });
-    
-    const safeTitle = title ? title.replace(/\s+/g, '_') : 'Peticao';
+    const blob = new Blob(['\ufeff', blobContent], { type: 'application/msword' });
+    const safeTitle = title ? title.replace(/[\\/:*?"<>|]/g, '_') : 'Peticao';
     saveAs(blob, `${safeTitle}.doc`);
-  };
-
-  const handleCopy = (content: string) => {
-    // Basic copy
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = content;
-    const text = tempDiv.innerText; // Falls back to text copy if rich copy fails
-    navigator.clipboard.writeText(text);
-    alert('Conteúdo copiado! (Use visualizar para copiar com formatação)');
   };
 
   const handlePrint = (content: string) => {
     if (!content) return;
-
     const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        alert("Por favor, permita popups para imprimir.");
-        return;
-    }
-
+    if (!printWindow) return;
+    const clean = content.replace(/<style([\s\S]*?)<\/style>/gi, '');
     printWindow.document.write(`
       <html>
         <head>
-          <title></title>
           <style>
-            /* Reset browser headers/footers via @page */
-            @page {
-              margin: 0;
-            }
-
-            body { 
-              font-family: 'Times New Roman', Times, serif; 
-              font-size: 12pt;
-              line-height: 1.5;
-              /* Manually set margins for the content */
-              margin: 2.5cm 2cm;
-              color: #000;
-            }
-
-            p {
-              text-align: justify;
-              text-indent: 3cm;
-              margin-bottom: 12px;
-            }
-            h1, h2, h3 {
-              text-align: center;
-              text-transform: uppercase;
-              margin-top: 24px;
-              margin-bottom: 12px;
-              font-weight: bold;
-            }
-            @media print {
-               /* Redundant check to ensure padding is 0 on the body itself inside print view */
-               body { padding: 0; }
-            }
+            @page { margin: 2.5cm 2cm 2.5cm 3cm; }
+            body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; color: #000; padding: 0; margin: 0; }
+            p { text-align: justify; text-indent: 1.25cm; margin-bottom: 12pt; margin-top: 0; }
+            h1, h2, h3 { text-align: center; text-transform: uppercase; font-weight: bold; margin: 18pt 0 12pt 0; text-indent: 0; }
+            .print-container { padding: 2.5cm 2cm 2.5cm 3cm; }
           </style>
         </head>
-        <body>
-          <div class="content">
-            ${content}
-          </div>
-        </body>
+        <body><div class="print-container">${clean}</div></body>
       </html>
     `);
     printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-        printWindow.print();
-    }, 500);
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-juris-900"></div>
-      </div>
-    );
-  }
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm("Excluir esta petição permanentemente?")) return;
+    try {
+      await supabase.from('petitions').delete().eq('id', id);
+      setPetitions(prev => prev.filter(p => p.id !== id));
+    } catch (error) { alert("Erro ao excluir."); }
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-juris-900"></div></div>;
 
   if (selectedPetition) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in slide-in-from-right-4">
-        <div className="border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-center bg-gray-50 gap-4">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">{selectedPetition.action_type || 'Petição Sem Título'}</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              {(selectedPetition.plaintiff_name || selectedPetition.defendant_name) && (
-                <span className="font-medium">
-                  {selectedPetition.plaintiff_name || 'Autor'} <span className="text-gray-400 px-1">vs</span> {selectedPetition.defendant_name || 'Réu'}
-                </span>
-              )}
-            </p>
+      <div className="bg-gray-100 rounded-xl shadow-sm border border-gray-200 overflow-hidden h-[90vh] flex flex-col">
+        <div className="border-b bg-white px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-juris-50 text-juris-900 rounded-lg">
+                <FileText size={20} />
+             </div>
+             <div>
+                <h2 className="text-lg font-bold text-gray-900 leading-tight">{selectedPetition.action_type}</h2>
+                <p className="text-xs text-gray-500 uppercase font-semibold">{selectedPetition.plaintiff_name} vs {selectedPetition.defendant_name}</p>
+             </div>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <Button variant="outline" onClick={() => setSelectedPetition(null)} className="flex-1 sm:flex-none">
-              Voltar
-            </Button>
-            <Button variant="outline" onClick={() => handleDownloadDoc(selectedPetition.content, selectedPetition.action_type)} className="flex-1 sm:flex-none">
-              <Download size={16} className="mr-2" /> Baixar Word
-            </Button>
-            <Button variant="outline" onClick={() => handlePrint(selectedPetition.content)} className="flex-1 sm:flex-none">
-              <Printer size={16} className="mr-2" /> Imprimir
-            </Button>
-            <Button onClick={() => handleCopy(selectedPetition.content)} className="flex-1 sm:flex-none">
-              <Copy size={16} className="mr-2" /> Copiar Texto
-            </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setSelectedPetition(null)}>Voltar</Button>
+            <Button variant="outline" onClick={() => handleDownloadDoc(selectedPetition.content, selectedPetition.action_type)}><Download size={16} className="mr-2" /> Word</Button>
+            <Button variant="outline" onClick={() => handlePrint(selectedPetition.content)}><Printer size={16} className="mr-2" /> Imprimir</Button>
+            <Button className="bg-juris-700 pointer-events-none"><Edit3 size={16} className="mr-2" /> Modo Edição Ativo</Button>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-4 h-[70vh]">
-            {/* Sidebar with metadata (if available) */}
-            {selectedPetition.analyzed_documents && selectedPetition.analyzed_documents.length > 0 && (
-                <div className="lg:col-span-1 bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
-                    <div className="mb-4">
-                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                           <FileBadge size={14} /> Documentos Base
-                        </h3>
-                        <div className="space-y-3">
-                            {selectedPetition.analyzed_documents.map((doc, idx) => (
-                                <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <div className="bg-blue-100 text-blue-600 p-1 rounded">
-                                            <FileText size={12} />
-                                        </div>
-                                        <span className="text-xs font-bold text-gray-700 truncate block w-full">{doc.docType}</span>
-                                    </div>
-                                    <p className="text-xs text-gray-900 font-medium truncate mb-1" title={doc.fileName}>{doc.fileName}</p>
-                                    {doc.summary && (
-                                        <p className="text-[10px] text-gray-500 leading-tight italic bg-gray-50 p-1 rounded border border-gray-100">
-                                            "{doc.summary.length > 80 ? doc.summary.substring(0, 80) + '...' : doc.summary}"
-                                        </p>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Main Content */}
-            <div 
-              id="petition-detail-content"
-              className={`${selectedPetition.analyzed_documents && selectedPetition.analyzed_documents.length > 0 ? 'lg:col-span-3' : 'lg:col-span-4'} p-8 overflow-y-auto bg-gray-100 flex justify-center`}
-            >
+        <div className="flex-1 overflow-y-auto bg-slate-200 p-4 md:p-10 flex flex-col items-center">
+            <div className="w-full max-w-[21cm] mb-6 flex items-center gap-2 text-juris-800 bg-juris-50 px-4 py-3 rounded-lg border border-juris-100 shadow-sm">
+                <Info size={18} className="text-juris-600 animate-pulse" />
+                <span className="text-xs font-bold uppercase tracking-wider">Documento Editável: O texto abaixo será salvo automaticamente ao ser alterado.</span>
+            </div>
+            
+            <div className="relative w-full max-w-[21cm]">
               <div 
-                  className="bg-white shadow-lg p-[3cm_2cm_2cm_3cm]"
-                  style={{
-                      width: '21cm', // Fixed A4 width
-                      minHeight: '29.7cm', // Min A4 height
-                      fontFamily: '"Times New Roman", Times, serif',
-                      fontSize: '12pt',
-                      lineHeight: '1.5',
-                      color: 'black'
-                  }}
+                className="bg-white shadow-2xl p-[3cm_2cm_3cm_3cm] h-auto min-h-[29.7cm] border border-gray-200 mb-20 focus:ring-0 outline-none"
+                contentEditable={true}
+                suppressContentEditableWarning={true}
+                onBlur={e => {
+                    const newContent = e.currentTarget.innerHTML;
+                    supabase.from('petitions').update({ content: newContent }).eq('id', selectedPetition.id);
+                }}
+                style={{ width: '100%', fontFamily: '"Times New Roman", serif', fontSize: '12pt', lineHeight: '1.5', color: 'black', boxSizing: 'border-box' }}
               >
-                  <style>{`
-                       #petition-detail-content p {
-                           text-align: justify;
-                           text-indent: 3cm;
-                           margin-bottom: 12px;
-                       }
-                       #petition-detail-content h3, #petition-detail-content h2 {
-                           text-align: center;
-                           text-transform: uppercase;
-                           margin-top: 24px;
-                           margin-bottom: 12px;
-                           font-weight: bold;
-                       }
-                  `}</style>
-
-                  {/* Detect HTML or fallback to text */}
-                  {selectedPetition.content.trim().startsWith('<') ? (
-                       <div dangerouslySetInnerHTML={{ __html: selectedPetition.content }} />
-                   ) : (
-                       <div className="whitespace-pre-wrap">{selectedPetition.content}</div>
-                   )}
+                <style>{`
+                  p { text-align: justify; text-indent: 1.25cm; margin-bottom: 12pt; margin-top: 0; outline: none; }
+                  h1, h2, h3 { text-align: center; text-transform: uppercase; font-weight: bold; margin: 18pt 0 12pt 0; text-indent: 0; outline: none; }
+                `}</style>
+                <div dangerouslySetInnerHTML={{ __html: selectedPetition.content.replace(/<style([\s\S]*?)<\/style>/gi, '') }} />
               </div>
             </div>
         </div>
-      </div>
-    );
-  }
-
-  if (petitions.length === 0) {
-    return (
-      <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="bg-gray-100 p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-            <FileText className="text-gray-400 w-8 h-8" />
-        </div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Nenhuma petição encontrada</h2>
-        <p className="text-gray-500 max-w-sm mx-auto mb-6">
-          Você ainda não gerou nenhuma petição. Vá para "Nova Petição" para criar seu primeiro documento.
-        </p>
       </div>
     );
   }
@@ -304,11 +208,7 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Minhas Petições</h1>
         <div className="relative w-64">
-          <input 
-            type="text" 
-            placeholder="Buscar petições..." 
-            className="w-full pl-9 pr-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-juris-500 focus:outline-none text-sm"
-          />
+          <input type="text" placeholder="Buscar..." className="w-full pl-9 pr-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-juris-500 text-sm" />
           <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
         </div>
       </div>
@@ -316,102 +216,40 @@ export const PetitionList: React.FC<PetitionListProps> = ({ userId }) => {
       <div className="grid gap-4">
         {petitions.map((petition) => {
           const isFiled = petition.filed === true;
-          const hasDocs = petition.analyzed_documents && petition.analyzed_documents.length > 0;
-          
           return (
             <div 
               key={petition.id}
-              className={`p-4 rounded-lg border hover:shadow-md transition-all flex items-center justify-between group cursor-pointer ${
-                isFiled 
-                  ? 'bg-green-50 border-green-200 shadow-sm' 
-                  : 'bg-white border-gray-200'
-              }`}
+              className={`p-4 rounded-xl border hover:shadow-md transition-all flex items-center justify-between group cursor-pointer ${isFiled ? 'bg-green-50 border-green-200 shadow-sm' : 'bg-white border-gray-200'}`}
               onClick={() => setSelectedPetition(petition)}
             >
               <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-lg flex-shrink-0 transition-colors ${
-                  isFiled ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-juris-700'
-                }`}>
+                <div className={`p-3 rounded-lg ${isFiled ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-juris-700'}`}>
                   <FileText size={24} />
                 </div>
                 <div>
-                  <h3 className={`font-semibold transition-colors flex items-center gap-2 ${
-                    isFiled ? 'text-green-900' : 'text-gray-900 group-hover:text-juris-800'
-                  }`}>
-                    {petition.action_type || 'Ação Judicial'}
-                    {hasDocs && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-800 border border-indigo-200" title="Gerado com análise de documento">
-                            <FileBadge size={10} className="mr-1" /> IA Doc
-                        </span>
-                    )}
-                  </h3>
-                  
-                  {(petition.plaintiff_name || petition.defendant_name) && (
-                     <p className={`text-sm font-medium mt-1 truncate max-w-md ${
-                       isFiled ? 'text-green-800' : 'text-gray-700'
-                     }`}>
-                        {petition.plaintiff_name || 'Autor'} <span className={`${isFiled ? 'text-green-600' : 'text-gray-400'} font-normal px-1`}>vs</span> {petition.defendant_name || 'Réu'}
-                     </p>
-                  )}
-
-                  <div className={`flex items-center gap-4 mt-2 text-sm ${
-                    isFiled ? 'text-green-700' : 'text-gray-500'
-                  }`}>
-                    <span className={`capitalize px-2 py-0.5 rounded text-xs border ${
-                      isFiled 
-                        ? 'bg-green-100 border-green-200 text-green-800' 
-                        : 'bg-gray-100 border-gray-200 text-gray-600'
-                    }`}>
-                      {petition.area}
-                    </span>
-                    <span className="flex items-center gap-1 text-xs">
-                      <Calendar size={12} />
-                      {new Date(petition.created_at).toLocaleDateString('pt-BR')}
-                    </span>
+                  <h3 className="font-bold text-gray-900">{petition.action_type}</h3>
+                  <p className="text-sm text-gray-600 truncate max-w-md">{petition.plaintiff_name} vs {petition.defendant_name}</p>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                    <span className="capitalize bg-gray-100 px-2 py-0.5 rounded font-medium">{petition.area}</span>
+                    <span className="flex items-center gap-1"><Calendar size={12} />{new Date(petition.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
               </div>
-              
-              <div className="flex items-center gap-4">
-                 {/* Peticionado Checkbox */}
+              <div className="flex items-center gap-3">
                 <div 
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors ${
-                    isFiled ? 'bg-green-100 text-green-800' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors ${isFiled ? 'bg-green-100 text-green-800' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`} 
                   onClick={(e) => handleToggleFiled(e, petition.id, petition.filed)}
                 >
-                  {isFiled ? (
-                    <CheckSquare size={18} className="text-green-600" />
-                  ) : (
-                    <Square size={18} className="text-gray-400" />
-                  )}
-                  <span className="text-xs font-medium select-none">
-                    {isFiled ? 'Peticionado' : 'Peticionar'}
-                  </span>
+                  {isFiled ? <CheckSquare size={18} className="text-green-600" /> : <Square size={18} />}
+                  <span className="text-xs font-bold uppercase tracking-wider">{isFiled ? 'Peticionado' : 'Peticionar'}</span>
                 </div>
-
-                <Button 
-                  variant="ghost" 
-                  className={`${isFiled ? 'text-green-700 hover:text-green-900 hover:bg-green-100' : 'text-gray-400 hover:text-juris-600'}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePrint(petition.content);
-                  }}
-                  title="Imprimir"
+                <button 
+                  onClick={(e) => handleDelete(e, petition.id)} 
+                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Excluir petição"
                 >
-                  <Printer size={20} />
-                </Button>
-
-                <Button 
-                  variant="ghost" 
-                  className={`${isFiled ? 'text-green-700 hover:text-green-900 hover:bg-green-100' : 'text-gray-400 hover:text-juris-600'}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedPetition(petition);
-                  }}
-                >
-                  <Eye size={20} className="mr-2" /> Visualizar
-                </Button>
+                  <Trash2 size={20}/>
+                </button>
               </div>
             </div>
           );

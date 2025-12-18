@@ -3,27 +3,21 @@ import { UserProfile, UsageLimit, Petition, Deadline } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { 
   FileText, 
-  AlertCircle, 
   Zap, 
   CheckCircle2,
-  X,
   Crown,
   Clock,
   AlertTriangle,
   Flame,
   ShieldAlert,
-  GripHorizontal,
-  Plus,
-  Settings2,
-  Layout,
-  Undo2,
   ChevronRight,
   BookOpen,
   Globe,
   HardDrive,
   ShieldCheck,
   Calendar,
-  Infinity
+  Infinity,
+  Sparkles
 } from 'lucide-react';
 import { Button } from './ui/Button';
 
@@ -35,21 +29,6 @@ interface DashboardHomeProps {
 
 type WidgetType = 'actions' | 'subscription' | 'deadlines' | 'recents' | 'jurisprudence' | 'portals';
 
-interface DashboardWidget {
-  id: WidgetType;
-  title: string;
-  defaultColSpan: number; // 1, 2 or 3
-}
-
-const ALL_WIDGETS: DashboardWidget[] = [
-  { id: 'actions', title: 'Ações Rápidas', defaultColSpan: 1 },
-  { id: 'portals', title: 'Portais da Justiça', defaultColSpan: 1 },
-  { id: 'jurisprudence', title: 'Jurisprudência Rápida', defaultColSpan: 1 },
-  { id: 'subscription', title: 'Uso e Plano', defaultColSpan: 1 },
-  { id: 'deadlines', title: 'Próximos Prazos', defaultColSpan: 1 },
-  { id: 'recents', title: 'Últimas Petições', defaultColSpan: 3 }, // Full width usually
-];
-
 export const DashboardHome: React.FC<DashboardHomeProps> = ({ 
   profile, 
   usage,
@@ -59,33 +38,9 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<Deadline[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Customization State
-  const [isCustomizing, setIsCustomizing] = useState(false);
-  const [activeWidgets, setActiveWidgets] = useState<WidgetType[]>(['actions', 'portals', 'jurisprudence', 'subscription', 'deadlines', 'recents']);
-  const [hiddenWidgets, setHiddenWidgets] = useState<WidgetType[]>([]);
-
-  // Drag & Drop Refs
-  const dragItem = useRef<number | null>(null);
-  const dragOverItem = useRef<number | null>(null);
-
   const isTrial = profile?.account_status === 'trial';
   const isAdmin = profile?.role === 'admin';
 
-  // Load Layout Preference
-  useEffect(() => {
-    const savedLayout = localStorage.getItem('dashboard_layout_v3');
-    if (savedLayout) {
-      try {
-        const parsed = JSON.parse(savedLayout);
-        setActiveWidgets(parsed.active);
-        setHiddenWidgets(parsed.hidden);
-      } catch (e) {
-        console.error("Erro ao carregar layout", e);
-      }
-    }
-  }, []);
-
-  // Fetch Data
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!profile?.id) return;
@@ -97,7 +52,6 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
           .order('created_at', { ascending: false })
           .limit(5);
 
-        // Fetch pending deadlines, ordered by due date
         const { data: deadlineData } = await supabase
           .from('deadlines')
           .select('*')
@@ -118,298 +72,156 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
     fetchDashboardData();
   }, [profile?.id]);
 
-  const saveLayout = (active: WidgetType[], hidden: WidgetType[]) => {
-    localStorage.setItem('dashboard_layout_v3', JSON.stringify({ active, hidden }));
-    setActiveWidgets(active);
-    setHiddenWidgets(hidden);
-  };
-
-  // Helpers
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 MB';
-    const mb = bytes / (1024 * 1024);
-    return mb.toFixed(2) + ' MB';
-  };
-
   const getDeadlineStyle = (dateStr: string) => {
     const today = new Date();
     today.setHours(0,0,0,0);
     const due = new Date(dateStr);
     due.setHours(0,0,0,0);
-    
-    const diffTime = due.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Vencido
-    if (diffDays < 0) return { 
-        style: 'bg-red-50 border-red-200 text-red-900', 
-        icon: <AlertTriangle size={14} className="text-red-600" />,
-        label: 'Vencido'
-    };
-    // Urgente (Hoje, Amanhã, Depois de Amanhã)
-    if (diffDays <= 2) return { 
-        style: 'bg-red-50 border-red-200 text-red-900', 
-        icon: <Flame size={14} className="text-red-600 animate-pulse" />,
-        label: diffDays === 0 ? 'Hoje' : diffDays === 1 ? 'Amanhã' : '2 dias'
-    };
-    // Atenção (3 a 5 dias)
-    if (diffDays <= 5) return { 
-        style: 'bg-amber-50 border-amber-200 text-amber-900', 
-        icon: <Clock size={14} className="text-amber-600" />,
-        label: `${diffDays} dias`
-    };
-    // Normal
-    return { 
-        style: 'bg-gray-50 border-gray-200 text-gray-700', 
-        icon: <Calendar size={14} className="text-gray-400" />,
-        label: new Date(dateStr).toLocaleDateString('pt-BR').slice(0, 5) // dd/mm
-    };
+    if (diffDays < 0) return { style: 'bg-rose-50 text-rose-600', label: 'Atrasado' };
+    if (diffDays <= 2) return { style: 'bg-rose-50 text-rose-600 font-bold', label: diffDays === 0 ? 'Hoje' : 'Amanhã' };
+    if (diffDays <= 5) return { style: 'bg-amber-50 text-amber-600', label: `${diffDays}d` };
+    return { style: 'bg-slate-50 text-slate-500', label: due.toLocaleDateString('pt-BR').slice(0, 5) };
   };
 
-  // --- Renderers for Each Widget Type ---
-
-  const renderWidgetContent = (type: WidgetType) => {
+  const renderWidget = (type: WidgetType) => {
     switch (type) {
       case 'actions':
         return (
-          <div className="h-full flex flex-col gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
              <button 
                 onClick={() => onNavigate('new-petition')}
-                className="flex-1 bg-gradient-to-br from-juris-800 to-juris-900 hover:from-juris-700 hover:to-juris-800 text-white rounded-lg p-4 text-left transition-all shadow-md group relative overflow-hidden"
+                className="group relative bg-white rounded-[2.5rem] p-8 text-left transition-all hover:shadow-2xl hover:shadow-indigo-200/50 border border-slate-100 flex flex-col justify-between h-full overflow-hidden"
              >
-                <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4">
-                    <Zap size={80} />
+                <div className="absolute -right-4 -top-4 w-32 h-32 bg-indigo-50 rounded-full opacity-50 blur-3xl transition-all group-hover:scale-150" />
+                <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-rose-400 p-4 rounded-2xl w-fit shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform relative z-10">
+                    <Sparkles size={28} className="text-white" />
                 </div>
-                <div className="relative z-10 flex flex-col h-full justify-between">
-                    <div className="bg-white/20 w-fit p-2 rounded-lg mb-2 group-hover:scale-110 transition-transform">
-                        <Zap size={24} />
-                    </div>
-                    <div>
-                        <h3 className="font-bold text-lg">Nova Petição</h3>
-                        <p className="text-juris-200 text-xs">Iniciar do zero ou upload</p>
-                    </div>
+                <div className="mt-12 relative z-10">
+                    <h3 className="text-2xl font-bold text-slate-900 tracking-tight">Nova Petição</h3>
+                    <p className="text-slate-500 mt-2 text-sm font-medium">Criação assistida com IA (Fatos/Resumo)</p>
                 </div>
              </button>
 
              <button 
                 onClick={() => onNavigate('new-defense')}
-                className="flex-1 bg-white border border-red-200 hover:border-red-400 hover:bg-red-50 text-red-900 rounded-lg p-4 text-left transition-all shadow-sm group relative overflow-hidden"
+                className="group relative bg-white rounded-[2.5rem] p-8 text-left transition-all hover:shadow-2xl hover:shadow-rose-200/50 border border-slate-100 flex flex-col justify-between h-full overflow-hidden"
              >
-                <div className="absolute right-0 top-0 opacity-5 transform translate-x-2 -translate-y-2">
-                    <ShieldAlert size={80} className="text-red-600" />
+                <div className="absolute -right-4 -top-4 w-32 h-32 bg-rose-50 rounded-full opacity-50 blur-3xl transition-all group-hover:scale-150" />
+                <div className="bg-slate-900 p-4 rounded-2xl w-fit shadow-lg shadow-slate-200 group-hover:scale-110 transition-transform relative z-10">
+                    <ShieldAlert size={28} className="text-white" />
                 </div>
-                <div className="relative z-10 flex flex-col h-full justify-between">
-                    <div className="bg-red-100 w-fit p-2 rounded-lg mb-2 text-red-600 group-hover:scale-110 transition-transform">
-                        <ShieldAlert size={24} />
-                    </div>
-                    <div>
-                        <h3 className="font-bold text-lg">Nova Contestação</h3>
-                        <p className="text-red-700/70 text-xs">Defesa e contra-argumentação</p>
-                    </div>
+                <div className="mt-12 relative z-10">
+                    <h3 className="text-2xl font-bold text-slate-900 tracking-tight">Contestação</h3>
+                    <p className="text-slate-500 mt-2 text-sm font-medium">Defesa técnica a partir do Resumo da Inicial</p>
                 </div>
              </button>
           </div>
         );
 
       case 'subscription':
-        if (isAdmin) {
-            return (
-                <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl shadow-sm border border-gray-700 p-6 flex flex-col relative overflow-hidden h-full text-white">
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <ShieldCheck size={100} className="text-white" />
-                    </div>
-                    <div className="relative z-10 flex-1 flex flex-col">
-                        <div className="flex items-center gap-2 mb-4">
-                            <h3 className="text-2xl font-bold">Acesso Total</h3>
-                        </div>
-                        <div className="mb-4 text-sm text-gray-300">
-                            <p>Você é um <strong>Administrador</strong>.</p>
-                            <p className="mt-2">Limites de petições e armazenamento estão desativados para sua conta.</p>
-                        </div>
-                        <div className="mt-auto flex items-center gap-2 text-green-400 bg-white/10 p-3 rounded-lg border border-white/20">
-                            <CheckCircle2 size={20} />
-                            <span className="font-medium text-sm">Uso Ilimitado Ativo.</span>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
         const count = usage?.petitions_this_month || 0;
-        const countLimit = isTrial ? (usage?.petitions_limit || 5) : 9999;
-        const countPercent = Math.min(100, (count / countLimit) * 100);
-
-        const storage = usage?.used_storage_bytes || 0;
-        const storageLimit = usage?.storage_limit_bytes || 52428800;
-        const storagePercent = Math.min(100, (storage / storageLimit) * 100);
+        const countLimit = isTrial ? (usage?.petitions_limit || 5) : 999;
+        const countPercent = (count / countLimit) * 100;
 
         return (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col relative overflow-hidden h-full">
-                <div className="absolute top-0 right-0 p-4 opacity-10">
-                    <HardDrive size={100} className="text-juris-900" />
+            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full flex flex-col">
+                <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Status da Conta</h3>
+                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${isTrial ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
+                        {isTrial ? 'Trial' : 'Pro'}
+                    </span>
                 </div>
-                <div className="relative z-10 flex-1 flex flex-col">
-                    <p className="text-sm font-medium text-gray-500 mb-1">Seu Plano</p>
-                    <div className="flex items-center gap-2 mb-4">
-                        <h3 className={`text-2xl font-bold capitalize ${isTrial ? 'text-gray-900' : 'text-green-600'}`}>
-                            {isTrial ? 'Gratuito' : 'Plano Pro'}
-                        </h3>
-                    </div>
-                    
-                    {/* Barra de Quantidade */}
-                    <div className="mb-3">
-                        <div className="flex justify-between text-xs font-medium text-gray-600 mb-1">
-                            <span>Petições: {count}</span>
-                            {isTrial ? <span>Limite: {countLimit}</span> : <span className="flex items-center gap-1 text-green-600"><Infinity size={14}/> Ilimitado</span>}
+                
+                <div className="space-y-6 flex-1">
+                    <div>
+                        <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-tighter mb-2">
+                            <span>Uso Mensal</span>
+                            <span>{count}/{countLimit}</span>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                            <div 
-                                className={`h-2.5 rounded-full ${isTrial ? (countPercent > 80 ? 'bg-amber-500' : 'bg-juris-600') : 'bg-green-500'}`} 
-                                style={{ width: isTrial ? `${countPercent}%` : '100%' }}
-                            ></div>
+                        <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5">
+                            <div className="h-2 rounded-full bg-slate-900 transition-all duration-1000" style={{ width: `${countPercent}%` }} />
                         </div>
                     </div>
+                </div>
 
-                    {/* Barra de Armazenamento (Visível para PRO ou se > 0 no trial) */}
-                    <div className="mb-4">
-                        <div className="flex justify-between text-xs font-medium text-gray-600 mb-1">
-                            <span>Armazenamento: {formatBytes(storage)}</span>
-                            <span>{formatBytes(storageLimit)}</span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                            <div 
-                                className={`h-2.5 rounded-full ${storagePercent > 90 ? 'bg-red-500' : 'bg-green-600'}`} 
-                                style={{ width: `${storagePercent}%` }}
-                            ></div>
-                        </div>
-                    </div>
-
-                    {/* Avisos */}
-                    {isTrial && countPercent >= 100 && (
-                        <p className="text-xs text-red-500 font-semibold mb-2 flex items-center gap-1">
-                            <AlertTriangle size={12} /> Limite operacional atingido!
-                        </p>
-                    )}
-
+                <div className="mt-auto pt-6">
                     {isTrial ? (
-                        <div className="mt-auto space-y-3">
-                            <Button className="w-full bg-juris-900 hover:bg-juris-800 h-9 text-sm" onClick={() => onNavigate('subscription')}>
-                                <Crown size={14} className="mr-2" /> Fazer Upgrade (R$ 60,00)
-                            </Button>
-                        </div>
+                        <Button className="w-full h-12 rounded-2xl bg-indigo-600 text-white font-bold" onClick={() => onNavigate('subscription')}>
+                            <Crown size={16} className="mr-2" /> Upgrade para Pro
+                        </Button>
                     ) : (
-                        <div className="mt-auto flex items-center gap-2 text-green-700 bg-green-50 p-3 rounded-lg border border-green-100">
-                            <CheckCircle2 size={20} />
-                            <span className="font-medium text-sm">Assinatura Ativa.</span>
+                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+                            <ShieldCheck className="text-green-500" size={20} />
+                            <span className="text-sm font-bold text-slate-700">Plano Ativo</span>
                         </div>
                     )}
                 </div>
             </div>
         );
 
-        case 'portals': return (
-             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col relative overflow-hidden h-full group">
-                <div className="relative z-10 flex-1 flex flex-col">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="bg-gray-100 p-2 rounded-lg text-gray-700"><Globe size={24} /></div>
-                        <h3 className="text-lg font-bold text-gray-900">Portais da Justiça</h3>
-                    </div>
-                    <p className="text-sm text-gray-500 mb-4">Acesso rápido aos sistemas e downloads.</p>
-                    <div className="mt-auto"><Button onClick={() => onNavigate('portals')} variant="outline" className="w-full justify-between">Acessar Lista <ChevronRight size={16} /></Button></div>
+      case 'deadlines':
+        return (
+            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full flex flex-col">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Próximos Prazos</h3>
+                    <Calendar size={18} className="text-slate-400" />
                 </div>
-            </div>
-        );
-        case 'jurisprudence': return (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col relative overflow-hidden h-full group">
-                <div className="relative z-10 flex-1 flex flex-col">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="bg-blue-100 p-2 rounded-lg text-blue-700"><BookOpen size={24} /></div>
-                        <h3 className="text-lg font-bold text-gray-900">Pesquisa Jurídica</h3>
-                    </div>
-                    <p className="text-sm text-gray-500 mb-4">Busque julgados com auxílio da IA.</p>
-                    <div className="mt-auto"><Button onClick={() => onNavigate('jurisprudence')} variant="outline" className="w-full justify-between">Pesquisar <ChevronRight size={16} /></Button></div>
-                </div>
-            </div>
-        );
-        case 'deadlines': return (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm"><AlertCircle size={16} className="text-gray-500" /> Próximos Prazos</h3>
-                    <Button variant="ghost" size="sm" onClick={() => onNavigate('deadlines')} className="h-6 text-xs px-2">Ver todos</Button>
-                </div>
-                <div className="flex-1 overflow-y-auto max-h-[300px] p-4">
+                <div className="space-y-3 flex-1 overflow-y-auto max-h-[300px]">
                     {upcomingDeadlines.length > 0 ? (
-                        <div className="space-y-2">
-                            {upcomingDeadlines.map(d => {
-                                const info = getDeadlineStyle(d.due_date);
-                                return (
-                                    <div key={d.id} className={`p-3 rounded-lg border flex justify-between items-center transition-colors ${info.style}`}>
-                                        <div className="flex flex-col min-w-0 mr-2">
-                                            <span className="text-sm font-semibold truncate">{d.title}</span>
-                                            <span className="text-[10px] opacity-80 flex items-center gap-1 mt-0.5">
-                                                {new Date(d.due_date).toLocaleDateString()}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 shrink-0 bg-white/50 px-2 py-1 rounded text-xs font-bold">
-                                            {info.icon}
-                                            <span>{info.label}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        upcomingDeadlines.map(d => {
+                            const info = getDeadlineStyle(d.due_date);
+                            return (
+                                <div key={d.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-100">
+                                    <span className="text-sm font-bold text-slate-900 truncate mr-2">{d.title}</span>
+                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${info.style}`}>{info.label}</span>
+                                </div>
+                            );
+                        })
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                             <CheckCircle2 size={32} className="mb-2 opacity-20" />
-                             <p className="text-xs">Tudo em dia!</p>
+                        <div className="text-center py-10">
+                            <CheckCircle2 size={32} className="mx-auto text-slate-200 mb-2" />
+                            <p className="text-xs text-slate-400 font-medium">Nenhum prazo</p>
                         </div>
                     )}
                 </div>
             </div>
         );
-        case 'recents': return (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
-                <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
-                   <h3 className="font-semibold text-gray-900 flex items-center gap-2"><Clock size={18} className="text-gray-400" /> Últimas Petições</h3>
+
+      case 'recents':
+        return (
+            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full flex flex-col mt-6">
+                <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">Últimos Documentos</h3>
+                    <button onClick={() => onNavigate('my-petitions')} className="text-indigo-600 text-xs font-bold hover:underline uppercase tracking-widest">Ver Todos</button>
                 </div>
-                <div className="flex-1 p-0 overflow-hidden min-h-[200px]">
-                   {loading ? (
-                       <div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-juris-900"></div></div>
-                   ) : recentPetitions.length > 0 ? (
-                       <div className="divide-y divide-gray-100">
-                          {recentPetitions.map((petition) => (
-                              <div 
-                                key={petition.id} 
-                                className={`p-4 transition-all flex items-center justify-between group cursor-pointer border-l-4 ${
-                                    petition.filed 
-                                      ? 'bg-green-50 border-green-500 hover:bg-green-100' // Estilo Peticionado
-                                      : 'bg-white border-transparent hover:bg-gray-50' // Estilo Padrão
-                                }`} 
+                <div className="divide-y divide-slate-100">
+                    {recentPetitions.length > 0 ? (
+                        recentPetitions.map((pet) => (
+                            <div 
+                                key={pet.id} 
+                                className="py-5 flex items-center justify-between group cursor-pointer hover:px-2 transition-all"
                                 onClick={() => onNavigate('my-petitions')}
-                              >
-                                  <div className="flex items-center gap-4">
-                                      <div className={`p-2 rounded-lg ${petition.filed ? 'bg-green-200 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
-                                        <FileText size={20} />
-                                      </div>
-                                      <div>
-                                          <p className={`font-medium text-sm ${petition.filed ? 'text-green-900' : 'text-gray-900'}`}>
-                                            {petition.action_type || 'Petição'}
-                                          </p>
-                                          <div className={`flex items-center gap-2 text-xs mt-1 ${petition.filed ? 'text-green-700' : 'text-gray-500'}`}>
-                                            <span>{new Date(petition.created_at).toLocaleDateString('pt-BR')}</span>
-                                            {petition.filed && (
-                                                <span className="font-bold flex items-center gap-1">
-                                                    • Peticionado
-                                                </span>
-                                            )}
-                                          </div>
-                                      </div>
-                                  </div>
-                                  <ChevronRight size={16} className={`${petition.filed ? 'text-green-400' : 'text-gray-300'} group-hover:text-juris-500`} />
-                              </div>
-                          ))}
-                       </div>
-                   ) : <div className="p-8 text-center text-gray-400 text-sm">Sem petições recentes.</div>}
+                            >
+                                <div className="flex items-center gap-5">
+                                    <div className="p-3 rounded-2xl bg-slate-100 text-slate-600 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                                        <FileText size={22} />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{pet.action_type || 'Petição Inicial'}</p>
+                                        <p className="text-xs text-slate-400 font-medium mt-0.5">{pet.plaintiff_name} vs {pet.defendant_name}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-xs font-bold text-slate-300">{new Date(pet.created_at).toLocaleDateString()}</span>
+                                    <ChevronRight size={16} className="text-slate-200 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="py-10 text-center text-slate-400 text-sm">Nenhum documento gerado ainda.</p>
+                    )}
                 </div>
             </div>
         );
@@ -417,55 +229,44 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
     }
   };
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, position: number) => {
-    dragItem.current = position;
-  };
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>, position: number) => {
-    dragOverItem.current = position;
-    e.preventDefault();
-  };
-  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
-    if (dragItem.current === null || dragOverItem.current === null) return;
-    const copyListItems = [...activeWidgets];
-    const dragItemContent = copyListItems[dragItem.current];
-    copyListItems.splice(dragItem.current, 1);
-    copyListItems.splice(dragOverItem.current, 0, dragItemContent);
-    dragItem.current = null;
-    dragOverItem.current = null;
-    saveLayout(copyListItems, hiddenWidgets);
-  };
-
   return (
-    <div className="space-y-6 pb-12">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-10 animate-in fade-in duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/50 backdrop-blur-md p-8 rounded-[3rem] border border-white">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Painel do Advogado</h1>
-          <p className="text-gray-500">Bem-vindo de volta, Dr(a). {profile?.full_name?.split(' ')[0] || 'Advogado(a)'}.</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Olá, Dr(a). {profile?.full_name?.split(' ')[0]}</h1>
+          <p className="text-slate-500 font-medium mt-1">Sua advocacia inteligente está pronta para hoje.</p>
         </div>
-        <Button variant="ghost" onClick={() => setIsCustomizing(!isCustomizing)} className="text-gray-500 hover:text-juris-700">
-            <Settings2 size={18} className="mr-2" /> {isCustomizing ? 'Salvar' : 'Personalizar'}
-        </Button>
+        <div className="flex gap-4">
+            <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                <Clock size={16} className="text-indigo-500" />
+                <span className="text-xs font-bold text-slate-900 uppercase tracking-widest">{new Date().toLocaleDateString('pt-BR', { weekday: 'long' })}</span>
+            </div>
+        </div>
       </div>
 
-      <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6`}>
-        {activeWidgets.map((widgetId, index) => {
-             const meta = ALL_WIDGETS.find(w => w.id === widgetId);
-             if (!meta) return null;
-             const isFullWidth = meta.defaultColSpan === 3;
-             return (
-                 <div
-                    key={widgetId}
-                    draggable={isCustomizing}
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragEnter={(e) => handleDragEnter(e, index)}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={(e) => e.preventDefault()}
-                    className={`${isFullWidth ? 'lg:col-span-3' : 'lg:col-span-1'} ${isCustomizing ? 'cursor-move opacity-90' : ''}`}
-                 >
-                    {renderWidgetContent(widgetId)}
-                 </div>
-             );
-        })}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2">{renderWidget('actions')}</div>
+        <div className="lg:col-span-1">{renderWidget('subscription')}</div>
+        <div className="lg:col-span-1">{renderWidget('deadlines')}</div>
+        <div className="lg:col-span-1">
+            <div className="bg-indigo-600 rounded-[2.5rem] p-8 h-full text-white relative overflow-hidden group cursor-pointer" onClick={() => onNavigate('jurisprudence')}>
+                <div className="absolute right-0 top-0 p-4 opacity-20 transform group-hover:scale-125 transition-transform"><BookOpen size={120} /></div>
+                <h3 className="text-xl font-bold mb-2 relative z-10">Pesquisa Jurídica</h3>
+                <p className="text-indigo-100 text-sm font-medium relative z-10">Busque julgados com auxílio da IA em todos os tribunais.</p>
+                <div className="mt-8 relative z-10 flex items-center gap-2 font-bold text-sm">Acessar agora <ChevronRight size={16} /></div>
+            </div>
+        </div>
+        <div className="lg:col-span-1">
+            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full flex flex-col group cursor-pointer" onClick={() => onNavigate('portals')}>
+                <div className="flex items-center gap-4 mb-4">
+                    <div className="bg-slate-100 p-3 rounded-2xl text-slate-900 group-hover:bg-slate-900 group-hover:text-white transition-colors"><Globe size={24} /></div>
+                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Sistemas Judiciais</h3>
+                </div>
+                <p className="text-sm text-slate-500 font-medium">Links diretos para PJe, e-SAJ, E-proc e instaladores de token.</p>
+                <div className="mt-auto pt-6 text-xs font-bold text-slate-300 group-hover:text-slate-900 transition-colors uppercase tracking-widest flex items-center gap-1">Ver tribunais <ChevronRight size={14}/></div>
+            </div>
+        </div>
+        <div className="lg:col-span-3">{renderWidget('recents')}</div>
       </div>
     </div>
   );
