@@ -1,21 +1,41 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
-// Helper seguro para obter a chave do ambiente conforme as diretrizes
+/**
+ * Obtém a chave de API de forma robusta para ambientes de produção.
+ * Prioriza process.env conforme diretrizes, mas previne erros de referência em browsers.
+ */
 const getApiKey = (): string => {
+  let key = "";
+  
+  // 1. Tentativa via process.env (Requisito principal)
   try {
-    // A chave deve vir exclusivamente de process.env.API_KEY
-    const key = process.env.API_KEY;
-    if (!key) return "";
-    return key;
-  } catch (e) {
-    return "";
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      key = process.env.API_KEY;
+    }
+  } catch (e) {}
+
+  // 2. Fallback para import.meta.env (Comum em ambientes Vite/Modernos)
+  if (!key) {
+    try {
+      key = (import.meta as any).env?.API_KEY || (import.meta as any).env?.VITE_API_KEY || "";
+    } catch (e) {}
   }
+
+  // 3. Fallback para escopo global (Injeção direta)
+  if (!key && typeof window !== 'undefined') {
+    key = (window as any).API_KEY || "";
+  }
+
+  return key;
 };
 
-// Added hasAiKey to verify if API_KEY is available in the environment
+/**
+ * Verifica se o sistema tem uma chave de IA configurada.
+ */
 export const hasAiKey = (): boolean => {
-  return !!getApiKey();
+  const key = getApiKey();
+  return !!(key && key.length > 10);
 };
 
 const SHIELD_PROTOCOL = `
@@ -26,22 +46,29 @@ PROTOCOLO DE BLINDAGEM E EXCELÊNCIA JURÍDICA:
 4. Estrutura: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
 `;
 
+/**
+ * Runner genérico para chamadas ao Gemini com tratamento de erro e inicialização dinâmica.
+ */
 const runGenAI = async (callback: (ai: GoogleGenAI) => Promise<any>): Promise<any> => {
     const apiKey = getApiKey();
     if (!apiKey) {
-        throw new Error("API_KEY_MISSING: A variável de ambiente API_KEY não foi configurada no servidor/deploy.");
+        throw new Error("API_KEY_MISSING: A variável de ambiente API_KEY não foi configurada. Verifique as configurações de Secrets do seu deploy (ex: Vercel/Netlify).");
     }
+    
+    // Inicializa o cliente Gemini com a chave encontrada
     const ai = new GoogleGenAI({ apiKey });
+    
     try {
         return await callback(ai);
     } catch (error: any) {
         console.error("Gemini API Error:", error);
         const msg = error.message || "";
+        
         if (msg.includes('429') || msg.includes('Quota')) {
             throw new Error("LIMITE_EXCEDIDO: A cota da API foi atingida. Tente novamente em instantes.");
         }
         if (msg.includes('API key not valid') || msg.includes('403')) {
-            throw new Error("CHAVE_INVALIDA: A chave de API configurada no ambiente é inválida.");
+            throw new Error("CHAVE_INVALIDA: A chave de API configurada no ambiente é inválida ou expirou.");
         }
         throw error;
     }
@@ -80,7 +107,7 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
       } catch (e) {
           const jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) return JSON.parse(jsonMatch[0]);
-          throw new Error("A IA retornou um formato inválido. Tente novamente.");
+          throw new Error("Falha ao processar os dados do documento. Tente novamente.");
       }
   });
 };
@@ -136,7 +163,7 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
         
         if (links.length > 0) {
             const uniqueLinks = Array.from(new Set(links));
-            text += `<div class='mt-4 p-4 bg-slate-50 border-t'><strong>Referências:</strong><ul class='list-disc ml-4'>`;
+            text += `<div class='mt-4 p-4 bg-slate-50 border-t'><strong>Referências Oficiais:</strong><ul class='list-disc ml-4'>`;
             uniqueLinks.forEach(link => { text += `<li><a href='${link}' target='_blank' class='text-blue-600 break-all'>${link}</a></li>`; });
             text += `</ul></div>`;
         }

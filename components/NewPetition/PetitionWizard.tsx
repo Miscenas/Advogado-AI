@@ -171,14 +171,21 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         setIsExtracting(false);
         setUploadSuccess(true);
       } catch (error: any) {
-        setIsExtracting(false);
-        alert("Erro na análise: " + (error.message || "Falha ao processar arquivo. Verifique sua conexão ou API Key."));
+        console.error("Erro no processamento:", error);
+        setIsExtracting(false); // Garante que o spinner de carregamento pare
+        
+        const errorMessage = error.message || "";
+        if (errorMessage.includes("API_KEY_MISSING")) {
+           alert("Configuração Necessária: A chave de API do Gemini não foi detectada. Verifique se a variável de ambiente API_KEY foi configurada no servidor de deploy.");
+        } else {
+           alert("Erro na análise: " + (errorMessage || "Falha ao processar arquivo."));
+        }
       }
     };
 
     reader.onerror = () => {
       setIsExtracting(false);
-      alert("Erro ao ler o arquivo localmente.");
+      alert("Erro ao ler o arquivo do seu computador.");
     };
 
     reader.readAsDataURL(file);
@@ -208,15 +215,15 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             }
         };
         reader.readAsDataURL(files[0]);
-    } catch (error: any) {
+    } catch (error) {
         setIsTranscribing(false);
-        alert("Erro ao ler áudio.");
+        alert("Erro ao ler arquivo de áudio.");
     }
   };
 
   const toggleRecording = (targetField: 'facts' | 'requests') => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Sem suporte a voz.");
+    if (!SpeechRecognition) return alert("Seu navegador não suporta reconhecimento de voz.");
     if (isListening) { recognitionRef.current?.stop(); return; }
     
     const rec = new SpeechRecognition();
@@ -248,7 +255,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       setGeneratedContent(content);
       setIsFullScreen(true);
     } catch (error: any) { 
-        setGenError(error.message || "Ocorreu um erro desconhecido ao gerar a petição.");
+        setGenError(error.message || "Ocorreu um erro ao gerar a petição.");
     } finally { 
         setIsGenerating(false); 
     }
@@ -265,68 +272,22 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       }]).select().single();
       alert("Salvo com sucesso!");
       onSuccess(); 
-    } catch (error) { alert("Erro ao salvar."); } finally { setIsSaving(false); }
+    } catch (error) { alert("Erro ao salvar no banco de dados."); } finally { setIsSaving(false); }
   };
 
   const handleDownloadDoc = () => {
     if (!generatedContent) return;
-    
-    const cleanContent = generatedContent
-        .replace(/<style([\s\S]*?)<\/style>/gi, '')
-        .replace(/<html([\s\S]*?)>/gi, '')
-        .replace(/<\/html>/gi, '')
-        .replace(/<body([\s\S]*?)>/gi, '')
-        .replace(/<\/body>/gi, '')
-        .replace(/<!DOCTYPE([\s\S]*?)>/gi, '')
-        .trim();
-
-    const blobContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset='utf-8'>
-        <style>
-          @page Section1 { 
-            size: 21cm 29.7cm; 
-            margin: 2cm 2cm 2cm 3cm; 
-            mso-header-margin: 35.4pt; 
-            mso-footer-margin: 35.4pt; 
-            mso-paper-source: 0; 
-          }
-          div.Section1 { page: Section1; }
-          body { font-family: "Times New Roman", serif; font-size: 12pt; line-height: 1.5; text-align: justify; }
-          p { margin: 0; margin-bottom: 12pt; text-indent: 1.25cm; text-align: justify; }
-          h1, h2, h3 { text-align: center; font-weight: bold; text-transform: uppercase; margin: 18pt 0 12pt 0; text-indent: 0; font-size: 12pt; }
-        </style>
-      </head>
-      <body>
-        <div class="Section1">${cleanContent}</div>
-      </body>
-      </html>
-    `;
-
+    const cleanContent = generatedContent.replace(/<style([\s\S]*?)<\/style>/gi, '').trim();
+    const blobContent = `<html><head><meta charset='utf-8'><style>body { font-family: "Times New Roman", serif; font-size: 12pt; line-height: 1.5; text-align: justify; } p { text-indent: 1.25cm; margin-bottom: 12pt; } h1, h2, h3 { text-align: center; font-weight: bold; text-transform: uppercase; margin: 18pt 0 12pt 0; }</style></head><body>${cleanContent}</body></html>`;
     const blob = new Blob(['\ufeff', blobContent], { type: 'application/msword' });
-    const fileName = `${formData.actionType || 'Peticao'}_${new Date().getTime()}.doc`;
-    saveAs(blob, fileName);
+    saveAs(blob, `${formData.actionType || 'Peticao'}.doc`);
   };
 
   const handlePrint = () => {
     if (!generatedContent) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    printWindow.document.write(`
-      <html>
-        <head>
-          <style>
-            @page { margin: 2.5cm 2cm 2.5cm 3cm; } 
-            body { font-family: "Times New Roman", serif; padding: 0; margin: 0; line-height: 1.5; font-size: 12pt; color: #000; } 
-            p { text-align: justify; text-indent: 1.25cm; margin-bottom: 12pt; margin-top: 0; } 
-            h1, h2, h3 { text-align: center; text-transform: uppercase; font-weight: bold; margin: 18pt 0 12pt 0; text-indent: 0; }
-            .print-container { padding: 2.5cm 2cm 2.5cm 3cm; }
-          </style>
-        </head>
-        <body><div class="print-container">${generatedContent.replace(/<style([\s\S]*?)<\/style>/gi, '')}</div></body>
-      </html>
-    `);
+    printWindow.document.write(`<html><head><style>@page { margin: 2.5cm 2cm 2.5cm 3cm; } body { font-family: "Times New Roman", serif; font-size: 12pt; } p { text-align: justify; text-indent: 1.25cm; } h1, h2, h3 { text-align: center; text-transform: uppercase; }</style></head><body>${generatedContent}</body></html>`);
     printWindow.document.close();
     setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
@@ -386,31 +347,12 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                 <Input label="Tipo de Ação" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Ação de Cobrança, Indenizatória..." />
             </div>
             <Input label="Jurisdição" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="AO JUÍZO DO FORO CENTRAL..." />
-            <div className="space-y-8 pt-6 border-t">
-               <div className="flex items-center justify-between"><h4 className="font-bold text-sm text-blue-800 flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full"><Users size={16}/> POLO ATIVO</h4><Button variant="ghost" size="sm" onClick={() => addParty('plaintiffs')} className="text-blue-600 hover:text-blue-800 font-bold"><Plus size={14} className="mr-1"/> Adicionar</Button></div>
-               <div className="grid gap-6">{formData.plaintiffs.map(p => (
-                   <div key={p.id} className="bg-blue-50/30 p-5 rounded-2xl border border-blue-100 border-l-4 border-l-blue-500 relative group shadow-sm">
-                      <button onClick={() => removeParty('plaintiffs', p.id!)} className="absolute -top-2 -right-2 bg-white text-red-500 p-1.5 rounded-full shadow-md border border-red-100 opacity-0 group-hover:opacity-100 transition-opacity z-10"><Trash2 size={16}/></button>
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                        <div className="md:col-span-5"><Input label="Nome" placeholder="Nome" value={p.name} onChange={e => updateParty('plaintiffs', p.id!, 'name', e.target.value)} /></div>
-                        <div className="md:col-span-3"><Input label="Doc" placeholder="Doc" value={p.doc} onChange={e => updateParty('plaintiffs', p.id!, 'doc', e.target.value)} /></div>
-                        <div className="md:col-span-4"><Input label="Qualificação" placeholder="Estado civil, profissão, endereço..." value={p.qualification} onChange={e => updateParty('plaintiffs', p.id!, 'qualification', e.target.value)} /></div>
-                      </div>
-                   </div>
-                 ))}</div>
-            </div>
           </div>
         );
       case 'Fatos':
         return (
           <div className="space-y-6 animate-in fade-in">
-             <div className="flex items-start justify-between gap-6">
-                <div className="flex-1"><label className="text-sm font-bold text-gray-700">Fatos e Narrativa</label><p className="text-xs text-gray-500 mb-2">Descreva o ocorrido detalhadamente.</p></div>
-                <div className="flex-1 max-w-sm bg-blue-50/50 border border-blue-100 rounded-2xl p-3 flex items-center gap-3 shadow-sm backdrop-blur-sm">
-                    <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600"><Sparkles size={16} /></div>
-                    <p className="text-[10px] leading-snug text-blue-800 font-medium"><strong>DICA PRO:</strong> Detalhes enriquecem a fundamentação técnica da IA.</p>
-                </div>
-             </div>
+             <label className="text-sm font-bold text-gray-700">Fatos e Narrativa</label>
              <div className="relative group">
                 <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.facts} onChange={e => handleInputChange('facts', e.target.value)} placeholder="Narre os fatos aqui..." />
                 {isTranscribing && (<div className="absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center rounded-2xl z-10"><div className="flex flex-col items-center gap-3"><Loader2 className="h-8 w-8 text-juris-600 animate-spin" /><span className="text-xs font-bold text-juris-900">TRANSCREVENDO...</span></div></div>)}
@@ -425,7 +367,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       case 'Pedidos':
         return (
             <div className="space-y-6 animate-in fade-in">
-               <div><label className="text-sm font-bold text-gray-700">Pedidos</label><p className="text-xs text-gray-500 mb-2">Liste os pedidos ou ditar.</p></div>
+               <label className="text-sm font-bold text-gray-700">Pedidos</label>
                <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.requests.join('\n')} onChange={e => handleInputChange('requests', e.target.value.split('\n'))} placeholder="Liste os pedidos..." />
                <Input label="Valor da Causa" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} />
             </div>
@@ -434,9 +376,9 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         return (
             <div className="text-center py-20 animate-in zoom-in-95">
                 {isGenerating ? (
-                    <div className="flex flex-col items-center gap-4"><Sparkles className="h-16 w-16 text-juris-500 animate-pulse" /><h3 className="text-2xl font-bold">Redigindo Peça...</h3><p className="text-gray-500">A IA está processando sua petição.</p></div>
+                    <div className="flex flex-col items-center gap-4"><Sparkles className="h-16 w-16 text-juris-500 animate-pulse" /><h3 className="text-2xl font-bold">Redigindo Peça...</h3><p className="text-gray-500">Isso pode levar alguns segundos.</p></div>
                 ) : genError ? (
-                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto"><AlertTriangle className="h-12 w-12 text-red-600" /><h3 className="text-lg font-bold text-red-900">Erro na Geração</h3><p className="text-sm text-red-700 text-center">{genError}</p><div className="flex gap-2 mt-4"><Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button><Button onClick={onCancel}>Voltar</Button></div></div>
+                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto"><AlertTriangle className="h-12 w-12 text-red-600" /><h3 className="text-lg font-bold text-red-900">Erro</h3><p className="text-sm text-red-700 text-center">{genError}</p><div className="flex gap-2 mt-4"><Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button><Button onClick={onCancel}>Voltar</Button></div></div>
                 ) : (
                     <><Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" /><h3 className="text-2xl font-bold mb-2">Tudo pronto!</h3><p className="text-gray-500 mb-8">Revise os dados antes de gerar a peça final.</p><Button size="lg" onClick={handleGenerate} className="px-12 h-14 text-lg shadow-xl"><Sparkles className="mr-2"/> Gerar Petição agora</Button></>
                 )}
@@ -457,16 +399,15 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
              <div className="flex-1 overflow-y-auto p-4 md:p-10 flex flex-col items-center bg-slate-200">
                  <div className="w-full max-w-[21cm] mb-6 flex items-center gap-2 text-juris-800 bg-juris-50 px-4 py-3 rounded-lg border border-juris-100 shadow-sm"><Info size={18} className="text-juris-600 animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Modo Edição Ativado</span></div>
                  <div className="relative w-full max-w-[21cm]">
-                   <div ref={contentRef} className="bg-white shadow-2xl p-[3cm_2cm_3cm_3cm] h-auto min-h-[29.7cm] outline-none border border-gray-100 mb-20 text-justify" contentEditable={true} suppressContentEditableWarning={true} onBlur={e => setGeneratedContent(e.currentTarget.innerHTML)} style={{ width: '100%', fontFamily: '"Times New Roman", serif', fontSize: '12pt', lineHeight: '1.5', boxSizing: 'border-box' }} />
+                   <div ref={contentRef} className="bg-white shadow-2xl p-[3cm_2cm_3cm_3cm] h-auto min-h-[29.7cm] outline-none border border-gray-200 mb-20 text-justify" contentEditable={true} suppressContentEditableWarning={true} onBlur={e => setGeneratedContent(e.currentTarget.innerHTML)} style={{ width: '100%', fontFamily: '"Times New Roman", serif', fontSize: '12pt', lineHeight: '1.5', boxSizing: 'border-box' }} />
                    <style>{`[contenteditable] h1, [contenteditable] h2, [contenteditable] h3 { text-align: center; text-transform: uppercase; margin: 18pt 0 12pt 0; font-weight: bold; outline: none; } [contenteditable] p { text-align: justify; text-indent: 1.25cm; margin-bottom: 12pt; margin-top: 0; outline: none; }`}</style>
                  </div>
              </div>
              <div className="w-full md:w-80 p-6 bg-white border-l overflow-y-auto shrink-0 flex flex-col gap-6 shadow-lg">
-                {cnjMetadata && (<div className="bg-white rounded-xl border border-juris-100 shadow-sm overflow-hidden"><div className="bg-juris-900 px-4 py-2 text-white text-[10px] font-bold uppercase tracking-wider">Metadados CNJ</div><div className="p-4 space-y-4"><div><label className="text-[9px] font-bold text-gray-400 uppercase">Classe</label><div className="text-xs bg-gray-50 p-2 rounded font-medium">{cnjMetadata.class}</div></div><div><label className="text-[9px] font-bold text-gray-400 uppercase">Assunto</label><div className="text-xs bg-gray-50 p-2 rounded font-medium">{cnjMetadata.subject}</div></div></div></div>)}
                 <div className="bg-sky-50 rounded-xl border border-sky-100 p-5 shadow-sm">
                    <h4 className="text-xs font-bold text-sky-800 uppercase mb-4 flex items-center gap-2 font-bold"><RefreshCw size={14}/> Refinar com IA</h4>
                    <textarea className="w-full h-32 rounded-lg border border-sky-200 p-3 text-sm mb-3 outline-none focus:ring-2 focus:ring-sky-300 transition-all" placeholder="Ex: Adicione fundamentação sobre danos morais..." value={refinementText} onChange={e => setRefinementText(e.target.value)} />
-                   <Button onClick={async () => { if (!generatedContent || !refinementText) return; setIsRefining(true); try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e: any) { alert("Erro ao refinar."); } finally { setIsRefining(false); } }} isLoading={isRefining} className="w-full bg-sky-600 hover:bg-sky-700">Ajustar Peça</Button>
+                   <Button onClick={async () => { if (!generatedContent || !refinementText) return; setIsRefining(true); try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e) { alert("Erro ao refinar."); } finally { setIsRefining(false); } }} isLoading={isRefining} className="w-full bg-sky-600 hover:bg-sky-700">Ajustar Peça</Button>
                 </div>
              </div>
          </div>
