@@ -113,7 +113,16 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
             systemInstruction: "Você é um perito em análise processual e tabelas unificadas do CNJ. Extraia dados com precisão cirúrgica."
           }
       });
-      return JSON.parse(response.text || "{}");
+      
+      const text = response.text || "{}";
+      try {
+          return JSON.parse(text);
+      } catch (e) {
+          // Fallback para caso a IA retorne markdown blocks ou texto extra
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) return JSON.parse(jsonMatch[0]);
+          throw new Error("Falha ao processar resposta da IA. Formato de dados inválido.");
+      }
   });
 };
 
@@ -201,7 +210,13 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
                 contents: prompt,
                 config: { responseMimeType: "application/json" }
             });
-            return { ...JSON.parse(response.text || "{}"), portalName: portal.name, filingUrl: portal.url };
+            const text = response.text || "{}";
+            try {
+                return { ...JSON.parse(text), portalName: portal.name, filingUrl: portal.url };
+            } catch (e) {
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                return { ...(jsonMatch ? JSON.parse(jsonMatch[0]) : {}), portalName: portal.name, filingUrl: portal.url };
+            }
         });
     } catch (e) {
         return { competence: data.jurisdiction, class: "Procedimento Comum", subject: data.area, portalName: portal.name, filingUrl: portal.url };

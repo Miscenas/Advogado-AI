@@ -137,43 +137,53 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    
     setIsExtracting(true);
-    try {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            const base64Data = (event.target?.result as string).split(',')[1];
-            const analysis = await extractDataFromDocument(base64Data, files[0].type);
-            
-            const aiPlaintiffs = (analysis.extractedData.plaintiffs || []).map((p: any) => ({...INITIAL_PARTY, ...p, id: 'pl-' + Math.random().toString(36).substr(2, 9)}));
-            const aiDefendants = (analysis.extractedData.defendants || []).map((p: any) => ({...INITIAL_PARTY, ...p, id: 'df-' + Math.random().toString(36).substr(2, 9)}));
+    const file = files[0];
+    const reader = new FileReader();
 
-            setFormData(prev => ({
-              ...prev,
-              area: analysis.extractedData.area || prev.area,
-              actionType: analysis.extractedData.actionType || prev.actionType,
-              jurisdiction: analysis.extractedData.jurisdiction || prev.jurisdiction,
-              facts: analysis.extractedData.facts || prev.facts,
-              plaintiffs: aiPlaintiffs.length > 0 ? aiPlaintiffs : prev.plaintiffs,
-              defendants: aiDefendants.length > 0 ? aiDefendants : prev.defendants,
-              value: analysis.extractedData.value || prev.value,
-              analyzedDocuments: [{ id: Math.random().toString(), fileName: files[0].name, docType: analysis.docType }]
-            }));
+    reader.onload = async (event) => {
+      try {
+        const base64Data = (event.target?.result as string).split(',')[1];
+        const analysis = await extractDataFromDocument(base64Data, file.type);
+        
+        const aiPlaintiffs = (analysis.extractedData.plaintiffs || []).map((p: any) => ({...INITIAL_PARTY, ...p, id: 'pl-' + Math.random().toString(36).substr(2, 9)}));
+        const aiDefendants = (analysis.extractedData.defendants || []).map((p: any) => ({...INITIAL_PARTY, ...p, id: 'df-' + Math.random().toString(36).substr(2, 9)}));
 
-            if (analysis.extractedData.cnjClass || analysis.extractedData.cnjSubject) {
-                setCnjMetadata({
-                    competence: analysis.extractedData.jurisdiction || 'Não Identificada',
-                    class: analysis.extractedData.cnjClass || 'Petição Inicial',
-                    subject: analysis.extractedData.cnjSubject || 'Direito Civil'
-                });
-            }
-            setIsExtracting(false);
-            setUploadSuccess(true);
-        };
-        reader.readAsDataURL(files[0]);
-    } catch (error: any) { 
-        setIsExtracting(false); 
-        alert("Erro na análise: " + (error.message || "Falha ao processar arquivo."));
-    }
+        setFormData(prev => ({
+          ...prev,
+          area: analysis.extractedData.area || prev.area,
+          actionType: analysis.extractedData.actionType || prev.actionType,
+          jurisdiction: analysis.extractedData.jurisdiction || prev.jurisdiction,
+          facts: analysis.extractedData.facts || prev.facts,
+          plaintiffs: aiPlaintiffs.length > 0 ? aiPlaintiffs : prev.plaintiffs,
+          defendants: aiDefendants.length > 0 ? aiDefendants : prev.defendants,
+          value: analysis.extractedData.value || prev.value,
+          analyzedDocuments: [{ id: Math.random().toString(), fileName: file.name, docType: analysis.docType }]
+        }));
+
+        if (analysis.extractedData.cnjClass || analysis.extractedData.cnjSubject) {
+            setCnjMetadata({
+                competence: analysis.extractedData.jurisdiction || 'Não Identificada',
+                class: analysis.extractedData.cnjClass || 'Petição Inicial',
+                subject: analysis.extractedData.cnjSubject || 'Direito Civil'
+            });
+        }
+        setIsExtracting(false);
+        setUploadSuccess(true);
+      } catch (error: any) {
+        console.error("Erro no processamento do arquivo:", error);
+        setIsExtracting(false);
+        alert("Erro na análise: " + (error.message || "Falha ao processar arquivo. Verifique sua conexão ou API Key."));
+      }
+    };
+
+    reader.onerror = () => {
+      setIsExtracting(false);
+      alert("Erro ao ler o arquivo localmente.");
+    };
+
+    reader.readAsDataURL(file);
   };
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetField: 'facts' | 'requests') => {
@@ -183,21 +193,26 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     try {
         const reader = new FileReader();
         reader.onload = async (event) => {
-            const base64Data = (event.target?.result as string).split(',')[1];
-            const transcription = await transcribeAudio(base64Data, files[0].type);
-            if (targetField === 'facts') {
-                setFormData(prev => ({ ...prev, facts: prev.facts + (prev.facts ? '\n\n' : '') + transcription }));
-            } else {
-                const currentRequests = formData.requests.join('\n');
-                const newRequests = (currentRequests + (currentRequests ? '\n' : '') + transcription).split('\n');
-                setFormData(prev => ({ ...prev, requests: newRequests }));
+            try {
+              const base64Data = (event.target?.result as string).split(',')[1];
+              const transcription = await transcribeAudio(base64Data, files[0].type);
+              if (targetField === 'facts') {
+                  setFormData(prev => ({ ...prev, facts: prev.facts + (prev.facts ? '\n\n' : '') + transcription }));
+              } else {
+                  const currentRequests = formData.requests.join('\n');
+                  const newRequests = (currentRequests + (currentRequests ? '\n' : '') + transcription).split('\n');
+                  setFormData(prev => ({ ...prev, requests: newRequests }));
+              }
+              setIsTranscribing(false);
+            } catch (err: any) {
+              setIsTranscribing(false);
+              alert("Erro na transcrição: " + (err.message || "Tente novamente."));
             }
-            setIsTranscribing(false);
         };
         reader.readAsDataURL(files[0]);
     } catch (error: any) {
         setIsTranscribing(false);
-        alert("Erro na transcrição: " + (error.message || "Tente novamente."));
+        alert("Erro ao ler áudio.");
     }
   };
 
