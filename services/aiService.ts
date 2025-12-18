@@ -1,62 +1,32 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
 /**
- * Obtém a chave de API de forma robusta para ambientes de produção.
- * Prioriza process.env conforme diretrizes, mas previne erros de referência em browsers.
- */
-const getApiKey = (): string => {
-  let key = "";
-  
-  // 1. Tentativa via process.env (Requisito principal)
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-      key = process.env.API_KEY;
-    }
-  } catch (e) {}
-
-  // 2. Fallback para import.meta.env (Comum em ambientes Vite/Modernos)
-  if (!key) {
-    try {
-      key = (import.meta as any).env?.API_KEY || (import.meta as any).env?.VITE_API_KEY || "";
-    } catch (e) {}
-  }
-
-  // 3. Fallback para escopo global (Injeção direta)
-  if (!key && typeof window !== 'undefined') {
-    key = (window as any).API_KEY || "";
-  }
-
-  return key;
-};
-
-/**
- * Verifica se o sistema tem uma chave de IA configurada.
+ * Verifica se a chave de API está configurada no ambiente.
  */
 export const hasAiKey = (): boolean => {
-  const key = getApiKey();
-  return !!(key && key.length > 10);
+  return !!(process.env.API_KEY && process.env.API_KEY.length > 10);
 };
 
 const SHIELD_PROTOCOL = `
 PROTOCOLO DE BLINDAGEM E EXCELÊNCIA JURÍDICA:
 1. Você é um ADVOGADO SÊNIOR BRASILEIRO com mais de 20 anos de prática jurídica.
-2. Identidade: Rigorosa, técnica, polida e estratégica.
+2. Identidade: Rigorosa, técnica, polida e estratégica. Utilize o "juridiquês" de alto nível.
 3. Fundamentação: Utilize CPC/2015 para cível e CLT para trabalhista.
-4. Estrutura: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
+4. Estrutura de Peça Sênior: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
 `;
 
 /**
- * Runner genérico para chamadas ao Gemini com tratamento de erro e inicialização dinâmica.
+ * Runner para chamadas ao Gemini. 
+ * Inicializa um novo cliente a cada chamada para garantir o uso da chave de ambiente atualizada.
  */
 const runGenAI = async (callback: (ai: GoogleGenAI) => Promise<any>): Promise<any> => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-        throw new Error("API_KEY_MISSING: A variável de ambiente API_KEY não foi configurada. Verifique as configurações de Secrets do seu deploy (ex: Vercel/Netlify).");
+    if (!process.env.API_KEY) {
+        throw new Error("API_KEY_MISSING: A variável de ambiente API_KEY não foi configurada no servidor de deploy.");
     }
     
-    // Inicializa o cliente Gemini com a chave encontrada
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
         return await callback(ai);
@@ -65,10 +35,10 @@ const runGenAI = async (callback: (ai: GoogleGenAI) => Promise<any>): Promise<an
         const msg = error.message || "";
         
         if (msg.includes('429') || msg.includes('Quota')) {
-            throw new Error("LIMITE_EXCEDIDO: A cota da API foi atingida. Tente novamente em instantes.");
+            throw new Error("LIMITE_EXCEDIDO: Cota da API atingida. Tente novamente em breve.");
         }
-        if (msg.includes('API key not valid') || msg.includes('403')) {
-            throw new Error("CHAVE_INVALIDA: A chave de API configurada no ambiente é inválida ou expirou.");
+        if (msg.includes('403') || msg.includes('not valid')) {
+            throw new Error("CHAVE_INVALIDA: A chave de API (API_KEY) configurada é inválida.");
         }
         throw error;
     }
@@ -80,15 +50,23 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   extractedData: Partial<PetitionFormData> & { cnjClass?: string, cnjSubject?: string };
 }> => {
   return await runGenAI(async (ai) => {
-      const prompt = `Analise este documento jurídico. Extraia dados cadastrais e IDENTIFIQUE a classificação processual (CNJ).
-      Retorne APENAS JSON: { 
+      const prompt = `Analise este documento jurídico brasileiro. 
+      Extraia dados cadastrais e IDENTIFIQUE a classificação processual correta (CNJ).
+      
+      RETORNE APENAS JSON: 
+      { 
         "docType": string, 
         "summary": string, 
         "extractedData": { 
-          "area": string, "actionType": string, "jurisdiction": string, "cnjClass": string, "cnjSubject": string,
+          "area": string, 
+          "actionType": string, 
+          "jurisdiction": string, 
+          "cnjClass": string,
+          "cnjSubject": string,
           "plaintiffs": [{"name": string, "type": "pf"|"pj", "doc": string}], 
           "defendants": [{"name": string, "type": "pf"|"pj", "doc": string}], 
-          "facts": string, "value": string 
+          "facts": string, 
+          "value": string 
         } 
       }`;
       
@@ -97,7 +75,7 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
           contents: { parts: [{ inlineData: { mimeType, data: base64Data } }, { text: prompt }] },
           config: { 
             responseMimeType: "application/json",
-            systemInstruction: "Você é um perito em análise processual e tabelas unificadas do CNJ."
+            systemInstruction: "Você é um perito em análise processual brasileira."
           }
       });
       
@@ -107,14 +85,18 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
       } catch (e) {
           const jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) return JSON.parse(jsonMatch[0]);
-          throw new Error("Falha ao processar os dados do documento. Tente novamente.");
+          throw new Error("Falha ao interpretar resposta da IA.");
       }
   });
 };
 
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
     return await runGenAI(async (ai) => {
-        const prompt = `REDIJA UMA PETIÇÃO INICIAL SÊNIOR. AREA: ${data.area}. DADOS: ${JSON.stringify(data)}`;
+        const prompt = `REDIJA UMA PETIÇÃO INICIAL SÊNIOR. 
+        DADOS: ${JSON.stringify(data)}
+        ÁREA: ${data.area.toUpperCase()}
+        AÇÃO: ${data.actionType}`;
+        
         const response = await ai.models.generateContent({ 
             model: 'gemini-3-pro-preview', 
             contents: prompt,
@@ -126,7 +108,9 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
 export const generateLegalDefense = async (data: PetitionFormData): Promise<string> => {
     return await runGenAI(async (ai) => {
-        const prompt = `REDIJA UMA CONTESTAÇÃO TÉCNICA. DADOS: ${JSON.stringify(data)}`;
+        const prompt = `REDIJA UMA CONTESTAÇÃO/DEFESA TÉCNICA SÊNIOR. 
+        DADOS: ${JSON.stringify(data)}`;
+        
         const response = await ai.models.generateContent({ 
             model: 'gemini-3-pro-preview', 
             contents: prompt,
@@ -138,7 +122,9 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
 
 export const suggestFilingMetadata = async (data: PetitionFormData): Promise<PetitionFilingMetadata> => {
     return await runGenAI(async (ai) => {
-        const prompt = `Sugira Competência, Classe e Assunto (CNJ) para: ${data.area}, ${data.actionType}. Retorne JSON { "competence": string, "class": string, "subject": string }`;
+        const prompt = `Sugira Competência, Classe e Assunto (CNJ) para: ${data.area}, ${data.actionType}. 
+        Retorne JSON: { "competence": string, "class": string, "subject": string }`;
+        
         const response = await ai.models.generateContent({ 
             model: 'gemini-3-flash-preview', 
             contents: prompt,
@@ -150,7 +136,7 @@ export const suggestFilingMetadata = async (data: PetitionFormData): Promise<Pet
 
 export const searchJurisprudence = async (query: string, scope: string): Promise<string> => {
     return await runGenAI(async (ai) => {
-        const prompt = `Busque jurisprudência relevante sobre: "${query}". Retorne ementas em HTML.`;
+        const prompt = `Busque jurisprudência relevante sobre: "${query}". Retorne ementas formatadas em HTML.`;
         const response = await ai.models.generateContent({ 
             model: 'gemini-3-flash-preview', 
             contents: prompt,
@@ -163,7 +149,7 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
         
         if (links.length > 0) {
             const uniqueLinks = Array.from(new Set(links));
-            text += `<div class='mt-4 p-4 bg-slate-50 border-t'><strong>Referências Oficiais:</strong><ul class='list-disc ml-4'>`;
+            text += `<div class='mt-4 p-4 bg-slate-50 border-t'><strong>Referências:</strong><ul class='list-disc ml-4'>`;
             uniqueLinks.forEach(link => { text += `<li><a href='${link}' target='_blank' class='text-blue-600 break-all'>${link}</a></li>`; });
             text += `</ul></div>`;
         }
@@ -175,7 +161,7 @@ export const refineLegalPetition = async (currentContent: string, instructions: 
     return await runGenAI(async (ai) => {
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: `Refine esta petição: "${instructions}". Peça: ${currentContent}`,
+            contents: `Aperfeiçoe tecnicamente este texto jurídico: "${instructions}". Texto original: ${currentContent}`,
             config: { systemInstruction: SHIELD_PROTOCOL }
         });
         return response.text || currentContent;
@@ -186,7 +172,7 @@ export const transcribeAudio = async (base64Data: string, mimeType: string): Pro
     return await runGenAI(async (ai) => {
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: { parts: [{ inlineData: { mimeType, data: base64Data } }, { text: "Transcreva este relato jurídico com precisão técnica." }] }
+            contents: { parts: [{ inlineData: { mimeType, data: base64Data } }, { text: "Transcreva este relato jurídico mantendo o rigor técnico." }] }
         });
         return response.text || "";
     });

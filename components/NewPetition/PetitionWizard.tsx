@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty, UsageLimit } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -172,20 +173,20 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         setUploadSuccess(true);
       } catch (error: any) {
         console.error("Erro no processamento:", error);
-        setIsExtracting(false); // Garante que o spinner de carregamento pare
+        setIsExtracting(false);
         
         const errorMessage = error.message || "";
         if (errorMessage.includes("API_KEY_MISSING")) {
-           alert("Configuração Necessária: A chave de API do Gemini não foi detectada. Verifique se a variável de ambiente API_KEY foi configurada no servidor de deploy.");
+           alert("Configuração Necessária: A chave de API do Gemini (API_KEY) não foi encontrada nas variáveis de ambiente do servidor.");
         } else {
-           alert("Erro na análise: " + (errorMessage || "Falha ao processar arquivo."));
+           alert("Erro na análise: " + (errorMessage || "Falha ao processar arquivo. Verifique sua conexão."));
         }
       }
     };
 
     reader.onerror = () => {
       setIsExtracting(false);
-      alert("Erro ao ler o arquivo do seu computador.");
+      alert("Erro ao ler o arquivo.");
     };
 
     reader.readAsDataURL(file);
@@ -217,13 +218,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         reader.readAsDataURL(files[0]);
     } catch (error) {
         setIsTranscribing(false);
-        alert("Erro ao ler arquivo de áudio.");
+        alert("Erro ao ler áudio.");
     }
   };
 
   const toggleRecording = (targetField: 'facts' | 'requests') => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Seu navegador não suporta reconhecimento de voz.");
+    if (!SpeechRecognition) return alert("Navegador sem suporte a voz.");
     if (isListening) { recognitionRef.current?.stop(); return; }
     
     const rec = new SpeechRecognition();
@@ -255,7 +256,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       setGeneratedContent(content);
       setIsFullScreen(true);
     } catch (error: any) { 
-        setGenError(error.message || "Ocorreu um erro ao gerar a petição.");
+        setGenError(error.message || "Erro desconhecido ao gerar a peça.");
     } finally { 
         setIsGenerating(false); 
     }
@@ -270,9 +271,9 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           content: generatedContent, plaintiff_name: formData.plaintiffs[0]?.name, defendant_name: formData.defendants[0]?.name, 
           analyzed_documents: formData.analyzedDocuments, created_at: new Date().toISOString()
       }]).select().single();
-      alert("Salvo com sucesso!");
+      alert("Peça salva com sucesso!");
       onSuccess(); 
-    } catch (error) { alert("Erro ao salvar no banco de dados."); } finally { setIsSaving(false); }
+    } catch (error) { alert("Erro ao salvar."); } finally { setIsSaving(false); }
   };
 
   const handleDownloadDoc = () => {
@@ -313,14 +314,14 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                     <div className="flex flex-col items-center gap-2">
                         <FileCheck className="h-16 w-16 text-green-600 mb-2" />
                         <h3 className="text-xl font-bold text-green-900">Análise Completa!</h3>
-                        <p className="text-green-700">Dados identificados com sucesso.</p>
+                        <p className="text-green-700">Dados e fatos extraídos.</p>
                         <button onClick={() => fileInputRef.current?.click()} className="text-xs text-sky-600 underline mt-4">Trocar Arquivo</button>
                     </div>
                 ) : (
                     <>
                         <Upload className="h-16 w-16 text-sky-400 mx-auto mb-4" />
-                        <h3 className="text-xl font-bold text-gray-900">Upload e Análise</h3>
-                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Extrairemos CPFs, Nomes e Resumo dos Fatos automaticamente.</p>
+                        <h3 className="text-xl font-bold text-gray-900">Upload para Análise</h3>
+                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Extrairemos CPFs, Nomes e Resumo dos Fatos do documento enviado.</p>
                         <Button variant="primary" onClick={() => fileInputRef.current?.click()}>Selecionar Documento</Button>
                     </>
                 )}
@@ -334,7 +335,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                 <div className="bg-amber-100 p-2 rounded-xl text-amber-600"><Lightbulb size={20} /></div>
                 <div>
                     <h4 className="text-sm font-bold text-amber-900 mb-0.5 tracking-tight">DICA: Preenchimento opcional.</h4>
-                    <p className="text-xs text-amber-700 leading-relaxed">A IA organiza os dados no cabeçalho automaticamente a partir da narrativa.</p>
+                    <p className="text-xs text-amber-700 leading-relaxed">Se você narrar os nomes no texto dos fatos, a IA irá qualificar as partes automaticamente.</p>
                 </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -344,43 +345,43 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                     {AREAS_DO_DIREITO.map(area => (<option key={area.value} value={area.value}>{area.label}</option>))}
                   </select>
                 </div>
-                <Input label="Tipo de Ação" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Ação de Cobrança, Indenizatória..." />
+                <Input label="Tipo de Ação" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Indenizatória, Cobrança..." />
             </div>
-            <Input label="Jurisdição" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="AO JUÍZO DO FORO CENTRAL..." />
+            <Input label="Jurisdição" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="AO JUÍZO DA..." />
           </div>
         );
       case 'Fatos':
         return (
           <div className="space-y-6 animate-in fade-in">
-             <label className="text-sm font-bold text-gray-700">Fatos e Narrativa</label>
+             <label className="text-sm font-bold text-gray-700">Narrativa dos Fatos</label>
              <div className="relative group">
-                <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.facts} onChange={e => handleInputChange('facts', e.target.value)} placeholder="Narre os fatos aqui..." />
+                <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.facts} onChange={e => handleInputChange('facts', e.target.value)} placeholder="Relate o ocorrido com o máximo de detalhes..." />
                 {isTranscribing && (<div className="absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center rounded-2xl z-10"><div className="flex flex-col items-center gap-3"><Loader2 className="h-8 w-8 text-juris-600 animate-spin" /><span className="text-xs font-bold text-juris-900">TRANSCREVENDO...</span></div></div>)}
              </div>
              <div className="flex gap-4 justify-center pt-2">
                 <input type="file" ref={audioInputRef} onChange={e => handleAudioUpload(e, 'facts')} className="hidden" accept="audio/*" />
-                <button onClick={() => audioInputRef.current?.click()} className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg hover:-translate-y-0.5 transition-all"><FileAudio size={20} /><span className="text-sm font-bold uppercase">Áudio</span></button>
-                <button onClick={() => toggleRecording('facts')} className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white text-gray-700'}`}>{isListening ? <MicOff size={20} /> : <Mic size={20} className="text-red-500" />}<span className="text-sm font-bold uppercase">{isListening ? 'Parar' : 'Ditar'}</span></button>
+                <button onClick={() => audioInputRef.current?.click()} className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg hover:-translate-y-0.5 transition-all"><FileAudio size={20} /><span className="text-sm font-bold uppercase">Importar Áudio</span></button>
+                <button onClick={() => toggleRecording('facts')} className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white text-gray-700'}`}>{isListening ? <MicOff size={20} /> : <Mic size={20} className="text-red-500" />}<span className="text-sm font-bold uppercase">{isListening ? 'Parar' : 'Ditar Fatos'}</span></button>
              </div>
           </div>
         );
       case 'Pedidos':
         return (
             <div className="space-y-6 animate-in fade-in">
-               <label className="text-sm font-bold text-gray-700">Pedidos</label>
-               <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.requests.join('\n')} onChange={e => handleInputChange('requests', e.target.value.split('\n'))} placeholder="Liste os pedidos..." />
-               <Input label="Valor da Causa" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} />
+               <label className="text-sm font-bold text-gray-700">Pedidos e Valor da Causa</label>
+               <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.requests.join('\n')} onChange={e => handleInputChange('requests', e.target.value.split('\n'))} placeholder="Liste os pedidos principais..." />
+               <Input label="Valor da Causa (Estimado)" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} />
             </div>
         );
       case 'Gerar':
         return (
             <div className="text-center py-20 animate-in zoom-in-95">
                 {isGenerating ? (
-                    <div className="flex flex-col items-center gap-4"><Sparkles className="h-16 w-16 text-juris-500 animate-pulse" /><h3 className="text-2xl font-bold">Redigindo Peça...</h3><p className="text-gray-500">Isso pode levar alguns segundos.</p></div>
+                    <div className="flex flex-col items-center gap-4"><Sparkles className="h-16 w-16 text-juris-500 animate-pulse" /><h3 className="text-2xl font-bold">Redigindo Peça de Excelência...</h3><p className="text-gray-500">Isso pode levar alguns segundos dependendo da complexidade.</p></div>
                 ) : genError ? (
-                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto"><AlertTriangle className="h-12 w-12 text-red-600" /><h3 className="text-lg font-bold text-red-900">Erro</h3><p className="text-sm text-red-700 text-center">{genError}</p><div className="flex gap-2 mt-4"><Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button><Button onClick={onCancel}>Voltar</Button></div></div>
+                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto"><AlertTriangle className="h-12 w-12 text-red-600" /><h3 className="text-lg font-bold text-red-900">Erro na Geração</h3><p className="text-sm text-red-700 text-center">{genError}</p><div className="flex gap-2 mt-4"><Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button><Button onClick={onCancel}>Sair</Button></div></div>
                 ) : (
-                    <><Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" /><h3 className="text-2xl font-bold mb-2">Tudo pronto!</h3><p className="text-gray-500 mb-8">Revise os dados antes de gerar a peça final.</p><Button size="lg" onClick={handleGenerate} className="px-12 h-14 text-lg shadow-xl"><Sparkles className="mr-2"/> Gerar Petição agora</Button></>
+                    <><Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" /><h3 className="text-2xl font-bold mb-2">Petição Pronta para Geração</h3><p className="text-gray-500 mb-8">A IA irá fundamentar sua peça com base na narrativa fornecida.</p><Button size="lg" onClick={handleGenerate} className="px-12 h-14 text-lg shadow-xl"><Sparkles className="mr-2"/> Gerar Petição agora</Button></>
                 )}
             </div>
         );
@@ -392,22 +393,21 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     return (
       <div className="fixed inset-0 z-[200] bg-gray-100 flex flex-col h-screen overflow-hidden">
          <div className="bg-white border-b px-6 py-3 flex justify-between items-center shadow-sm shrink-0">
-             <div className="flex items-center gap-4"><button onClick={() => setIsFullScreen(false)} className="p-2 text-gray-400 hover:text-gray-900"><X size={24}/></button><h2 className="text-lg font-bold text-juris-900">Petição Gerada</h2></div>
-             <div className="flex gap-2"><Button variant="outline" onClick={handlePrint}><Printer size={16} className="mr-2"/> Imprimir</Button><Button variant="outline" onClick={handleDownloadDoc}><Download size={16} className="mr-2"/> Word</Button><Button onClick={handleSave} isLoading={isSaving}><Save size={18} className="mr-2"/> Salvar</Button></div>
+             <div className="flex items-center gap-4"><button onClick={() => setIsFullScreen(false)} className="p-2 text-gray-400 hover:text-gray-900"><X size={24}/></button><h2 className="text-lg font-bold text-juris-900">Visualização da Peça</h2></div>
+             <div className="flex gap-2"><Button variant="outline" onClick={handlePrint}><Printer size={16} className="mr-2"/> Imprimir</Button><Button variant="outline" onClick={handleDownloadDoc}><Download size={16} className="mr-2"/> Word</Button><Button onClick={handleSave} isLoading={isSaving}><Save size={18} className="mr-2"/> Salvar no Sistema</Button></div>
          </div>
          <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
              <div className="flex-1 overflow-y-auto p-4 md:p-10 flex flex-col items-center bg-slate-200">
-                 <div className="w-full max-w-[21cm] mb-6 flex items-center gap-2 text-juris-800 bg-juris-50 px-4 py-3 rounded-lg border border-juris-100 shadow-sm"><Info size={18} className="text-juris-600 animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Modo Edição Ativado</span></div>
                  <div className="relative w-full max-w-[21cm]">
-                   <div ref={contentRef} className="bg-white shadow-2xl p-[3cm_2cm_3cm_3cm] h-auto min-h-[29.7cm] outline-none border border-gray-200 mb-20 text-justify" contentEditable={true} suppressContentEditableWarning={true} onBlur={e => setGeneratedContent(e.currentTarget.innerHTML)} style={{ width: '100%', fontFamily: '"Times New Roman", serif', fontSize: '12pt', lineHeight: '1.5', boxSizing: 'border-box' }} />
+                   <div ref={contentRef} className="bg-white shadow-2xl p-[3cm_2cm_3cm_3cm] h-auto min-h-[29.7cm] outline-none border border-gray-100 mb-20 text-justify" contentEditable={true} suppressContentEditableWarning={true} onBlur={e => setGeneratedContent(e.currentTarget.innerHTML)} style={{ width: '100%', fontFamily: '"Times New Roman", serif', fontSize: '12pt', lineHeight: '1.5', boxSizing: 'border-box' }} />
                    <style>{`[contenteditable] h1, [contenteditable] h2, [contenteditable] h3 { text-align: center; text-transform: uppercase; margin: 18pt 0 12pt 0; font-weight: bold; outline: none; } [contenteditable] p { text-align: justify; text-indent: 1.25cm; margin-bottom: 12pt; margin-top: 0; outline: none; }`}</style>
                  </div>
              </div>
              <div className="w-full md:w-80 p-6 bg-white border-l overflow-y-auto shrink-0 flex flex-col gap-6 shadow-lg">
                 <div className="bg-sky-50 rounded-xl border border-sky-100 p-5 shadow-sm">
-                   <h4 className="text-xs font-bold text-sky-800 uppercase mb-4 flex items-center gap-2 font-bold"><RefreshCw size={14}/> Refinar com IA</h4>
-                   <textarea className="w-full h-32 rounded-lg border border-sky-200 p-3 text-sm mb-3 outline-none focus:ring-2 focus:ring-sky-300 transition-all" placeholder="Ex: Adicione fundamentação sobre danos morais..." value={refinementText} onChange={e => setRefinementText(e.target.value)} />
-                   <Button onClick={async () => { if (!generatedContent || !refinementText) return; setIsRefining(true); try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e) { alert("Erro ao refinar."); } finally { setIsRefining(false); } }} isLoading={isRefining} className="w-full bg-sky-600 hover:bg-sky-700">Ajustar Peça</Button>
+                   <h4 className="text-xs font-bold text-sky-800 uppercase mb-4 flex items-center gap-2 font-bold"><RefreshCw size={14}/> Refinar Texto</h4>
+                   <textarea className="w-full h-32 rounded-lg border border-sky-200 p-3 text-sm mb-3 outline-none focus:ring-2 focus:ring-sky-300 transition-all" placeholder="Ex: Adicione fundamentação sobre o Art. 186 do CC..." value={refinementText} onChange={e => setRefinementText(e.target.value)} />
+                   <Button onClick={async () => { if (!generatedContent || !refinementText) return; setIsRefining(true); try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e) { alert("Erro ao refinar."); } finally { setIsRefining(false); } }} isLoading={isRefining} className="w-full bg-sky-600 hover:bg-sky-700">Aplicar Ajuste</Button>
                 </div>
              </div>
          </div>
@@ -419,8 +419,8 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     <div className="max-w-4xl mx-auto py-8">
       {mode === 'selection' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <button onClick={() => { setMode('scratch'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-juris-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-juris-50 p-6 rounded-full group-hover:bg-juris-100 transition-colors mb-6"><PenTool size={56} className="text-juris-600" /></div><h3 className="text-2xl font-bold text-gray-900">Petição do Zero</h3><p className="text-gray-500 mt-2 max-w-xs">IA redige a peça completa a partir da sua narrativa.</p></button>
-          <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-sky-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-sky-50 p-6 rounded-full group-hover:bg-sky-100 transition-colors mb-6"><FileUp size={56} className="text-sky-600" /></div><h3 className="text-2xl font-bold text-gray-900">Importar Documento</h3><p className="text-gray-500 mt-2 max-w-xs">IA analisa um arquivo e preenche os dados.</p></button>
+          <button onClick={() => { setMode('scratch'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-juris-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-juris-50 p-6 rounded-full group-hover:bg-juris-100 transition-colors mb-6"><PenTool size={56} className="text-juris-600" /></div><h3 className="text-2xl font-bold text-gray-900">Petição do Zero</h3><p className="text-gray-500 mt-2 max-w-xs">Narre os fatos e a IA redigirá a peça completa para você.</p></button>
+          <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-sky-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-sky-50 p-6 rounded-full group-hover:bg-sky-100 transition-colors mb-6"><FileUp size={56} className="text-sky-600" /></div><h3 className="text-2xl font-bold text-gray-900">Analisar Documento</h3><p className="text-gray-500 mt-2 max-w-xs">Envie um documento para extração automática de dados.</p></button>
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
