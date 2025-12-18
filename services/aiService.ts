@@ -12,19 +12,22 @@ Estrutura: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
 
 /**
  * Helper para instanciar o SDK seguindo as diretrizes exclusivas.
- * A chave DEVE vir de process.env.API_KEY.
+ * O código deve usar estritamente process.env.API_KEY.
  */
 const getAiClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+  
+  // Verificação robusta para ambientes de produção (Vercel/Vite)
+  if (!apiKey || apiKey === 'undefined' || apiKey === '' || apiKey.length < 5) {
     throw new Error("API_KEY_NOT_FOUND");
   }
+  
   return new GoogleGenAI({ apiKey });
 };
 
 export const hasAiKey = (): boolean => {
   const apiKey = process.env.API_KEY;
-  return !!(apiKey && apiKey !== 'undefined' && apiKey.length > 10);
+  return !!(apiKey && apiKey !== 'undefined' && apiKey.length > 5);
 };
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
@@ -71,7 +74,7 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   } catch (error: any) {
     if (error.message === "API_KEY_NOT_FOUND") throw error;
     console.error("Erro na extração:", error);
-    throw new Error("Falha na análise: A IA não pôde processar o documento no momento.");
+    throw new Error("Falha na análise da IA: Verifique a conexão e a chave de API.");
   }
 };
 
