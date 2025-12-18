@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty, UsageLimit } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -172,7 +171,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         setIsExtracting(false);
         setUploadSuccess(true);
       } catch (error: any) {
-        console.error("Erro no processamento do arquivo:", error);
         setIsExtracting(false);
         alert("Erro na análise: " + (error.message || "Falha ao processar arquivo. Verifique sua conexão ou API Key."));
       }
@@ -273,7 +271,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const handleDownloadDoc = () => {
     if (!generatedContent) return;
     
-    // Limpeza profunda para evitar que tags HTML sujem o Word
     const cleanContent = generatedContent
         .replace(/<style([\s\S]*?)<\/style>/gi, '')
         .replace(/<html([\s\S]*?)>/gi, '')
@@ -283,7 +280,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         .replace(/<!DOCTYPE([\s\S]*?)>/gi, '')
         .trim();
 
-    // Template Microsoft Word com margens judiciais oficiais (3cm esquerda, 2cm demais)
     const blobContent = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
@@ -291,41 +287,19 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         <style>
           @page Section1 { 
             size: 21cm 29.7cm; 
-            margin: 2cm 2cm 2cm 3cm; /* Topo, Direita, Baixo, Esquerda (Padrao Judiciário) */
+            margin: 2cm 2cm 2cm 3cm; 
             mso-header-margin: 35.4pt; 
             mso-footer-margin: 35.4pt; 
             mso-paper-source: 0; 
           }
           div.Section1 { page: Section1; }
-          body { 
-            font-family: "Times New Roman", serif; 
-            font-size: 12pt; 
-            line-height: 1.5; 
-            text-align: justify; 
-            color: #000;
-          }
-          p { 
-            margin: 0; 
-            margin-bottom: 12pt; 
-            text-indent: 1.25cm; /* Recuo oficial de parágrafo */
-            text-align: justify; 
-            line-height: 1.5;
-          }
-          h1, h2, h3 { 
-            text-align: center; 
-            font-weight: bold; 
-            text-transform: uppercase; 
-            margin: 18pt 0 12pt 0; 
-            text-indent: 0; 
-            font-size: 12pt;
-          }
-          li { text-align: justify; margin-bottom: 6pt; }
+          body { font-family: "Times New Roman", serif; font-size: 12pt; line-height: 1.5; text-align: justify; }
+          p { margin: 0; margin-bottom: 12pt; text-indent: 1.25cm; text-align: justify; }
+          h1, h2, h3 { text-align: center; font-weight: bold; text-transform: uppercase; margin: 18pt 0 12pt 0; text-indent: 0; font-size: 12pt; }
         </style>
       </head>
       <body>
-        <div class="Section1">
-          ${cleanContent}
-        </div>
+        <div class="Section1">${cleanContent}</div>
       </body>
       </html>
     `;
@@ -344,24 +318,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         <head>
           <style>
             @page { margin: 2.5cm 2cm 2.5cm 3cm; } 
-            body { 
-              font-family: "Times New Roman", serif; 
-              padding: 0; 
-              margin: 0; 
-              line-height: 1.5; 
-              font-size: 12pt;
-              color: #000;
-            } 
+            body { font-family: "Times New Roman", serif; padding: 0; margin: 0; line-height: 1.5; font-size: 12pt; color: #000; } 
             p { text-align: justify; text-indent: 1.25cm; margin-bottom: 12pt; margin-top: 0; } 
             h1, h2, h3 { text-align: center; text-transform: uppercase; font-weight: bold; margin: 18pt 0 12pt 0; text-indent: 0; }
             .print-container { padding: 2.5cm 2cm 2.5cm 3cm; }
           </style>
         </head>
-        <body>
-          <div class="print-container">
-            ${generatedContent.replace(/<style([\s\S]*?)<\/style>/gi, '')}
-          </div>
-        </body>
+        <body><div class="print-container">${generatedContent.replace(/<style([\s\S]*?)<\/style>/gi, '')}</div></body>
       </html>
     `);
     printWindow.document.close();
@@ -383,20 +346,20 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                 {isExtracting ? (
                     <div className="flex flex-col items-center gap-4">
                         <Loader2 className="h-12 w-12 text-sky-600 animate-spin" />
-                        <p className="font-bold text-sky-700">Analisando documento e extraindo Fatos/Resumo...</p>
+                        <p className="font-bold text-sky-700">Analisando documento...</p>
                     </div>
                 ) : uploadSuccess ? (
                     <div className="flex flex-col items-center gap-2">
                         <FileCheck className="h-16 w-16 text-green-600 mb-2" />
                         <h3 className="text-xl font-bold text-green-900">Análise Completa!</h3>
-                        <p className="text-green-700">Dados das partes, classificação e <strong>Resumo dos Fatos</strong> identificados.</p>
+                        <p className="text-green-700">Dados identificados com sucesso.</p>
                         <button onClick={() => fileInputRef.current?.click()} className="text-xs text-sky-600 underline mt-4">Trocar Arquivo</button>
                     </div>
                 ) : (
                     <>
                         <Upload className="h-16 w-16 text-sky-400 mx-auto mb-4" />
-                        <h3 className="text-xl font-bold text-gray-900">Upload e Análise de Fatos</h3>
-                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Extrairemos CPFs, Nomes, Classe, Assunto e um <strong>Resumo Detalhado dos Fatos</strong> do seu documento.</p>
+                        <h3 className="text-xl font-bold text-gray-900">Upload e Análise</h3>
+                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Extrairemos CPFs, Nomes e Resumo dos Fatos automaticamente.</p>
                         <Button variant="primary" onClick={() => fileInputRef.current?.click()}>Selecionar Documento</Button>
                     </>
                 )}
@@ -406,102 +369,35 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       case 'Dados':
         return (
           <div className="space-y-8 animate-in fade-in">
-            {/* Aviso iOS Style para Dados Opcionais */}
             <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 flex items-start gap-4 shadow-sm backdrop-blur-sm">
-                <div className="bg-amber-100 p-2 rounded-xl text-amber-600">
-                    <Lightbulb size={20} />
-                </div>
+                <div className="bg-amber-100 p-2 rounded-xl text-amber-600"><Lightbulb size={20} /></div>
                 <div>
-                    <h4 className="text-sm font-bold text-amber-900 mb-0.5 tracking-tight">DICA: O preenchimento detalhado é opcional.</h4>
-                    <p className="text-xs text-amber-700 leading-relaxed">Você pode narrar os dados das partes (nomes, documentos, endereços) diretamente no passo de <strong>"Fatos"</strong>. A IA organizará tudo no cabeçalho automaticamente.</p>
+                    <h4 className="text-sm font-bold text-amber-900 mb-0.5 tracking-tight">DICA: Preenchimento opcional.</h4>
+                    <p className="text-xs text-amber-700 leading-relaxed">A IA organiza os dados no cabeçalho automaticamente a partir da narrativa.</p>
                 </div>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="w-full">
                   <label className="mb-2 block text-sm font-medium text-gray-700">Área do Direito</label>
-                  <select 
-                    className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-juris-500 transition-all shadow-sm cursor-pointer"
-                    value={formData.area} 
-                    onChange={e => handleInputChange('area', e.target.value)}
-                  >
-                    {AREAS_DO_DIREITO.map(area => (
-                      <option key={area.value} value={area.value}>{area.label}</option>
-                    ))}
+                  <select className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-juris-500 transition-all shadow-sm cursor-pointer" value={formData.area} onChange={e => handleInputChange('area', e.target.value)}>
+                    {AREAS_DO_DIREITO.map(area => (<option key={area.value} value={area.value}>{area.label}</option>))}
                   </select>
                 </div>
-                <Input label="Tipo de Ação" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Ex: Ação de Cobrança, Indenizatória..." />
+                <Input label="Tipo de Ação" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Ação de Cobrança, Indenizatória..." />
             </div>
-            <Input label="Jurisdição" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="Ex: AO JUÍZO DO FORO CENTRAL..." />
-            
+            <Input label="Jurisdição" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="AO JUÍZO DO FORO CENTRAL..." />
             <div className="space-y-8 pt-6 border-t">
-               <div className="flex items-center justify-between">
-                 <h4 className="font-bold text-sm text-blue-800 flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full">
-                   <Users size={16}/> POLO ATIVO
-                 </h4>
-                 <Button variant="ghost" size="sm" onClick={() => addParty('plaintiffs')} className="text-blue-600 hover:text-blue-800 font-bold">
-                   <Plus size={14} className="mr-1"/> Adicionar
-                 </Button>
-               </div>
-               
-               <div className="grid gap-6">
-                 {formData.plaintiffs.map(p => (
+               <div className="flex items-center justify-between"><h4 className="font-bold text-sm text-blue-800 flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full"><Users size={16}/> POLO ATIVO</h4><Button variant="ghost" size="sm" onClick={() => addParty('plaintiffs')} className="text-blue-600 hover:text-blue-800 font-bold"><Plus size={14} className="mr-1"/> Adicionar</Button></div>
+               <div className="grid gap-6">{formData.plaintiffs.map(p => (
                    <div key={p.id} className="bg-blue-50/30 p-5 rounded-2xl border border-blue-100 border-l-4 border-l-blue-500 relative group shadow-sm">
-                      <button onClick={() => removeParty('plaintiffs', p.id!)} className="absolute -top-2 -right-2 bg-white text-red-500 p-1.5 rounded-full shadow-md border border-red-100 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        <Trash2 size={16}/>
-                      </button>
+                      <button onClick={() => removeParty('plaintiffs', p.id!)} className="absolute -top-2 -right-2 bg-white text-red-500 p-1.5 rounded-full shadow-md border border-red-100 opacity-0 group-hover:opacity-100 transition-opacity z-10"><Trash2 size={16}/></button>
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                        <div className="md:col-span-5"><Input label="Nome Completo" placeholder="Nome" value={p.name} onChange={e => updateParty('plaintiffs', p.id!, 'name', e.target.value)} /></div>
-                        <div className="md:col-span-3"><Input label="CPF/CNPJ" placeholder="Doc" value={p.doc} onChange={e => updateParty('plaintiffs', p.id!, 'doc', e.target.value)} /></div>
-                        <div className="md:col-span-2"><Input label="RG" placeholder="RG" value={p.rg} onChange={e => updateParty('plaintiffs', p.id!, 'rg', e.target.value)} /></div>
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                          <select className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm" value={p.type} onChange={e => updateParty('plaintiffs', p.id!, 'type', e.target.value as any)}>
-                            <option value="pf">P. Física</option>
-                            <option value="pj">P. Jurídica</option>
-                          </select>
-                        </div>
-                        <div className="md:col-span-12">
-                          <Input label="Qualificação Completa (Estado Civil, Profissão, Endereço)" placeholder="Nacionalidade, estado civil, profissão, residente e domiciliado em..." value={p.qualification} onChange={e => updateParty('plaintiffs', p.id!, 'qualification', e.target.value)} />
-                        </div>
+                        <div className="md:col-span-5"><Input label="Nome" placeholder="Nome" value={p.name} onChange={e => updateParty('plaintiffs', p.id!, 'name', e.target.value)} /></div>
+                        <div className="md:col-span-3"><Input label="Doc" placeholder="Doc" value={p.doc} onChange={e => updateParty('plaintiffs', p.id!, 'doc', e.target.value)} /></div>
+                        <div className="md:col-span-4"><Input label="Qualificação" placeholder="Estado civil, profissão, endereço..." value={p.qualification} onChange={e => updateParty('plaintiffs', p.id!, 'qualification', e.target.value)} /></div>
                       </div>
                    </div>
-                 ))}
-               </div>
-               
-               <div className="flex items-center justify-between pt-6 border-t">
-                 <h4 className="font-bold text-sm text-slate-700 flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full">
-                   <Users size={16}/> POLO PASSIVO
-                 </h4>
-                 <Button variant="ghost" size="sm" onClick={() => addParty('defendants')} className="text-slate-600 hover:text-slate-800 font-bold">
-                   <Plus size={14} className="mr-1"/> Adicionar
-                 </Button>
-               </div>
-
-               <div className="grid gap-6">
-                 {formData.defendants.map(d => (
-                   <div key={d.id} className="bg-slate-50/30 p-5 rounded-2xl border border-slate-200 border-l-4 border-l-slate-500 relative group shadow-sm">
-                      <button onClick={() => removeParty('defendants', d.id!)} className="absolute -top-2 -right-2 bg-white text-slate-400 p-1.5 rounded-full shadow-md border border-red-100 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        <Trash2 size={16}/>
-                      </button>
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                        <div className="md:col-span-5"><Input label="Nome Completo" placeholder="Nome" value={d.name} onChange={e => updateParty('defendants', d.id!, 'name', e.target.value)} /></div>
-                        <div className="md:col-span-3"><Input label="CPF/CNPJ" placeholder="Doc" value={d.doc} onChange={e => updateParty('defendants', d.id!, 'doc', e.target.value)} /></div>
-                        <div className="md:col-span-2"><Input label="RG" placeholder="RG" value={d.rg} onChange={e => updateParty('defendants', d.id!, 'rg', e.target.value)} /></div>
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                          <select className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm" value={d.type} onChange={e => updateParty('defendants', d.id!, 'type', e.target.value as any)}>
-                            <option value="pf">P. Física</option>
-                            <option value="pj">P. Jurídica</option>
-                          </select>
-                        </div>
-                        <div className="md:col-span-12">
-                          <Input label="Qualificação Completa (Estado Civil, Profissão, Endereço)" placeholder="Endereço para citação, nacionalidade..." value={d.qualification} onChange={e => updateParty('defendants', d.id!, 'qualification', e.target.value)} />
-                        </div>
-                      </div>
-                   </div>
-                 ))}
-               </div>
+                 ))}</div>
             </div>
           </div>
         );
@@ -509,146 +405,40 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         return (
           <div className="space-y-6 animate-in fade-in">
              <div className="flex items-start justify-between gap-6">
-                <div className="flex-1">
-                  <label className="text-sm font-bold text-gray-700">Fatos e Narrativa</label>
-                  <p className="text-xs text-gray-500 mb-2">Descreva o ocorrido detalhadamente.</p>
-                </div>
-                {/* Destaque iOS para Detalhes nos Fatos */}
+                <div className="flex-1"><label className="text-sm font-bold text-gray-700">Fatos e Narrativa</label><p className="text-xs text-gray-500 mb-2">Descreva o ocorrido detalhadamente.</p></div>
                 <div className="flex-1 max-w-sm bg-blue-50/50 border border-blue-100 rounded-2xl p-3 flex items-center gap-3 shadow-sm backdrop-blur-sm">
-                    <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600">
-                        <Sparkles size={16} />
-                    </div>
-                    <p className="text-[10px] leading-snug text-blue-800 font-medium">
-                        <strong>DICA PRO:</strong> Quanto mais rico em detalhes for seu relato, mais robusta e técnica será a fundamentação gerada pela IA.
-                    </p>
+                    <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600"><Sparkles size={16} /></div>
+                    <p className="text-[10px] leading-snug text-blue-800 font-medium"><strong>DICA PRO:</strong> Detalhes enriquecem a fundamentação técnica da IA.</p>
                 </div>
              </div>
              <div className="relative group">
-                <textarea 
-                  className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" 
-                  value={formData.facts} 
-                  onChange={e => handleInputChange('facts', e.target.value)} 
-                  placeholder="Inicie a narrativa dos fatos aqui... Inclua nomes, datas, documentos e valores." 
-                />
-                {isTranscribing && (
-                   <div className="absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center rounded-2xl z-10">
-                      <div className="flex flex-col items-center gap-3">
-                         <div className="relative">
-                            <Loader2 className="h-8 w-8 text-juris-600 animate-spin" />
-                            <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-amber-400 animate-pulse" />
-                         </div>
-                         <span className="text-xs font-bold text-juris-900 tracking-tight">TRANSCREVENDO ÁUDIO...</span>
-                      </div>
-                   </div>
-                )}
+                <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.facts} onChange={e => handleInputChange('facts', e.target.value)} placeholder="Narre os fatos aqui..." />
+                {isTranscribing && (<div className="absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center rounded-2xl z-10"><div className="flex flex-col items-center gap-3"><Loader2 className="h-8 w-8 text-juris-600 animate-spin" /><span className="text-xs font-bold text-juris-900">TRANSCREVENDO...</span></div></div>)}
              </div>
              <div className="flex gap-4 justify-center pt-2">
                 <input type="file" ref={audioInputRef} onChange={e => handleAudioUpload(e, 'facts')} className="hidden" accept="audio/*" />
-                <button 
-                    onClick={() => audioInputRef.current?.click()}
-                    disabled={isTranscribing}
-                    className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
-                >
-                    <FileAudio size={20} className="drop-shadow-sm" />
-                    <span className="text-sm font-bold tracking-wide uppercase">Importar Áudio</span>
-                </button>
-                <button 
-                    onClick={() => toggleRecording('facts')}
-                    disabled={isTranscribing}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
-                      isListening 
-                      ? 'bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-500 animate-pulse text-white shadow-rose-500/40' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                    }`}
-                >
-                    {isListening ? <MicOff size={20} /> : <Mic size={20} className="text-rose-500" />}
-                    <span className="text-sm font-bold tracking-wide uppercase">
-                      {isListening ? 'Parar Agora' : 'Ditar Fatos'}
-                    </span>
-                </button>
+                <button onClick={() => audioInputRef.current?.click()} className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg hover:-translate-y-0.5 transition-all"><FileAudio size={20} /><span className="text-sm font-bold uppercase">Áudio</span></button>
+                <button onClick={() => toggleRecording('facts')} className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white text-gray-700'}`}>{isListening ? <MicOff size={20} /> : <Mic size={20} className="text-red-500" />}<span className="text-sm font-bold uppercase">{isListening ? 'Parar' : 'Ditar'}</span></button>
              </div>
           </div>
         );
       case 'Pedidos':
         return (
             <div className="space-y-6 animate-in fade-in">
-               <div>
-                  <label className="text-sm font-bold text-gray-700">Pedidos e Valor da Causa</label>
-                  <p className="text-xs text-gray-500 mb-2">Liste os pedidos ou utilize as ferramentas de voz.</p>
-               </div>
-               <div className="relative">
-                  <textarea 
-                    className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" 
-                    value={formData.requests.join('\n')} 
-                    onChange={e => handleInputChange('requests', e.target.value.split('\n'))} 
-                    placeholder="Liste os pedidos, um por linha..." 
-                  />
-                  {isTranscribing && (
-                    <div className="absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center rounded-2xl z-10">
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="relative">
-                                <Loader2 className="h-8 w-8 text-juris-600 animate-spin" />
-                                <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-amber-400 animate-pulse" />
-                            </div>
-                            <span className="text-xs font-bold text-juris-900 tracking-tight">ANALISANDO FALA...</span>
-                        </div>
-                    </div>
-                  )}
-               </div>
-               <div className="flex gap-4 justify-center mb-6">
-                  <input type="file" ref={audioInputRef} onChange={e => handleAudioUpload(e, 'requests')} className="hidden" accept="audio/*" />
-                  <button 
-                      onClick={() => audioInputRef.current?.click()}
-                      disabled={isTranscribing}
-                      className="flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
-                  >
-                      <FileAudio size={20} className="drop-shadow-sm" />
-                      <span className="text-sm font-bold tracking-wide uppercase">Importar Áudio</span>
-                  </button>
-                  <button 
-                      onClick={() => toggleRecording('requests')}
-                      disabled={isTranscribing}
-                      className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
-                        isListening 
-                        ? 'bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-500 animate-pulse text-white shadow-rose-500/40' 
-                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                      }`}
-                  >
-                      {isListening ? <MicOff size={20} /> : <Mic size={20} className="text-rose-500" />}
-                      <span className="text-sm font-bold tracking-wide uppercase">
-                        {isListening ? 'Parar' : 'Ditar Pedidos'}
-                      </span>
-                  </button>
-               </div>
-               <Input label="Valor Estimado da Causa" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} />
+               <div><label className="text-sm font-bold text-gray-700">Pedidos</label><p className="text-xs text-gray-500 mb-2">Liste os pedidos ou ditar.</p></div>
+               <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.requests.join('\n')} onChange={e => handleInputChange('requests', e.target.value.split('\n'))} placeholder="Liste os pedidos..." />
+               <Input label="Valor da Causa" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} />
             </div>
         );
       case 'Gerar':
         return (
             <div className="text-center py-20 animate-in zoom-in-95">
                 {isGenerating ? (
-                    <div className="flex flex-col items-center gap-4">
-                        <Sparkles className="h-16 w-16 text-juris-500 animate-pulse" />
-                        <h3 className="text-2xl font-bold">Redigindo Peça Judicial...</h3>
-                        <p className="text-gray-500">Fundamentando Direito e Pedidos com Gemini AI.</p>
-                    </div>
+                    <div className="flex flex-col items-center gap-4"><Sparkles className="h-16 w-16 text-juris-500 animate-pulse" /><h3 className="text-2xl font-bold">Redigindo Peça...</h3><p className="text-gray-500">A IA está processando sua petição.</p></div>
                 ) : genError ? (
-                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto">
-                        <AlertTriangle className="h-12 w-12 text-red-600" />
-                        <h3 className="text-lg font-bold text-red-900">Erro na Geração</h3>
-                        <p className="text-sm text-red-700 text-center">{genError}</p>
-                        <div className="flex gap-2 mt-4">
-                            <Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button>
-                            <Button onClick={onCancel}>Voltar ao início</Button>
-                        </div>
-                    </div>
+                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto"><AlertTriangle className="h-12 w-12 text-red-600" /><h3 className="text-lg font-bold text-red-900">Erro na Geração</h3><p className="text-sm text-red-700 text-center">{genError}</p><div className="flex gap-2 mt-4"><Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button><Button onClick={onCancel}>Voltar</Button></div></div>
                 ) : (
-                    <>
-                        <Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" />
-                        <h3 className="text-2xl font-bold mb-2">Tudo pronto!</h3>
-                        <p className="text-gray-500 mb-8">Revise os dados antes de gerar a peça final.</p>
-                        <Button size="lg" onClick={handleGenerate} className="px-12 h-14 text-lg shadow-xl"><Sparkles className="mr-2"/> Gerar Petição agora</Button>
-                    </>
+                    <><Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" /><h3 className="text-2xl font-bold mb-2">Tudo pronto!</h3><p className="text-gray-500 mb-8">Revise os dados antes de gerar a peça final.</p><Button size="lg" onClick={handleGenerate} className="px-12 h-14 text-lg shadow-xl"><Sparkles className="mr-2"/> Gerar Petição agora</Button></>
                 )}
             </div>
         );
@@ -660,68 +450,23 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     return (
       <div className="fixed inset-0 z-[200] bg-gray-100 flex flex-col h-screen overflow-hidden">
          <div className="bg-white border-b px-6 py-3 flex justify-between items-center shadow-sm shrink-0">
-             <div className="flex items-center gap-4">
-                <button onClick={() => setIsFullScreen(false)} className="p-2 text-gray-400 hover:text-gray-900"><X size={24}/></button>
-                <h2 className="text-lg font-bold text-juris-900 leading-tight">Petição Gerada</h2>
-             </div>
-             <div className="flex gap-2">
-                 <Button variant="outline" onClick={handlePrint}><Printer size={16} className="mr-2"/> Imprimir</Button>
-                 <Button variant="outline" onClick={handleDownloadDoc}><Download size={16} className="mr-2"/> Word</Button>
-                 <Button onClick={handleSave} isLoading={isSaving}><Save size={18} className="mr-2"/> Salvar</Button>
-             </div>
+             <div className="flex items-center gap-4"><button onClick={() => setIsFullScreen(false)} className="p-2 text-gray-400 hover:text-gray-900"><X size={24}/></button><h2 className="text-lg font-bold text-juris-900">Petição Gerada</h2></div>
+             <div className="flex gap-2"><Button variant="outline" onClick={handlePrint}><Printer size={16} className="mr-2"/> Imprimir</Button><Button variant="outline" onClick={handleDownloadDoc}><Download size={16} className="mr-2"/> Word</Button><Button onClick={handleSave} isLoading={isSaving}><Save size={18} className="mr-2"/> Salvar</Button></div>
          </div>
          <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
              <div className="flex-1 overflow-y-auto p-4 md:p-10 flex flex-col items-center bg-slate-200">
-                 <div className="w-full max-w-[21cm] mb-6 flex items-center gap-2 text-juris-800 bg-juris-50 px-4 py-3 rounded-lg border border-juris-100 shadow-sm">
-                    <Info size={18} className="text-juris-600 animate-pulse" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Modo Edição Ativado: Você pode alterar o texto diretamente na folha branca.</span>
-                 </div>
+                 <div className="w-full max-w-[21cm] mb-6 flex items-center gap-2 text-juris-800 bg-juris-50 px-4 py-3 rounded-lg border border-juris-100 shadow-sm"><Info size={18} className="text-juris-600 animate-pulse" /><span className="text-xs font-bold uppercase tracking-wider">Modo Edição Ativado</span></div>
                  <div className="relative w-full max-w-[21cm]">
-                   <div 
-                      ref={contentRef}
-                      className="bg-white shadow-2xl p-[3cm_2cm_3cm_3cm] h-auto min-h-[29.7cm] outline-none border border-gray-100 mb-20 text-justify"
-                      contentEditable={true}
-                      suppressContentEditableWarning={true}
-                      onBlur={e => setGeneratedContent(e.currentTarget.innerHTML)}
-                      style={{ width: '100%', fontFamily: '"Times New Roman", serif', fontSize: '12pt', lineHeight: '1.5', boxSizing: 'border-box' }}
-                   />
-                   <style>{`
-                      [contenteditable] h1, [contenteditable] h2, [contenteditable] h3 { 
-                          text-align: center; 
-                          text-transform: uppercase; 
-                          margin: 18pt 0 12pt 0; 
-                          font-weight: bold; 
-                          text-indent: 0;
-                          outline: none;
-                      }
-                      [contenteditable] p { 
-                          text-align: justify; 
-                          text-indent: 1.25cm; 
-                          margin-bottom: 12pt; 
-                          margin-top: 0;
-                          outline: none;
-                      }
-                   `}</style>
+                   <div ref={contentRef} className="bg-white shadow-2xl p-[3cm_2cm_3cm_3cm] h-auto min-h-[29.7cm] outline-none border border-gray-100 mb-20 text-justify" contentEditable={true} suppressContentEditableWarning={true} onBlur={e => setGeneratedContent(e.currentTarget.innerHTML)} style={{ width: '100%', fontFamily: '"Times New Roman", serif', fontSize: '12pt', lineHeight: '1.5', boxSizing: 'border-box' }} />
+                   <style>{`[contenteditable] h1, [contenteditable] h2, [contenteditable] h3 { text-align: center; text-transform: uppercase; margin: 18pt 0 12pt 0; font-weight: bold; outline: none; } [contenteditable] p { text-align: justify; text-indent: 1.25cm; margin-bottom: 12pt; margin-top: 0; outline: none; }`}</style>
                  </div>
              </div>
              <div className="w-full md:w-80 p-6 bg-white border-l overflow-y-auto shrink-0 flex flex-col gap-6 shadow-lg">
-                {cnjMetadata && (
-                  <div className="bg-white rounded-xl border border-juris-100 shadow-sm overflow-hidden">
-                    <div className="bg-juris-900 px-4 py-2 text-white text-[10px] font-bold uppercase tracking-wider">Metadados Sugeridos</div>
-                    <div className="p-4 space-y-4">
-                      <div><label className="text-[9px] font-bold text-gray-400 uppercase">Classe</label><div className="text-xs bg-gray-50 p-2 rounded font-medium">{cnjMetadata.class}</div></div>
-                      <div><label className="text-[9px] font-bold text-gray-400 uppercase">Assunto</label><div className="text-xs bg-gray-50 p-2 rounded font-medium">{cnjMetadata.subject}</div></div>
-                    </div>
-                  </div>
-                )}
+                {cnjMetadata && (<div className="bg-white rounded-xl border border-juris-100 shadow-sm overflow-hidden"><div className="bg-juris-900 px-4 py-2 text-white text-[10px] font-bold uppercase tracking-wider">Metadados CNJ</div><div className="p-4 space-y-4"><div><label className="text-[9px] font-bold text-gray-400 uppercase">Classe</label><div className="text-xs bg-gray-50 p-2 rounded font-medium">{cnjMetadata.class}</div></div><div><label className="text-[9px] font-bold text-gray-400 uppercase">Assunto</label><div className="text-xs bg-gray-50 p-2 rounded font-medium">{cnjMetadata.subject}</div></div></div></div>)}
                 <div className="bg-sky-50 rounded-xl border border-sky-100 p-5 shadow-sm">
                    <h4 className="text-xs font-bold text-sky-800 uppercase mb-4 flex items-center gap-2 font-bold"><RefreshCw size={14}/> Refinar com IA</h4>
                    <textarea className="w-full h-32 rounded-lg border border-sky-200 p-3 text-sm mb-3 outline-none focus:ring-2 focus:ring-sky-300 transition-all" placeholder="Ex: Adicione fundamentação sobre danos morais..." value={refinementText} onChange={e => setRefinementText(e.target.value)} />
-                   <Button onClick={async () => {
-                       if (!generatedContent || !refinementText) return;
-                       setIsRefining(true);
-                       try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e: any) { alert("Erro ao refinar: " + (e.message || "Tente novamente.")); } finally { setIsRefining(false); }
-                   }} isLoading={isRefining} className="w-full bg-sky-600 hover:bg-sky-700">Aplicar Ajustes</Button>
+                   <Button onClick={async () => { if (!generatedContent || !refinementText) return; setIsRefining(true); try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e: any) { alert("Erro ao refinar."); } finally { setIsRefining(false); } }} isLoading={isRefining} className="w-full bg-sky-600 hover:bg-sky-700">Ajustar Peça</Button>
                 </div>
              </div>
          </div>
@@ -733,41 +478,14 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     <div className="max-w-4xl mx-auto py-8">
       {mode === 'selection' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <button onClick={() => { setMode('scratch'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-juris-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group">
-             <div className="bg-juris-50 p-6 rounded-full group-hover:bg-juris-100 transition-colors mb-6">
-                <PenTool size={56} className="text-juris-600" />
-             </div>
-             <h3 className="text-2xl font-bold text-gray-900">Petição do Zero</h3>
-             <p className="text-gray-500 mt-2 max-w-xs">IA redige a peça completa a partir da sua narrativa dos fatos.</p>
-          </button>
-          <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-sky-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group">
-             <div className="bg-sky-50 p-6 rounded-full group-hover:bg-sky-100 transition-colors mb-6">
-                <FileUp size={56} className="text-sky-600" />
-             </div>
-             <h3 className="text-2xl font-bold text-gray-900">Importar Documento</h3>
-             <p className="text-gray-500 mt-2 max-w-xs">IA analisa um arquivo existente e preenche os dados automaticamente.</p>
-          </button>
+          <button onClick={() => { setMode('scratch'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-juris-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-juris-50 p-6 rounded-full group-hover:bg-juris-100 transition-colors mb-6"><PenTool size={56} className="text-juris-600" /></div><h3 className="text-2xl font-bold text-gray-900">Petição do Zero</h3><p className="text-gray-500 mt-2 max-w-xs">IA redige a peça completa a partir da sua narrativa.</p></button>
+          <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-sky-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-sky-50 p-6 rounded-full group-hover:bg-sky-100 transition-colors mb-6"><FileUp size={56} className="text-sky-600" /></div><h3 className="text-2xl font-bold text-gray-900">Importar Documento</h3><p className="text-gray-500 mt-2 max-w-xs">IA analisa um arquivo e preenche os dados.</p></button>
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-gray-50 px-8 py-4 border-b flex justify-between items-center">
-             <div className="flex gap-4">
-                {(mode === 'upload' ? ['Upload', 'Dados', 'Fatos', 'Pedidos', 'Gerar'] : ['Dados', 'Fatos', 'Pedidos', 'Gerar']).map((s, idx) => (
-                  <div key={s} className={`flex items-center gap-2 ${currentStep === idx + 1 ? 'text-juris-900 font-bold' : idx + 1 < currentStep ? 'text-green-500' : 'text-gray-400'}`}>
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${currentStep === idx + 1 ? 'bg-juris-900 text-white shadow-md' : idx + 1 < currentStep ? 'bg-green-100' : 'bg-gray-100'}`}>{idx+1 < currentStep ? <CheckCircle size={12}/> : idx+1}</div>
-                    <span className="hidden sm:inline text-xs uppercase font-bold tracking-wider">{s}</span>
-                  </div>
-                ))}
-             </div>
-             <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 p-2"><X size={20}/></button>
-          </div>
-          <div className="p-8 min-h-[500px]">
-            {renderStep()}
-          </div>
-          <div className="bg-gray-50 px-8 py-4 border-t flex justify-between">
-             <Button variant="outline" onClick={() => { if(currentStep===1) setMode('selection'); else setCurrentStep(prev=>prev-1); }}>Voltar</Button>
-             {currentStep < STEPS.length && <Button onClick={() => setCurrentStep(prev=>prev+1)} disabled={mode === 'upload' && currentStep === 1 && !uploadSuccess}>Próximo <ChevronRight size={16}/></Button>}
-          </div>
+          <div className="bg-gray-50 px-8 py-4 border-b flex justify-between items-center"><div className="flex gap-4">{(mode === 'upload' ? ['Upload', 'Dados', 'Fatos', 'Pedidos', 'Gerar'] : ['Dados', 'Fatos', 'Pedidos', 'Gerar']).map((s, idx) => (<div key={s} className={`flex items-center gap-2 ${currentStep === idx + 1 ? 'text-juris-900 font-bold' : idx + 1 < currentStep ? 'text-green-500' : 'text-gray-400'}`}><div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${currentStep === idx + 1 ? 'bg-juris-900 text-white shadow-md' : idx + 1 < currentStep ? 'bg-green-100' : 'bg-gray-100'}`}>{idx+1 < currentStep ? <CheckCircle size={12}/> : idx+1}</div><span className="hidden sm:inline text-xs uppercase font-bold tracking-wider">{s}</span></div>))}</div><button onClick={onCancel} className="text-gray-400 hover:text-gray-600 p-2"><X size={20}/></button></div>
+          <div className="p-8 min-h-[500px]">{renderStep()}</div>
+          <div className="bg-gray-50 px-8 py-4 border-t flex justify-between"><Button variant="outline" onClick={() => { if(currentStep===1) setMode('selection'); else setCurrentStep(prev=>prev-1); }}>Voltar</Button>{currentStep < STEPS.length && <Button onClick={() => setCurrentStep(prev=>prev+1)} disabled={mode === 'upload' && currentStep === 1 && !uploadSuccess}>Próximo <ChevronRight size={16}/></Button>}</div>
         </div>
       )}
     </div>
