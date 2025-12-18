@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty, UsageLimit } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -83,12 +82,6 @@ const AREAS_DO_DIREITO = [
 export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSuccess, usage, accountStatus, isAdmin = false }) => {
   const [mode, setMode] = useState<WizardMode>('selection');
   const [currentStep, setCurrentStep] = useState(1);
-
-  // Added STEPS constant to handle wizard navigation steps based on the selected mode
-  const STEPS = mode === 'upload' 
-    ? ['Upload', 'Dados', 'Fatos', 'Pedidos', 'Gerar'] 
-    : ['Dados', 'Fatos', 'Pedidos', 'Gerar'];
-
   const [formData, setFormData] = useState<PetitionFormData>(INITIAL_DATA);
   
   const [isGenerating, setIsGenerating] = useState(false);
@@ -109,6 +102,10 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recognitionRef = useRef<any>(null);
+
+  const STEPS = mode === 'upload' 
+    ? ['Upload', 'Dados', 'Fatos', 'Pedidos', 'Gerar'] 
+    : ['Dados', 'Fatos', 'Pedidos', 'Gerar'];
 
   useEffect(() => {
     if (isFullScreen && contentRef.current && generatedContent) {
@@ -161,7 +158,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         setUploadSuccess(true);
       } catch (error: any) {
         setIsExtracting(false);
-        if (error.message?.includes("API_KEY_MISSING") || error.message?.includes("process is not defined")) {
+        if (error.message?.includes("API_KEY_NOT_FOUND") || error.message?.includes("process is not defined")) {
            setGenError("API_KEY_MISSING");
         } else {
            alert("Erro na análise: " + (error.message || "Tente novamente."));
@@ -204,7 +201,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       setGeneratedContent(content);
       setIsFullScreen(true);
     } catch (error: any) { 
-        if (error.message?.includes("API_KEY_MISSING") || error.message?.includes("process is not defined")) {
+        if (error.message?.includes("API_KEY_NOT_FOUND") || error.message?.includes("process is not defined")) {
           setGenError("API_KEY_MISSING");
         } else {
           setGenError(error.message || "Erro na geração.");
@@ -215,48 +212,40 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   };
 
   const ErrorDisplay = () => (
-    <div className="flex flex-col items-center gap-6 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-2xl max-w-lg mx-auto animate-in zoom-in-95">
+    <div className="flex flex-col items-center gap-6 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-2xl max-w-lg mx-auto animate-in zoom-in-95 text-center">
         <div className="bg-amber-100 p-4 rounded-full text-amber-600">
             <AlertTriangle size={48} />
         </div>
-        <div className="text-center">
-            <h3 className="text-xl font-bold text-slate-900 mb-2">Chave da IA não detectada</h3>
+        <div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Chave da IA não visível no navegador</h3>
             <p className="text-sm text-slate-500 leading-relaxed mb-6">
-                Para rodar no Vercel, o nome da variável deve ser exatamente <strong className="text-slate-900">VITE_API_KEY</strong>. Nomes com hífens ou espaços são inválidos.
+                Você salvou a chave corretamente no Vercel, mas para ela ser ativada, você <strong>DEVE</strong> fazer um novo deploy.
             </p>
             
-            <div className="space-y-4">
-                <div className="flex flex-col items-start gap-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Variável no Vercel</span>
-                    <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-xl font-mono text-sm text-slate-800">
-                        <span>VITE_API_KEY</span>
-                        <button onClick={() => {
-                          navigator.clipboard.writeText('VITE_API_KEY');
-                          alert("Copiado!");
-                        }} className="text-slate-400 hover:text-indigo-600 transition-colors"><Copy size={16}/></button>
-                    </div>
+            <div className="space-y-4 text-left">
+                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100">
+                    <h4 className="text-xs font-bold text-indigo-900 uppercase mb-2">Como resolver agora:</h4>
+                    <ol className="text-xs text-indigo-700 space-y-2 list-decimal list-inside font-medium">
+                        <li>Vá no seu dashboard do <strong>Vercel</strong>.</li>
+                        <li>Clique na aba <strong>Deployments</strong>.</li>
+                        <li>Clique nos três pontinhos <code className="bg-indigo-100 px-1 rounded">...</code> no último deploy da lista.</li>
+                        <li>Selecione <strong>Redeploy</strong>.</li>
+                    </ol>
                 </div>
-                
-                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 text-left">
-                    <ul className="text-xs text-indigo-700 space-y-2 list-disc list-inside">
-                        <li>Vá em <strong>Environment Variables</strong> no dashboard da Vercel.</li>
-                        <li>Delete variáveis com nomes inválidos (ex: <code className="line-through">VITE-API-KEY</code>).</li>
-                        <li>Crie uma nova com a Key: <strong>VITE_API_KEY</strong>.</li>
-                        <li><strong>IMPORTANTE:</strong> Faça um <strong>Redeploy</strong> após salvar.</li>
-                    </ul>
-                </div>
+                <p className="text-[10px] text-slate-400 italic">
+                  Nota: Variáveis de ambiente no frontend são gravadas durante o "Build". Por isso salvar a variável não basta, é preciso reconstruir o app.
+                </p>
             </div>
         </div>
         
         <div className="flex gap-3 w-full">
-           <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setGenError(null)}>Tentar Novamente</Button>
+           <Button variant="outline" className="flex-1 rounded-xl" onClick={() => window.location.reload()}>Já fiz o Redeploy, Atualizar</Button>
            <Button className="flex-1 rounded-xl bg-slate-900" onClick={onCancel}>Sair</Button>
         </div>
     </div>
   );
 
   const renderStep = () => {
-    // FIX: Using the newly defined STEPS variable to identify the current step
     const step = STEPS[currentStep - 1];
     if (genError === "API_KEY_MISSING") return <ErrorDisplay />;
 
@@ -397,7 +386,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
              <div className="w-96 p-8 bg-white border-l overflow-y-auto shrink-0 flex flex-col gap-6">
                 <div className="bg-indigo-50/50 rounded-3xl border border-indigo-100 p-6">
                    <h4 className="text-xs font-bold text-indigo-900 uppercase mb-4 flex items-center gap-2 tracking-widest"><RefreshCw size={14}/> Refinar Texto</h4>
-                   <textarea className="w-full h-40 rounded-2xl border border-indigo-200 p-4 text-sm mb-4 outline-none focus:ring-2 focus:ring-indigo-300 transition-all bg-white shadow-inner" placeholder="Instrua a IA sobre ajustes..." value={refinementText} onChange={e => setRefinementText(e.target.value)} />
+                   <textarea className="w-full h-40 rounded-2xl border border-indigo-200 p-4 text-sm mb-4 outline-none focus:ring-2 focus:ring-indigo-300 transition-all bg-white shadow-inner" placeholder="Instrua a IA sobre ajustes..." value={refinementText} onChange={setRefinementText} />
                    <Button onClick={async () => {
                        if (!generatedContent || !refinementText) return;
                        setIsRefining(true);
@@ -439,7 +428,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         <div className="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
           <div className="bg-slate-50/80 backdrop-blur-md px-10 py-6 border-b flex justify-between items-center">
             <div className="flex gap-6">
-                {/* FIX: Using the newly defined STEPS variable to map navigation markers */}
                 {STEPS.map((s, idx) => (
                     <div key={s} className={`flex items-center gap-2 ${currentStep === idx + 1 ? 'text-slate-900' : 'text-slate-400 opacity-60'}`}>
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${currentStep === idx + 1 ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-500'}`}>{idx+1}</div>
@@ -454,7 +442,6 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           
           <div className="bg-slate-50/50 px-10 py-6 border-t flex justify-between">
               <Button variant="outline" className="rounded-xl px-8" onClick={() => { if(currentStep===1) setMode('selection'); else setCurrentStep(prev=>prev-1); }}>Voltar</Button>
-              {/* FIX: Using the newly defined STEPS variable to determine if more steps are available */}
               {currentStep < STEPS.length && (
                   <Button className="rounded-xl px-10 bg-slate-900" onClick={() => setCurrentStep(prev=>prev+1)} disabled={mode === 'upload' && currentStep === 1 && !uploadSuccess && !isExtracting}>Próximo <ChevronRight size={18} className="ml-1"/></Button>
               )}

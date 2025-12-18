@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
@@ -13,12 +12,12 @@ Estrutura: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
 
 /**
  * Helper para instanciar o SDK seguindo as diretrizes exclusivas.
+ * A chave DEVE vir de process.env.API_KEY.
  */
 const getAiClient = () => {
   const apiKey = process.env.API_KEY;
-  // Verifica se a chave existe e não é a string literal "undefined" (comum em builds falhas)
   if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
-    throw new Error("API_KEY_MISSING");
+    throw new Error("API_KEY_NOT_FOUND");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -33,10 +32,26 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   summary: string;
   extractedData: Partial<PetitionFormData> & { cnjClass?: string, cnjSubject?: string };
 }> => {
-  const ai = getAiClient();
-  const prompt = `Analise este documento jurídico brasileiro. Extraia resumo, partes e CPFs. RETORNE JSON: { "docType": "string", "summary": "string", "extractedData": { "area": "string", "actionType": "string", "jurisdiction": "string", "facts": "string", "plaintiffs": [], "defendants": [], "value": "string" } }`;
-
   try {
+    const ai = getAiClient();
+    const prompt = `Analise este documento jurídico brasileiro. 
+    Extraia o resumo dos fatos, nomes das partes e CPFs/CNPJs.
+    
+    RETORNE ESTRITAMENTE JSON: 
+    { 
+      "docType": "Petição Inicial|Sentença|Contrato|Outro", 
+      "summary": "Resumo técnico dos fatos", 
+      "extractedData": { 
+        "area": "civel|trabalhista|etc", 
+        "actionType": "Nome da Ação", 
+        "jurisdiction": "Vara/Comarca",
+        "plaintiffs": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
+        "defendants": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
+        "facts": "Texto detalhado dos fatos", 
+        "value": "R$ 0,00" 
+      } 
+    }`;
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { 
@@ -51,10 +66,12 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    const text = response.text || "{}";
+    return JSON.parse(text);
   } catch (error: any) {
+    if (error.message === "API_KEY_NOT_FOUND") throw error;
     console.error("Erro na extração:", error);
-    throw error;
+    throw new Error("Falha na análise: A IA não pôde processar o documento no momento.");
   }
 };
 
