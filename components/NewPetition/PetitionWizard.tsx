@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty, UsageLimit } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -33,7 +32,8 @@ import {
   Users,
   FileAudio,
   Lightbulb,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
 import { generateLegalPetition, refineLegalPetition, extractDataFromDocument, suggestFilingMetadata, transcribeAudio } from '../../services/aiService';
 
@@ -177,7 +177,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         
         const errorMessage = error.message || "";
         if (errorMessage.includes("API_KEY_MISSING")) {
-           alert("Configuração Necessária: A chave de API do Gemini (API_KEY) não foi encontrada nas variáveis de ambiente do servidor.");
+           setGenError("A chave da Inteligência Artificial (API_KEY) não foi configurada no servidor. Por favor, adicione sua chave do Gemini nas variáveis de ambiente do deploy.");
         } else {
            alert("Erro na análise: " + (errorMessage || "Falha ao processar arquivo. Verifique sua conexão."));
         }
@@ -379,7 +379,26 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                 {isGenerating ? (
                     <div className="flex flex-col items-center gap-4"><Sparkles className="h-16 w-16 text-juris-500 animate-pulse" /><h3 className="text-2xl font-bold">Redigindo Peça de Excelência...</h3><p className="text-gray-500">Isso pode levar alguns segundos dependendo da complexidade.</p></div>
                 ) : genError ? (
-                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto"><AlertTriangle className="h-12 w-12 text-red-600" /><h3 className="text-lg font-bold text-red-900">Erro na Geração</h3><p className="text-sm text-red-700 text-center">{genError}</p><div className="flex gap-2 mt-4"><Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button><Button onClick={onCancel}>Sair</Button></div></div>
+                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto">
+                        <AlertTriangle className="h-12 w-12 text-red-600" />
+                        <h3 className="text-lg font-bold text-red-900">Configuração Necessária</h3>
+                        <p className="text-sm text-red-700 text-center leading-relaxed">
+                          {genError.includes("API_KEY_MISSING") 
+                            ? "A chave de API do Gemini não foi configurada nas variáveis de ambiente do seu servidor. Vá ao painel do seu deploy (Vercel/Netlify) e adicione a variável 'API_KEY'." 
+                            : genError}
+                        </p>
+                        
+                        {genError.includes("API_KEY_MISSING") && (
+                          <a href="https://aistudio.google.com/app/apikey" target="_blank" className="flex items-center gap-2 text-xs font-bold text-red-800 hover:underline mt-2 bg-white px-4 py-2 rounded-full shadow-sm">
+                            <ExternalLink size={14}/> Obter chave gratuita
+                          </a>
+                        )}
+
+                        <div className="flex gap-2 mt-6">
+                           <Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button>
+                           <Button onClick={onCancel}>Sair</Button>
+                        </div>
+                    </div>
                 ) : (
                     <><Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" /><h3 className="text-2xl font-bold mb-2">Petição Pronta para Geração</h3><p className="text-gray-500 mb-8">A IA irá fundamentar sua peça com base na narrativa fornecida.</p><Button size="lg" onClick={handleGenerate} className="px-12 h-14 text-lg shadow-xl"><Sparkles className="mr-2"/> Gerar Petição agora</Button></>
                 )}

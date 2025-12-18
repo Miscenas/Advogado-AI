@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
@@ -21,7 +20,10 @@ import {
   Sparkles,
   Info,
   Settings,
-  Key
+  Key,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { supabase, isLive } from '../services/supabaseClient';
 import { hasAiKey } from '../services/aiService';
@@ -176,26 +178,50 @@ export const Layout: React.FC<LayoutProps> = ({
                 <button onClick={() => setShowConnectionModal(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-900 bg-slate-100 p-2 rounded-full transition-colors"><X size={18} /></button>
                 <div className="flex items-center gap-4 mb-8">
                     <div className="bg-slate-900 p-3 rounded-2xl text-white"><Settings size={24} /></div>
-                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">Preferências</h3>
+                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">Configurações</h3>
                 </div>
                 <div className="space-y-6">
                     <div className="space-y-4">
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                           <Database size={14}/> Banco de Dados (Supabase)
+                           <Database size={14}/> Banco de Dados
                         </h4>
                         <Input label="Supabase URL" value={customUrl} onChange={(e) => setCustomUrl(e.target.value)} placeholder="https://..." />
                         <Input label="Supabase Anon Key" value={customKey} onChange={(e) => setCustomKey(e.target.value)} type="password" placeholder="eyJ..." />
                         
-                        <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 mt-4">
-                           <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-2 mb-2">
-                              <Sparkles size={14}/> Inteligência Artificial
-                           </h4>
-                           <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
-                              O sistema utiliza a chave de API global do servidor para garantir estabilidade e performance.
+                        <div className={`p-4 rounded-2xl border flex flex-col gap-3 ${aiConnected ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
+                           <div className="flex items-center justify-between">
+                             <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${aiConnected ? 'text-blue-900' : 'text-amber-900'}`}>
+                                <Sparkles size={14}/> Inteligência Artificial
+                             </h4>
+                             {aiConnected ? (
+                               <div className="flex items-center gap-1 text-blue-600 font-bold text-[10px]">
+                                 <CheckCircle2 size={12}/> ATIVA
+                               </div>
+                             ) : (
+                               <div className="flex items-center gap-1 text-amber-600 font-bold text-[10px]">
+                                 <AlertCircle size={12}/> DESATIVADA
+                               </div>
+                             )}
+                           </div>
+                           
+                           <p className={`text-[10px] leading-relaxed font-medium ${aiConnected ? 'text-blue-700' : 'text-amber-700'}`}>
+                              {aiConnected 
+                                ? "O sistema está conectado com sucesso ao Google Gemini e pronto para gerar petições."
+                                : "A chave de API do Gemini não foi detectada no ambiente do servidor (API_KEY)."}
                            </p>
+                           
+                           {!aiConnected && (
+                             <a 
+                                href="https://aistudio.google.com/app/apikey" 
+                                target="_blank" 
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 hover:underline"
+                             >
+                                Obter chave gratuita no Google AI Studio <ExternalLink size={10}/>
+                             </a>
+                           )}
                         </div>
                     </div>
-                    <Button onClick={handleSaveConnection} className="w-full h-12 rounded-2xl text-sm font-bold bg-slate-900">Salvar Alterações</Button>
+                    <Button onClick={handleSaveConnection} className="w-full h-12 rounded-2xl text-sm font-bold bg-slate-900">Salvar e Reiniciar</Button>
                 </div>
             </div>
         </div>
