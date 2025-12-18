@@ -59,7 +59,7 @@ export const Layout: React.FC<LayoutProps> = ({
      if (storedKey) setCustomKey(storedKey);
      
      setAiConnected(hasAiKey());
-  }, [showConnectionModal]);
+  }, [showConnectionModal, activeRoute]);
   
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -132,7 +132,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sistema</span>
                 <div className="flex gap-1">
                     <div className={`h-2 w-2 rounded-full ${isLive ? 'bg-green-500' : 'bg-amber-400'}`} title={isLive ? "Conectado ao Supabase" : "Modo Mock"} />
-                    <div className={`h-2 w-2 rounded-full ${aiConnected ? 'bg-blue-400' : 'bg-slate-300'}`} title={aiConnected ? "IA Ativa" : "IA Desativada"} />
+                    <div className={`h-2 w-2 rounded-full ${aiConnected ? 'bg-blue-400' : 'bg-slate-300'}`} title={aiConnected ? "IA Ativa (Gemini)" : "IA Desativada"} />
                 </div>
             </div>
             <div className="flex items-center gap-3">
@@ -141,7 +141,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-900 truncate font-bold leading-tight">{userEmail?.split('@')[0]}</p>
-                    <p className="text-[10px] text-slate-400 truncate uppercase font-semibold">Online</p>
+                    <p className="text-[10px] text-slate-400 truncate uppercase font-semibold">Advogado</p>
                 </div>
             </div>
         </div>
@@ -195,19 +195,19 @@ export const Layout: React.FC<LayoutProps> = ({
                              </h4>
                              {aiConnected ? (
                                <div className="flex items-center gap-1 text-blue-600 font-bold text-[10px]">
-                                 <CheckCircle2 size={12}/> ATIVA
+                                 <CheckCircle2 size={12}/> GEMINI ATIVO
                                </div>
                              ) : (
                                <div className="flex items-center gap-1 text-amber-600 font-bold text-[10px]">
-                                 <AlertCircle size={12}/> DESATIVADA
+                                 <AlertCircle size={12}/> API_KEY AUSENTE
                                </div>
                              )}
                            </div>
                            
                            <p className={`text-[10px] leading-relaxed font-medium ${aiConnected ? 'text-blue-700' : 'text-amber-700'}`}>
                               {aiConnected 
-                                ? "O sistema está conectado com sucesso ao Google Gemini e pronto para gerar petições."
-                                : "A chave de API do Gemini não foi detectada no ambiente do servidor (API_KEY)."}
+                                ? "O JurisPet AI está pronto para gerar minutas e analisar documentos."
+                                : "A API_KEY deve ser configurada nas 'Environment Variables' da Vercel para ativar as funções de IA."}
                            </p>
                            
                            {!aiConnected && (
@@ -221,7 +221,7 @@ export const Layout: React.FC<LayoutProps> = ({
                            )}
                         </div>
                     </div>
-                    <Button onClick={handleSaveConnection} className="w-full h-12 rounded-2xl text-sm font-bold bg-slate-900">Salvar e Reiniciar</Button>
+                    <Button onClick={handleSaveConnection} className="w-full h-12 rounded-2xl text-sm font-bold bg-slate-900">Salvar Alterações</Button>
                 </div>
             </div>
         </div>
