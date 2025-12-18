@@ -11,36 +11,21 @@ Estrutura: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
 `;
 
 /**
- * Obtém a chave de API de forma resiliente em ambientes Vite/Vercel.
- * No Vite, variáveis precisam do prefixo VITE_ para serem expostas ao cliente.
- */
-const getApiKey = (): string | undefined => {
-  // 1. Tenta o padrão do Vite (exposto ao navegador)
-  const viteKey = (import.meta as any).env?.VITE_API_KEY;
-  if (viteKey) return viteKey;
-
-  // 2. Tenta o padrão process.env (comum em Vercel/Node)
-  const processKey = process.env.API_KEY;
-  if (processKey) return processKey;
-
-  // 3. Tenta a variável sem prefixo no import.meta (caso de define customizado)
-  return (import.meta as any).env?.API_KEY;
-};
-
-/**
- * Helper para instanciar o SDK e validar a chave
+ * Helper para instanciar o SDK seguindo as diretrizes
+ * Nota: Em ambientes Vite, o process.env.API_KEY é substituído em tempo de build 
+ * se estiver configurado corretamente como VITE_API_KEY no Vercel.
  */
 const getAiClient = () => {
-  const apiKey = getApiKey();
-  if (!apiKey || apiKey.length < 10) {
-    throw new Error("API_KEY_MISSING: A chave do Gemini não foi encontrada no navegador. Em projetos Vite/Vercel, você deve nomear a variável como VITE_API_KEY para que ela fique visível no frontend.");
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey.length < 5) {
+    throw new Error("API_KEY_MISSING");
   }
   return new GoogleGenAI({ apiKey });
 };
 
 export const hasAiKey = (): boolean => {
-  const key = getApiKey();
-  return !!(key && key.length > 10);
+  const key = process.env.API_KEY;
+  return !!(key && key !== 'undefined' && key.length > 5);
 };
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
@@ -48,26 +33,26 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   summary: string;
   extractedData: Partial<PetitionFormData> & { cnjClass?: string, cnjSubject?: string };
 }> => {
-  const ai = getAiClient();
-  const prompt = `Analise este documento jurídico brasileiro. 
-  Extraia o resumo dos fatos, nomes das partes e CPFs/CNPJs.
-  
-  RETORNE ESTRITAMENTE JSON: 
-  { 
-    "docType": "Petição Inicial|Sentença|Contrato|Outro", 
-    "summary": "Resumo técnico dos fatos", 
-    "extractedData": { 
-      "area": "civel|trabalhista|etc", 
-      "actionType": "Nome da Ação", 
-      "jurisdiction": "Vara/Comarca",
-      "plaintiffs": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
-      "defendants": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
-      "facts": "Texto detalhado dos fatos", 
-      "value": "R$ 0,00" 
-    } 
-  }`;
-
   try {
+    const ai = getAiClient();
+    const prompt = `Analise este documento jurídico brasileiro. 
+    Extraia o resumo dos fatos, nomes das partes e CPFs/CNPJs.
+    
+    RETORNE ESTRITAMENTE JSON: 
+    { 
+      "docType": "Petição Inicial|Sentença|Contrato|Outro", 
+      "summary": "Resumo técnico dos fatos", 
+      "extractedData": { 
+        "area": "civel|trabalhista|etc", 
+        "actionType": "Nome da Ação", 
+        "jurisdiction": "Vara/Comarca",
+        "plaintiffs": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
+        "defendants": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
+        "facts": "Texto detalhado dos fatos", 
+        "value": "R$ 0,00" 
+      } 
+    }`;
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { 
@@ -85,8 +70,9 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
     const text = response.text || "{}";
     return JSON.parse(text);
   } catch (error: any) {
+    if (error.message === "API_KEY_MISSING") throw error;
     console.error("Erro na extração:", error);
-    throw new Error(error.message || "Falha na comunicação com a IA.");
+    throw new Error("Falha na análise da IA: " + (error.message || "Erro desconhecido"));
   }
 };
 
