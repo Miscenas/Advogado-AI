@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
@@ -11,21 +12,20 @@ Estrutura: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
 `;
 
 /**
- * Helper para instanciar o SDK seguindo as diretrizes
- * Nota: Em ambientes Vite, o process.env.API_KEY é substituído em tempo de build 
- * se estiver configurado corretamente como VITE_API_KEY no Vercel.
+ * Helper para instanciar o SDK seguindo as diretrizes exclusivas.
  */
 const getAiClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === 'undefined' || apiKey.length < 5) {
+  // Verifica se a chave existe e não é a string literal "undefined" (comum em builds falhas)
+  if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
     throw new Error("API_KEY_MISSING");
   }
   return new GoogleGenAI({ apiKey });
 };
 
 export const hasAiKey = (): boolean => {
-  const key = process.env.API_KEY;
-  return !!(key && key !== 'undefined' && key.length > 5);
+  const apiKey = process.env.API_KEY;
+  return !!(apiKey && apiKey !== 'undefined' && apiKey.length > 10);
 };
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
@@ -33,26 +33,10 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   summary: string;
   extractedData: Partial<PetitionFormData> & { cnjClass?: string, cnjSubject?: string };
 }> => {
-  try {
-    const ai = getAiClient();
-    const prompt = `Analise este documento jurídico brasileiro. 
-    Extraia o resumo dos fatos, nomes das partes e CPFs/CNPJs.
-    
-    RETORNE ESTRITAMENTE JSON: 
-    { 
-      "docType": "Petição Inicial|Sentença|Contrato|Outro", 
-      "summary": "Resumo técnico dos fatos", 
-      "extractedData": { 
-        "area": "civel|trabalhista|etc", 
-        "actionType": "Nome da Ação", 
-        "jurisdiction": "Vara/Comarca",
-        "plaintiffs": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
-        "defendants": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
-        "facts": "Texto detalhado dos fatos", 
-        "value": "R$ 0,00" 
-      } 
-    }`;
+  const ai = getAiClient();
+  const prompt = `Analise este documento jurídico brasileiro. Extraia resumo, partes e CPFs. RETORNE JSON: { "docType": "string", "summary": "string", "extractedData": { "area": "string", "actionType": "string", "jurisdiction": "string", "facts": "string", "plaintiffs": [], "defendants": [], "value": "string" } }`;
 
+  try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { 
@@ -67,12 +51,10 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
       }
     });
 
-    const text = response.text || "{}";
-    return JSON.parse(text);
+    return JSON.parse(response.text || "{}");
   } catch (error: any) {
-    if (error.message === "API_KEY_MISSING") throw error;
     console.error("Erro na extração:", error);
-    throw new Error("Falha na análise da IA: " + (error.message || "Erro desconhecido"));
+    throw error;
   }
 };
 
