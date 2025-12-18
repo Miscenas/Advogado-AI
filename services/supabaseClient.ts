@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 // --- CONFIGURAÇÃO FIXA (SOLUÇÃO DEFINITIVA) ---
@@ -57,45 +58,36 @@ if (isConfigured) {
   console.warn('Advogado IA: Backend keys not found. Using Mock Client for demonstration.');
   
   // --- MOCK IMPLEMENTATION START ---
-  // This block runs ONLY if you haven't set up your Vercel/Supabase Environment Variables yet.
-  
   const MOCK_USER_ID = 'user-demo-123';
   const mockSessionKey = 'jurispet_mock_session';
   const mockPetitionsKey = 'jurispet_mock_petitions';
   const mockProfilesKey = 'jurispet_mock_profiles';
   const mockDeadlinesKey = 'jurispet_mock_deadlines';
   
-  // Try to restore session
   let currentSession: any = null;
   try {
     const stored = localStorage.getItem(mockSessionKey);
     if (stored) currentSession = JSON.parse(stored);
-  } catch (e) {
-    console.error('Error restoring mock session', e);
-  }
+  } catch (e) { console.error('Error restoring mock session', e); }
 
-  // Restore petitions
   let mockPetitions: any[] = [];
   try {
     const storedPetitions = localStorage.getItem(mockPetitionsKey);
     if (storedPetitions) mockPetitions = JSON.parse(storedPetitions);
   } catch (e) { console.error(e); }
 
-  // Restore Deadlines
   let mockDeadlines: any[] = [];
   try {
     const storedDeadlines = localStorage.getItem(mockDeadlinesKey);
     if (storedDeadlines) mockDeadlines = JSON.parse(storedDeadlines);
   } catch (e) { console.error(e); }
 
-  // Restore or Init Profiles (For Admin View)
   let mockProfiles: any[] = [];
   try {
     const storedProfiles = localStorage.getItem(mockProfilesKey);
     if (storedProfiles) {
       mockProfiles = JSON.parse(storedProfiles);
     } else {
-      // Seed with some dummy data if empty
       mockProfiles = [
         {
           id: MOCK_USER_ID,
@@ -112,14 +104,6 @@ if (isConfigured) {
           account_status: 'active',
           role: 'user',
           created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-        },
-        {
-          id: 'user-3',
-          full_name: 'Dra. Ana Souza',
-          email: 'ana@advocacia.com',
-          account_status: 'blocked',
-          role: 'user',
-          created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
         }
       ];
       localStorage.setItem(mockProfilesKey, JSON.stringify(mockProfiles));
@@ -128,9 +112,7 @@ if (isConfigured) {
 
   const listeners = new Set<(event: string, session: any) => void>();
 
-  const notify = (event: string, session: any) => {
-    listeners.forEach(cb => cb(event, session));
-  };
+  const notify = (event: string, session: any) => listeners.forEach(cb => cb(event, session));
 
   const updateSession = (session: any) => {
     currentSession = session;
@@ -149,11 +131,10 @@ if (isConfigured) {
     return mockProfiles.find(p => p.id === id);
   };
 
-  // Mock Usage Data
   const mockUsage = {
     user_id: MOCK_USER_ID,
     monthly_limit: 5,
-    used_this_month: 0, // Calculated dynamically below
+    used_this_month: 0,
     last_reset: new Date().toISOString(),
   };
 
@@ -166,92 +147,41 @@ if (isConfigured) {
         return { data: { subscription: { unsubscribe: () => listeners.delete(callback) } } };
       },
       signInWithPassword: async ({ email }: any) => {
-        // Simple logic: if email contains 'admin', treat as admin user
         const isDemoUser = email.includes('admin') || email === 'demo@jurispet.com';
         const userId = isDemoUser ? MOCK_USER_ID : 'new-user-' + Math.random();
-        
-        // Ensure profile exists for login
         let profile = getProfile(userId);
-        if (!profile && isDemoUser) {
-             profile = mockProfiles[0]; // fallback to demo admin
-        } else if (!profile) {
-             // Create on fly for demo login
-             profile = {
-                 id: userId,
-                 full_name: 'Novo Usuário',
-                 email: email,
-                 account_status: 'trial',
-                 role: 'user',
-                 created_at: new Date().toISOString()
-             };
+        if (!profile && isDemoUser) profile = mockProfiles[0];
+        else if (!profile) {
+             profile = { id: userId, full_name: 'Novo Usuário', email: email, account_status: 'trial', role: 'user', created_at: new Date().toISOString() };
              mockProfiles.push(profile);
              localStorage.setItem(mockProfilesKey, JSON.stringify(mockProfiles));
         }
-
-        const session = { 
-          user: { id: userId, email }, 
-          access_token: 'mock-jwt-token',
-          expires_in: 3600 
-        };
+        const session = { user: { id: userId, email }, access_token: 'mock-token', expires_in: 3600 };
         updateSession(session);
         notify('SIGNED_IN', session);
         return { data: { session }, error: null };
       },
       signUp: async ({ email, options }: any) => {
         const userId = 'user-' + Math.random().toString(36).substr(2, 9);
-        const session = { 
-          user: { id: userId, email },
-          access_token: 'mock-jwt-token',
-          expires_in: 3600
-        };
-        
-        // Create Profile
-        const newProfile = {
-            id: userId,
-            full_name: options?.data?.full_name || 'Usuário',
-            email: email,
-            account_status: 'trial', // Default to trial
-            role: 'user',
-            created_at: new Date().toISOString()
-        };
+        const session = { user: { id: userId, email }, access_token: 'mock-token', expires_in: 3600 };
+        const newProfile = { id: userId, full_name: options?.data?.full_name || 'Usuário', email: email, account_status: 'trial', role: 'user', created_at: new Date().toISOString() };
         mockProfiles.push(newProfile);
         localStorage.setItem(mockProfilesKey, JSON.stringify(mockProfiles));
-
         updateSession(session);
         notify('SIGNED_IN', session);
         return { data: { session }, error: null };
       },
-      signOut: async () => {
-        updateSession(null);
-        notify('SIGNED_OUT', null);
-        return { error: null };
-      },
-      updateUser: async (attributes: any) => {
-          // Simulate password update
-          await new Promise(resolve => setTimeout(resolve, 500));
-          if (attributes.password) {
-              return { data: { user: currentSession?.user }, error: null };
-          }
-          return { data: { user: null }, error: { message: "Mock error" } };
-      }
+      signOut: async () => { updateSession(null); notify('SIGNED_OUT', null); return { error: null }; },
+      updateUser: async (attributes: any) => { if (attributes.password) return { data: { user: currentSession?.user }, error: null }; return { data: null, error: { message: "Mock error" } }; }
     },
     from: (table: string) => {
       return {
         select: (columns = '*') => {
-          // Determine initial dataset
           let initialData: any[] = [];
-          if (table === 'petitions') {
-              initialData = mockPetitions;
-          }
-          else if (table === 'deadlines') {
-              initialData = mockDeadlines;
-          }
-          else if (table === 'profiles') {
-              initialData = mockProfiles;
-          }
+          if (table === 'petitions') initialData = mockPetitions;
+          else if (table === 'deadlines') initialData = mockDeadlines;
+          else if (table === 'profiles') initialData = mockProfiles;
           else if (table === 'usage_limits') {
-              // RECALCULATE usage based on current number of petitions
-              // This simulates the DB trigger behavior in Mock mode
               if (currentSession?.user) {
                  const count = mockPetitions.filter(p => p.user_id === currentSession.user.id).length;
                  mockUsage.used_this_month = count;
@@ -259,168 +189,88 @@ if (isConfigured) {
               }
               initialData = [mockUsage];
           }
-
-          // Chain Builder Pattern
           const createChain = (currentData: any[]) => ({
-             eq: (col: string, val: any) => {
-                return createChain(currentData.filter(x => x[col] === val));
-             },
-             gte: (col: string, val: any) => {
-                return createChain(currentData.filter(x => x[col] >= val));
-             },
-             order: (col: string, { ascending = true }: any) => {
-                const sorted = [...currentData].sort((a, b) => {
-                    const vA = a[col];
-                    const vB = b[col];
-                    if (typeof vA === 'string' && typeof vB === 'string') {
-                        return ascending ? vA.localeCompare(vB) : vB.localeCompare(vA);
-                    }
-                    if (vA < vB) return ascending ? -1 : 1;
-                    if (vA > vB) return ascending ? 1 : -1;
-                    return 0;
-                });
-                return createChain(sorted);
-             },
-             limit: (n: number) => {
-                return createChain(currentData.slice(0, n));
-             },
-             single: async () => {
-                await new Promise(r => setTimeout(r, 100));
-                if (currentData.length === 0) return { data: null, error: { code: 'PGRST116', message: 'Not found' } };
-                return { data: currentData[0], error: null };
-             },
-             then: (resolve: any) => {
-                resolve({ data: currentData, error: null });
-             }
+             eq: (col: string, val: any) => createChain(currentData.filter(x => x[col] === val)),
+             gte: (col: string, val: any) => createChain(currentData.filter(x => x[col] >= val)),
+             order: (col: string, { ascending = true }: any) => createChain([...currentData].sort((a,b) => ascending ? (a[col] > b[col] ? 1 : -1) : (a[col] < b[col] ? 1 : -1))),
+             limit: (n: number) => createChain(currentData.slice(0, n)),
+             single: async () => { if (currentData.length === 0) return { data: null, error: { code: 'PGRST116', message: 'Not found' } }; return { data: currentData[0], error: null }; },
+             then: (resolve: any) => resolve({ data: currentData, error: null })
           });
-
           return createChain(initialData);
         },
-        update: (updates: any) => {
-          return {
+        update: (updates: any) => ({
             eq: async (column: string, value: any) => {
-              await new Promise(resolve => setTimeout(resolve, 300));
-              
               if (table === 'petitions') {
                 mockPetitions = mockPetitions.map(p => p[column] === value ? { ...p, ...updates } : p);
                 localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
                 return { data: mockPetitions, error: null };
               }
-
               if (table === 'deadlines') {
                 mockDeadlines = mockDeadlines.map(p => p[column] === value ? { ...p, ...updates } : p);
                 localStorage.setItem(mockDeadlinesKey, JSON.stringify(mockDeadlines));
                 return { data: mockDeadlines, error: null };
               }
-
-              if (table === 'profiles') {
-                  // Only update if targeting ID
-                  if (column === 'id') {
-                      const updated = updateProfile(value, updates);
-                      return { data: updated, error: null };
-                  }
+              if (table === 'profiles' && column === 'id') {
+                const updated = updateProfile(value, updates);
+                return { data: updated, error: null };
               }
-
               return { data: null, error: null };
             }
-          }
-        },
-        insert: (data: any) => {
-          return {
-            select: () => {
-              return {
+        }),
+        insert: (data: any) => ({
+            select: () => ({
                  single: async () => {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    
                     if (table === 'petitions') {
                        const items = Array.isArray(data) ? data : [data];
-                       const newItems = items.map((item: any) => ({
-                         ...item,
-                         id: Math.random().toString(36).substr(2, 9),
-                         created_at: new Date().toISOString(),
-                         filed: false
-                       }));
+                       const newItems = items.map(item => ({ ...item, id: Math.random().toString(36).substr(2, 9), created_at: new Date().toISOString(), filed: false }));
                        mockPetitions = [...mockPetitions, ...newItems];
                        localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
                        return { data: newItems[0], error: null };
                     }
-
                     if (table === 'deadlines') {
                         const items = Array.isArray(data) ? data : [data];
-                        const newItems = items.map((item: any) => ({
-                          ...item,
-                          id: Math.random().toString(36).substr(2, 9),
-                          created_at: new Date().toISOString(),
-                        }));
+                        const newItems = items.map(item => ({ ...item, id: Math.random().toString(36).substr(2, 9), created_at: new Date().toISOString() }));
                         mockDeadlines = [...mockDeadlines, ...newItems];
                         localStorage.setItem(mockDeadlinesKey, JSON.stringify(mockDeadlines));
                         return { data: newItems[0], error: null };
                      }
-
                     return { data: null, error: { message: 'Insert failed' } };
                  }
-              }
-            }
-          }
-        },
-        delete: () => {
-            return {
-                eq: async (column: string, value: any) => {
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                    
-                    if (table === 'deadlines') {
-                        // Filtra a lista removendo o item
-                        const originalLength = mockDeadlines.length;
-                        mockDeadlines = mockDeadlines.filter(d => d[column] !== value);
-                        
-                        // Persiste no storage
-                        localStorage.setItem(mockDeadlinesKey, JSON.stringify(mockDeadlines));
-                        
-                        // Se não removeu nada (ID não encontrado), pode retornar erro ou sucesso vazio
-                        if (mockDeadlines.length === originalLength) {
-                            // console.warn('Mock Delete: Item not found');
-                        }
-                        
-                        return { data: null, error: null };
-                    }
-                    
-                    if (table === 'petitions') {
-                        mockPetitions = mockPetitions.filter(p => p[column] !== value);
-                        localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
-                        return { data: null, error: null };
-                    }
-                    
-                    if (table === 'saved_jurisprudence') {
-                        // Simulação para jurisprudência (não implementada no mock completo acima, mas seguro adicionar)
-                        return { data: null, error: null };
-                    }
-
+            })
+        }),
+        delete: () => ({
+            eq: async (column: string, value: any) => {
+                if (table === 'deadlines') {
+                    mockDeadlines = mockDeadlines.filter(d => d[column] !== value);
+                    localStorage.setItem(mockDeadlinesKey, JSON.stringify(mockDeadlines));
                     return { data: null, error: null };
                 }
+                if (table === 'petitions') {
+                    mockPetitions = mockPetitions.filter(p => p[column] !== value);
+                    localStorage.setItem(mockPetitionsKey, JSON.stringify(mockPetitions));
+                    return { data: null, error: null };
+                }
+                return { data: null, error: null };
             }
-        }
+        })
       };
     }
   } as any;
-  // --- MOCK IMPLEMENTATION END ---
 }
 
 export const supabase = client;
 export const isLive = isConfigured;
 
 // Helper methods to configure connection from UI
-export const updateConnection = (url: string, key: string, aiKey?: string) => {
+export const updateConnection = (url: string, key: string) => {
     localStorage.setItem('custom_supabase_url', url);
     localStorage.setItem('custom_supabase_key', key);
-    if (aiKey) {
-        localStorage.setItem('custom_gemini_api_key', aiKey);
-    }
     window.location.reload();
 };
 
 export const disconnectCustom = () => {
     localStorage.removeItem('custom_supabase_url');
     localStorage.removeItem('custom_supabase_key');
-    localStorage.removeItem('custom_gemini_api_key');
     window.location.reload();
 };

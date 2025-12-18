@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
@@ -19,9 +20,10 @@ import {
   Unplug,
   Sparkles,
   Info,
-  Settings
+  Settings,
+  Key
 } from 'lucide-react';
-import { supabase, isLive, disconnectCustom } from '../services/supabaseClient';
+import { supabase, isLive } from '../services/supabaseClient';
 import { hasAiKey } from '../services/aiService';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -50,21 +52,22 @@ export const Layout: React.FC<LayoutProps> = ({
   useEffect(() => {
      const storedUrl = localStorage.getItem('custom_supabase_url');
      const storedKey = localStorage.getItem('custom_supabase_key');
+     
      if (storedUrl) setCustomUrl(storedUrl);
      if (storedKey) setCustomKey(storedKey);
+     
      setAiConnected(hasAiKey());
-  }, []);
+  }, [showConnectionModal]);
   
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
 
   const handleSaveConnection = () => {
-      if (customUrl && customKey) {
-          localStorage.setItem('custom_supabase_url', customUrl);
-          localStorage.setItem('custom_supabase_key', customKey);
-          window.location.reload();
-      }
+      if (customUrl) localStorage.setItem('custom_supabase_url', customUrl);
+      if (customKey) localStorage.setItem('custom_supabase_key', customKey);
+      
+      window.location.reload();
   };
 
   const navItems = [
@@ -126,8 +129,8 @@ export const Layout: React.FC<LayoutProps> = ({
             <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sistema</span>
                 <div className="flex gap-1">
-                    <div className={`h-2 w-2 rounded-full ${isLive ? 'bg-green-500' : 'bg-amber-400'}`} />
-                    <div className={`h-2 w-2 rounded-full ${aiConnected ? 'bg-blue-400' : 'bg-slate-300'}`} />
+                    <div className={`h-2 w-2 rounded-full ${isLive ? 'bg-green-500' : 'bg-amber-400'}`} title={isLive ? "Conectado ao Supabase" : "Modo Mock"} />
+                    <div className={`h-2 w-2 rounded-full ${aiConnected ? 'bg-blue-400' : 'bg-slate-300'}`} title={aiConnected ? "IA Ativa" : "IA Desativada"} />
                 </div>
             </div>
             <div className="flex items-center gap-3">
@@ -177,8 +180,20 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <div className="space-y-6">
                     <div className="space-y-4">
-                        <Input label="Supabase URL" value={customUrl} onChange={(e) => setCustomUrl(e.target.value)} />
-                        <Input label="Supabase Anon Key" value={customKey} onChange={(e) => setCustomKey(e.target.value)} type="password" />
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                           <Database size={14}/> Banco de Dados (Supabase)
+                        </h4>
+                        <Input label="Supabase URL" value={customUrl} onChange={(e) => setCustomUrl(e.target.value)} placeholder="https://..." />
+                        <Input label="Supabase Anon Key" value={customKey} onChange={(e) => setCustomKey(e.target.value)} type="password" placeholder="eyJ..." />
+                        
+                        <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 mt-4">
+                           <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-2 mb-2">
+                              <Sparkles size={14}/> Inteligência Artificial
+                           </h4>
+                           <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
+                              O sistema utiliza a chave de API global do servidor para garantir estabilidade e performance.
+                           </p>
+                        </div>
                     </div>
                     <Button onClick={handleSaveConnection} className="w-full h-12 rounded-2xl text-sm font-bold bg-slate-900">Salvar Alterações</Button>
                 </div>

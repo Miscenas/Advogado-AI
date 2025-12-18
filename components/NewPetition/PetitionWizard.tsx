@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty, UsageLimit } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -31,7 +32,8 @@ import {
   Trash2,
   Users,
   FileAudio,
-  Lightbulb
+  Lightbulb,
+  AlertTriangle
 } from 'lucide-react';
 import { generateLegalPetition, refineLegalPetition, extractDataFromDocument, suggestFilingMetadata, transcribeAudio } from '../../services/aiService';
 
@@ -86,6 +88,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const [cnjMetadata, setCnjMetadata] = useState<PetitionFilingMetadata | null>(null);
   
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const [isExtracting, setIsExtracting] = useState(false);
@@ -167,7 +170,10 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             setUploadSuccess(true);
         };
         reader.readAsDataURL(files[0]);
-    } catch (error) { setIsExtracting(false); }
+    } catch (error: any) { 
+        setIsExtracting(false); 
+        alert("Erro na análise: " + (error.message || "Falha ao processar arquivo."));
+    }
   };
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetField: 'facts' | 'requests') => {
@@ -189,9 +195,9 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             setIsTranscribing(false);
         };
         reader.readAsDataURL(files[0]);
-    } catch (error) {
+    } catch (error: any) {
         setIsTranscribing(false);
-        alert("Erro ao transcrever áudio.");
+        alert("Erro na transcrição: " + (error.message || "Tente novamente."));
     }
   };
 
@@ -222,12 +228,17 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setGenError(null);
     try {
       if (!cnjMetadata) setCnjMetadata(await suggestFilingMetadata(formData));
       const content = await generateLegalPetition(formData);
       setGeneratedContent(content);
       setIsFullScreen(true);
-    } catch (error) { alert("Erro ao gerar."); } finally { setIsGenerating(false); }
+    } catch (error: any) { 
+        setGenError(error.message || "Ocorreu um erro desconhecido ao gerar a petição.");
+    } finally { 
+        setIsGenerating(false); 
+    }
   };
 
   const handleSave = async () => {
@@ -455,7 +466,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                <div className="grid gap-6">
                  {formData.defendants.map(d => (
                    <div key={d.id} className="bg-slate-50/30 p-5 rounded-2xl border border-slate-200 border-l-4 border-l-slate-500 relative group shadow-sm">
-                      <button onClick={() => removeParty('defendants', d.id!)} className="absolute -top-2 -right-2 bg-white text-slate-400 p-1.5 rounded-full shadow-md border border-slate-100 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      <button onClick={() => removeParty('defendants', d.id!)} className="absolute -top-2 -right-2 bg-white text-slate-400 p-1.5 rounded-full shadow-md border border-red-100 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         <Trash2 size={16}/>
                       </button>
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -606,6 +617,16 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                         <h3 className="text-2xl font-bold">Redigindo Peça Judicial...</h3>
                         <p className="text-gray-500">Fundamentando Direito e Pedidos com Gemini AI.</p>
                     </div>
+                ) : genError ? (
+                    <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto">
+                        <AlertTriangle className="h-12 w-12 text-red-600" />
+                        <h3 className="text-lg font-bold text-red-900">Erro na Geração</h3>
+                        <p className="text-sm text-red-700 text-center">{genError}</p>
+                        <div className="flex gap-2 mt-4">
+                            <Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button>
+                            <Button onClick={onCancel}>Voltar ao início</Button>
+                        </div>
+                    </div>
                 ) : (
                     <>
                         <Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" />
@@ -684,7 +705,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                    <Button onClick={async () => {
                        if (!generatedContent || !refinementText) return;
                        setIsRefining(true);
-                       try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e) { alert("Erro ao refinar."); } finally { setIsRefining(false); }
+                       try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e: any) { alert("Erro ao refinar: " + (e.message || "Tente novamente.")); } finally { setIsRefining(false); }
                    }} isLoading={isRefining} className="w-full bg-sky-600 hover:bg-sky-700">Aplicar Ajustes</Button>
                 </div>
              </div>
