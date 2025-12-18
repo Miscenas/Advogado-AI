@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty, UsageLimit } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -181,7 +180,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         
         const errorMessage = error.message || "";
         if (errorMessage.includes("API_KEY_MISSING")) {
-           alert("CONFIGURAÇÃO NECESSÁRIA:\nA chave de API do Gemini não foi encontrada no servidor.\n\n1. Verifique se configurou 'API_KEY' na Vercel.\n2. Faça um REDEPLOY do projeto para ativar a chave.");
+           alert("CONFIGURAÇÃO DE PRODUÇÃO NECESSÁRIA:\nA chave de API do Gemini não está visível para o navegador.\n\nNa Vercel, você deve nomear a variável de ambiente como VITE_API_KEY (com o prefixo VITE_).\n\nApós renomear a variável nas Settings da Vercel, você PRECISA fazer um REDEPLOY.");
         } else {
            alert("Erro na análise: " + (errorMessage || "Falha ao processar arquivo. Verifique sua conexão."));
         }
@@ -262,7 +261,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     } catch (error: any) { 
         const msg = error.message || "";
         if (msg.includes("API_KEY_MISSING")) {
-           setGenError("A variável de ambiente API_KEY não foi encontrada. Configure-a no servidor de deploy.");
+           setGenError("Chave VITE_API_KEY não encontrada nas variáveis de ambiente do navegador.");
         } else {
            setGenError(msg || "Erro desconhecido ao gerar a peça.");
         }
@@ -394,7 +393,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                         <h3 className="text-lg font-bold text-red-900">Configuração Pendente</h3>
                         <p className="text-sm text-red-700 text-center leading-relaxed">
                           {genError.includes("API_KEY") 
-                            ? "A chave da IA não foi configurada no servidor Vercel. Adicione a variável 'API_KEY' nas Settings e faça um REDEPLOY." 
+                            ? "A chave da IA deve ser nomeada como VITE_API_KEY no painel da Vercel para que o navegador consiga lê-la." 
                             : genError}
                         </p>
                         <div className="flex gap-2 mt-6">

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
@@ -12,18 +11,36 @@ Estrutura: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
 `;
 
 /**
+ * Obtém a chave de API de forma resiliente em ambientes Vite/Vercel.
+ * No Vite, variáveis precisam do prefixo VITE_ para serem expostas ao cliente.
+ */
+const getApiKey = (): string | undefined => {
+  // 1. Tenta o padrão do Vite (exposto ao navegador)
+  const viteKey = (import.meta as any).env?.VITE_API_KEY;
+  if (viteKey) return viteKey;
+
+  // 2. Tenta o padrão process.env (comum em Vercel/Node)
+  const processKey = process.env.API_KEY;
+  if (processKey) return processKey;
+
+  // 3. Tenta a variável sem prefixo no import.meta (caso de define customizado)
+  return (import.meta as any).env?.API_KEY;
+};
+
+/**
  * Helper para instanciar o SDK e validar a chave
  */
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey || apiKey.length < 10) {
-    throw new Error("API_KEY_MISSING: A chave do Gemini não foi detectada. Verifique se configurou a variável 'API_KEY' na Vercel e fez um Redeploy.");
+    throw new Error("API_KEY_MISSING: A chave do Gemini não foi encontrada no navegador. Em projetos Vite/Vercel, você deve nomear a variável como VITE_API_KEY para que ela fique visível no frontend.");
   }
   return new GoogleGenAI({ apiKey });
 };
 
 export const hasAiKey = (): boolean => {
-  return !!(process.env.API_KEY && process.env.API_KEY.length > 10);
+  const key = getApiKey();
+  return !!(key && key.length > 10);
 };
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
