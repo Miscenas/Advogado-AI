@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty, UsageLimit } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -139,12 +140,15 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     if (!files || files.length === 0) return;
     
     setIsExtracting(true);
+    setUploadSuccess(false);
     const file = files[0];
     const reader = new FileReader();
 
     reader.onload = async (event) => {
       try {
         const base64Data = (event.target?.result as string).split(',')[1];
+        if (!base64Data) throw new Error("Falha ao ler o conteúdo do arquivo.");
+
         const analysis = await extractDataFromDocument(base64Data, file.type);
         
         const aiPlaintiffs = (analysis.extractedData.plaintiffs || []).map((p: any) => ({...INITIAL_PARTY, ...p, id: 'pl-' + Math.random().toString(36).substr(2, 9)}));
@@ -177,7 +181,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         
         const errorMessage = error.message || "";
         if (errorMessage.includes("API_KEY_MISSING")) {
-           setGenError("A chave da Inteligência Artificial (API_KEY) não foi configurada no servidor. Por favor, adicione sua chave do Gemini nas variáveis de ambiente do deploy.");
+           alert("CONFIGURAÇÃO NECESSÁRIA:\nA chave de API do Gemini não foi encontrada no servidor.\n\n1. Verifique se configurou 'API_KEY' na Vercel.\n2. Faça um REDEPLOY do projeto para ativar a chave.");
         } else {
            alert("Erro na análise: " + (errorMessage || "Falha ao processar arquivo. Verifique sua conexão."));
         }
@@ -186,7 +190,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
     reader.onerror = () => {
       setIsExtracting(false);
-      alert("Erro ao ler o arquivo.");
+      alert("Erro ao ler o arquivo no navegador.");
     };
 
     reader.readAsDataURL(file);
@@ -256,7 +260,12 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       setGeneratedContent(content);
       setIsFullScreen(true);
     } catch (error: any) { 
-        setGenError(error.message || "Erro desconhecido ao gerar a peça.");
+        const msg = error.message || "";
+        if (msg.includes("API_KEY_MISSING")) {
+           setGenError("A variável de ambiente API_KEY não foi encontrada. Configure-a no servidor de deploy.");
+        } else {
+           setGenError(msg || "Erro desconhecido ao gerar a peça.");
+        }
     } finally { 
         setIsGenerating(false); 
     }
@@ -308,21 +317,22 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                 {isExtracting ? (
                     <div className="flex flex-col items-center gap-4">
                         <Loader2 className="h-12 w-12 text-sky-600 animate-spin" />
-                        <p className="font-bold text-sky-700">Analisando documento...</p>
+                        <p className="font-bold text-sky-700">Extraindo dados do documento...</p>
+                        <p className="text-xs text-slate-400">A IA está analisando nomes, CPFs e os fatos principais.</p>
                     </div>
                 ) : uploadSuccess ? (
                     <div className="flex flex-col items-center gap-2">
                         <FileCheck className="h-16 w-16 text-green-600 mb-2" />
-                        <h3 className="text-xl font-bold text-green-900">Análise Completa!</h3>
-                        <p className="text-green-700">Dados e fatos extraídos.</p>
-                        <button onClick={() => fileInputRef.current?.click()} className="text-xs text-sky-600 underline mt-4">Trocar Arquivo</button>
+                        <h3 className="text-xl font-bold text-green-900">Documento Processado!</h3>
+                        <p className="text-green-700">Dados importados com sucesso para os formulários.</p>
+                        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="mt-4">Trocar Arquivo</Button>
                     </div>
                 ) : (
                     <>
                         <Upload className="h-16 w-16 text-sky-400 mx-auto mb-4" />
-                        <h3 className="text-xl font-bold text-gray-900">Upload para Análise</h3>
-                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Extrairemos CPFs, Nomes e Resumo dos Fatos do documento enviado.</p>
-                        <Button variant="primary" onClick={() => fileInputRef.current?.click()}>Selecionar Documento</Button>
+                        <h3 className="text-xl font-bold text-gray-900">Análise de Documento</h3>
+                        <p className="text-gray-500 max-w-sm mx-auto mb-6">Selecione uma Inicial ou Resumo para preencher os dados automaticamente.</p>
+                        <Button variant="primary" onClick={() => fileInputRef.current?.click()}>Selecionar PDF ou Imagem</Button>
                     </>
                 )}
              </div>
@@ -334,8 +344,8 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
             <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 flex items-start gap-4 shadow-sm backdrop-blur-sm">
                 <div className="bg-amber-100 p-2 rounded-xl text-amber-600"><Lightbulb size={20} /></div>
                 <div>
-                    <h4 className="text-sm font-bold text-amber-900 mb-0.5 tracking-tight">DICA: Preenchimento opcional.</h4>
-                    <p className="text-xs text-amber-700 leading-relaxed">Se você narrar os nomes no texto dos fatos, a IA irá qualificar as partes automaticamente.</p>
+                    <h4 className="text-sm font-bold text-amber-900 mb-0.5 tracking-tight">DICA: Qualificação Automática.</h4>
+                    <p className="text-xs text-amber-700 leading-relaxed">Se os nomes constarem no texto dos fatos, a IA irá gerar a qualificação completa automaticamente.</p>
                 </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -345,9 +355,9 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                     {AREAS_DO_DIREITO.map(area => (<option key={area.value} value={area.value}>{area.label}</option>))}
                   </select>
                 </div>
-                <Input label="Tipo de Ação" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Indenizatória, Cobrança..." />
+                <Input label="Tipo de Ação" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Ex: Indenizatória por Danos Morais" />
             </div>
-            <Input label="Jurisdição" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="AO JUÍZO DA..." />
+            <Input label="Endereçamento (Jurisdição)" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="Ex: AO JUÍZO DA VARA CÍVEL DA COMARCA DE..." />
           </div>
         );
       case 'Fatos':
@@ -355,7 +365,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           <div className="space-y-6 animate-in fade-in">
              <label className="text-sm font-bold text-gray-700">Narrativa dos Fatos</label>
              <div className="relative group">
-                <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.facts} onChange={e => handleInputChange('facts', e.target.value)} placeholder="Relate o ocorrido com o máximo de detalhes..." />
+                <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.facts} onChange={e => handleInputChange('facts', e.target.value)} placeholder="Relate o ocorrido com o máximo de detalhes para fundamentação jurídica..." />
                 {isTranscribing && (<div className="absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center rounded-2xl z-10"><div className="flex flex-col items-center gap-3"><Loader2 className="h-8 w-8 text-juris-600 animate-spin" /><span className="text-xs font-bold text-juris-900">TRANSCREVENDO...</span></div></div>)}
              </div>
              <div className="flex gap-4 justify-center pt-2">
@@ -369,38 +379,31 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         return (
             <div className="space-y-6 animate-in fade-in">
                <label className="text-sm font-bold text-gray-700">Pedidos e Valor da Causa</label>
-               <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.requests.join('\n')} onChange={e => handleInputChange('requests', e.target.value.split('\n'))} placeholder="Liste os pedidos principais..." />
-               <Input label="Valor da Causa (Estimado)" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} />
+               <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-juris-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.requests.join('\n')} onChange={e => handleInputChange('requests', e.target.value.split('\n'))} placeholder="Liste os pedidos principais (Dano Moral, Tutela de Urgência...)" />
+               <Input label="Valor da Causa" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} placeholder="R$ 0,00" />
             </div>
         );
       case 'Gerar':
         return (
             <div className="text-center py-20 animate-in zoom-in-95">
                 {isGenerating ? (
-                    <div className="flex flex-col items-center gap-4"><Sparkles className="h-16 w-16 text-juris-500 animate-pulse" /><h3 className="text-2xl font-bold">Redigindo Peça de Excelência...</h3><p className="text-gray-500">Isso pode levar alguns segundos dependendo da complexidade.</p></div>
+                    <div className="flex flex-col items-center gap-4"><Sparkles className="h-16 w-16 text-juris-500 animate-pulse" /><h3 className="text-2xl font-bold">Redigindo Peça de Excelência...</h3><p className="text-gray-500">Fundamentando Direito e Pedidos com base na narrativa.</p></div>
                 ) : genError ? (
                     <div className="flex flex-col items-center gap-4 bg-red-50 p-8 rounded-[2.5rem] border border-red-100 max-w-lg mx-auto">
                         <AlertTriangle className="h-12 w-12 text-red-600" />
-                        <h3 className="text-lg font-bold text-red-900">Configuração Necessária</h3>
+                        <h3 className="text-lg font-bold text-red-900">Configuração Pendente</h3>
                         <p className="text-sm text-red-700 text-center leading-relaxed">
-                          {genError.includes("API_KEY_MISSING") 
-                            ? "A chave de API do Gemini não foi configurada nas variáveis de ambiente do seu servidor. Vá ao painel do seu deploy (Vercel/Netlify) e adicione a variável 'API_KEY'." 
+                          {genError.includes("API_KEY") 
+                            ? "A chave da IA não foi configurada no servidor Vercel. Adicione a variável 'API_KEY' nas Settings e faça um REDEPLOY." 
                             : genError}
                         </p>
-                        
-                        {genError.includes("API_KEY_MISSING") && (
-                          <a href="https://aistudio.google.com/app/apikey" target="_blank" className="flex items-center gap-2 text-xs font-bold text-red-800 hover:underline mt-2 bg-white px-4 py-2 rounded-full shadow-sm">
-                            <ExternalLink size={14}/> Obter chave gratuita
-                          </a>
-                        )}
-
                         <div className="flex gap-2 mt-6">
                            <Button variant="outline" onClick={() => setGenError(null)}>Tentar novamente</Button>
                            <Button onClick={onCancel}>Sair</Button>
                         </div>
                     </div>
                 ) : (
-                    <><Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" /><h3 className="text-2xl font-bold mb-2">Petição Pronta para Geração</h3><p className="text-gray-500 mb-8">A IA irá fundamentar sua peça com base na narrativa fornecida.</p><Button size="lg" onClick={handleGenerate} className="px-12 h-14 text-lg shadow-xl"><Sparkles className="mr-2"/> Gerar Petição agora</Button></>
+                    <><Scale className="h-16 w-16 text-juris-900 mx-auto mb-6" /><h3 className="text-2xl font-bold mb-2">Petição Pronta para Geração</h3><p className="text-gray-500 mb-8">O assistente irá redigir a peça completa com base nos dados fornecidos.</p><Button size="lg" onClick={handleGenerate} className="px-12 h-14 text-lg shadow-xl"><Sparkles className="mr-2"/> Gerar Minuta Completa</Button></>
                 )}
             </div>
         );
@@ -412,7 +415,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     return (
       <div className="fixed inset-0 z-[200] bg-gray-100 flex flex-col h-screen overflow-hidden">
          <div className="bg-white border-b px-6 py-3 flex justify-between items-center shadow-sm shrink-0">
-             <div className="flex items-center gap-4"><button onClick={() => setIsFullScreen(false)} className="p-2 text-gray-400 hover:text-gray-900"><X size={24}/></button><h2 className="text-lg font-bold text-juris-900">Visualização da Peça</h2></div>
+             <div className="flex items-center gap-4"><button onClick={() => setIsFullScreen(false)} className="p-2 text-gray-400 hover:text-gray-900"><X size={24}/></button><h2 className="text-lg font-bold text-juris-900">Editor de Petição</h2></div>
              <div className="flex gap-2"><Button variant="outline" onClick={handlePrint}><Printer size={16} className="mr-2"/> Imprimir</Button><Button variant="outline" onClick={handleDownloadDoc}><Download size={16} className="mr-2"/> Word</Button><Button onClick={handleSave} isLoading={isSaving}><Save size={18} className="mr-2"/> Salvar no Sistema</Button></div>
          </div>
          <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
@@ -425,7 +428,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
              <div className="w-full md:w-80 p-6 bg-white border-l overflow-y-auto shrink-0 flex flex-col gap-6 shadow-lg">
                 <div className="bg-sky-50 rounded-xl border border-sky-100 p-5 shadow-sm">
                    <h4 className="text-xs font-bold text-sky-800 uppercase mb-4 flex items-center gap-2 font-bold"><RefreshCw size={14}/> Refinar Texto</h4>
-                   <textarea className="w-full h-32 rounded-lg border border-sky-200 p-3 text-sm mb-3 outline-none focus:ring-2 focus:ring-sky-300 transition-all" placeholder="Ex: Adicione fundamentação sobre o Art. 186 do CC..." value={refinementText} onChange={e => setRefinementText(e.target.value)} />
+                   <textarea className="w-full h-32 rounded-lg border border-sky-200 p-3 text-sm mb-3 outline-none focus:ring-2 focus:ring-sky-300 transition-all" placeholder="Ex: Adicione fundamentação sobre o Art. 186 do Código Civil..." value={refinementText} onChange={e => setRefinementText(e.target.value)} />
                    <Button onClick={async () => { if (!generatedContent || !refinementText) return; setIsRefining(true); try { setGeneratedContent(await refineLegalPetition(generatedContent, refinementText)); setRefinementText(''); } catch (e) { alert("Erro ao refinar."); } finally { setIsRefining(false); } }} isLoading={isRefining} className="w-full bg-sky-600 hover:bg-sky-700">Aplicar Ajuste</Button>
                 </div>
              </div>
@@ -439,13 +442,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       {mode === 'selection' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <button onClick={() => { setMode('scratch'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-juris-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-juris-50 p-6 rounded-full group-hover:bg-juris-100 transition-colors mb-6"><PenTool size={56} className="text-juris-600" /></div><h3 className="text-2xl font-bold text-gray-900">Petição do Zero</h3><p className="text-gray-500 mt-2 max-w-xs">Narre os fatos e a IA redigirá a peça completa para você.</p></button>
-          <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-sky-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-sky-50 p-6 rounded-full group-hover:bg-sky-100 transition-colors mb-6"><FileUp size={56} className="text-sky-600" /></div><h3 className="text-2xl font-bold text-gray-900">Analisar Documento</h3><p className="text-gray-500 mt-2 max-w-xs">Envie um documento para extração automática de dados.</p></button>
+          <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white border-2 border-gray-100 p-10 rounded-2xl hover:border-sky-500 hover:shadow-xl transition-all h-80 flex flex-col items-center justify-center text-center group"><div className="bg-sky-50 p-6 rounded-full group-hover:bg-sky-100 transition-colors mb-6"><FileUp size={56} className="text-sky-600" /></div><h3 className="text-2xl font-bold text-gray-900">Analisar Documento</h3><p className="text-gray-500 mt-2 max-w-xs">Envie um documento para extração automática de dados e fatos.</p></button>
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="bg-gray-50 px-8 py-4 border-b flex justify-between items-center"><div className="flex gap-4">{(mode === 'upload' ? ['Upload', 'Dados', 'Fatos', 'Pedidos', 'Gerar'] : ['Dados', 'Fatos', 'Pedidos', 'Gerar']).map((s, idx) => (<div key={s} className={`flex items-center gap-2 ${currentStep === idx + 1 ? 'text-juris-900 font-bold' : idx + 1 < currentStep ? 'text-green-500' : 'text-gray-400'}`}><div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${currentStep === idx + 1 ? 'bg-juris-900 text-white shadow-md' : idx + 1 < currentStep ? 'bg-green-100' : 'bg-gray-100'}`}>{idx+1 < currentStep ? <CheckCircle size={12}/> : idx+1}</div><span className="hidden sm:inline text-xs uppercase font-bold tracking-wider">{s}</span></div>))}</div><button onClick={onCancel} className="text-gray-400 hover:text-gray-600 p-2"><X size={20}/></button></div>
-          <div className="p-8 min-h-[500px]">{renderStep()}</div>
-          <div className="bg-gray-50 px-8 py-4 border-t flex justify-between"><Button variant="outline" onClick={() => { if(currentStep===1) setMode('selection'); else setCurrentStep(prev=>prev-1); }}>Voltar</Button>{currentStep < STEPS.length && <Button onClick={() => setCurrentStep(prev=>prev+1)} disabled={mode === 'upload' && currentStep === 1 && !uploadSuccess}>Próximo <ChevronRight size={16}/></Button>}</div>
+          <div className="p-8 min-h-[400px]">{renderStep()}</div>
+          <div className="bg-gray-50 px-8 py-4 border-t flex justify-between"><Button variant="outline" onClick={() => { if(currentStep===1) setMode('selection'); else setCurrentStep(prev=>prev-1); }}>Voltar</Button>{currentStep < STEPS.length && <Button onClick={() => setCurrentStep(prev=>prev+1)} disabled={mode === 'upload' && currentStep === 1 && !uploadSuccess && !isExtracting}>Próximo <ChevronRight size={16}/></Button>}</div>
         </div>
       )}
     </div>

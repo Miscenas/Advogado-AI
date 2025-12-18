@@ -1,54 +1,29 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty } from "../types";
 
 /**
- * PROTOCOLO DE BLINDAGEM E EXCELÊNCIA JURÍDICA:
- * 1. Identidade: Advogado Sênior Brasileiro.
- * 2. Fundamentação: CPC/2015 e CLT.
+ * Protocolo de Identidade Jurídica para a IA
  */
 const SHIELD_PROTOCOL = `
-Você é um ADVOGADO SÊNIOR BRASILEIRO com 20 anos de prática.
-Responda com rigor técnico, polidez e estratégia.
-Utilize CPC/2015 para cível e CLT para trabalhista.
+Você é um ADVOGADO SÊNIOR BRASILEIRO.
+Responda com rigor técnico, polidez e fundamentação no CPC/2015 ou CLT.
 Estrutura: Endereçamento, Preâmbulo, Fatos, Direito e Pedidos.
 `;
 
 /**
- * Verifica se a variável de ambiente está disponível.
+ * Helper para instanciar o SDK e validar a chave
  */
-export const hasAiKey = (): boolean => {
-  return typeof process !== 'undefined' && !!process.env.API_KEY;
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey.length < 10) {
+    throw new Error("API_KEY_MISSING: A chave do Gemini não foi detectada. Verifique se configurou a variável 'API_KEY' na Vercel e fez um Redeploy.");
+  }
+  return new GoogleGenAI({ apiKey });
 };
 
-/**
- * Função centralizada para chamadas à API Gemini.
- * Sempre cria uma nova instância para garantir o uso da chave de ambiente mais recente.
- */
-const getModelResponse = async (modelName: string, prompt: string | any, systemInstruction?: string, isJson: boolean = false) => {
-  if (!process.env.API_KEY) {
-    throw new Error("API_KEY_MISSING: A variável de ambiente API_KEY não foi configurada no servidor.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  try {
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: typeof prompt === 'string' ? prompt : { parts: prompt.parts || prompt },
-      config: {
-        systemInstruction: systemInstruction || SHIELD_PROTOCOL,
-        responseMimeType: isJson ? "application/json" : undefined,
-      },
-    });
-
-    return response;
-  } catch (error: any) {
-    console.error("Erro Gemini API:", error);
-    if (error.message?.includes('403') || error.message?.includes('API key not valid')) {
-      throw new Error("CHAVE_INVALIDA: A API_KEY configurada no Vercel é inválida.");
-    }
-    throw error;
-  }
+export const hasAiKey = (): boolean => {
+  return !!(process.env.API_KEY && process.env.API_KEY.length > 10);
 };
 
 export const extractDataFromDocument = async (base64Data: string, mimeType: string): Promise<{
@@ -56,35 +31,89 @@ export const extractDataFromDocument = async (base64Data: string, mimeType: stri
   summary: string;
   extractedData: Partial<PetitionFormData> & { cnjClass?: string, cnjSubject?: string };
 }> => {
-  const parts = [
-    { inlineData: { mimeType, data: base64Data } },
-    { text: "Analise este documento jurídico brasileiro e extraia os dados em JSON. Identifique Classe e Assunto CNJ." }
-  ];
+  const ai = getAiClient();
+  const prompt = `Analise este documento jurídico brasileiro. 
+  Extraia o resumo dos fatos, nomes das partes e CPFs/CNPJs.
   
-  const response = await getModelResponse('gemini-3-flash-preview', { parts }, "Você é um perito em análise de documentos jurídicos.", true);
-  return JSON.parse(response.text || "{}");
+  RETORNE ESTRITAMENTE JSON: 
+  { 
+    "docType": "Petição Inicial|Sentença|Contrato|Outro", 
+    "summary": "Resumo técnico dos fatos", 
+    "extractedData": { 
+      "area": "civel|trabalhista|etc", 
+      "actionType": "Nome da Ação", 
+      "jurisdiction": "Vara/Comarca",
+      "plaintiffs": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
+      "defendants": [{"name": "string", "type": "pf|pj", "doc": "string"}], 
+      "facts": "Texto detalhado dos fatos", 
+      "value": "R$ 0,00" 
+    } 
+  }`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: { 
+        parts: [
+          { inlineData: { mimeType, data: base64Data } }, 
+          { text: prompt }
+        ] 
+      },
+      config: { 
+        responseMimeType: "application/json",
+        systemInstruction: "Você é um perito em análise processual brasileira."
+      }
+    });
+
+    const text = response.text || "{}";
+    return JSON.parse(text);
+  } catch (error: any) {
+    console.error("Erro na extração:", error);
+    throw new Error(error.message || "Falha na comunicação com a IA.");
+  }
 };
 
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
-  const prompt = `REDIJA UMA PETIÇÃO INICIAL SÊNIOR. AREA: ${data.area}. DADOS: ${JSON.stringify(data)}`;
-  const response = await getModelResponse('gemini-3-pro-preview', prompt);
+  const ai = getAiClient();
+  const prompt = `REDIJA UMA PETIÇÃO INICIAL SÊNIOR COM BASE NESTES DADOS: ${JSON.stringify(data)}`;
+  
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-pro-preview',
+    contents: prompt,
+    config: { systemInstruction: SHIELD_PROTOCOL }
+  });
+  
   return response.text || "";
 };
 
 export const generateLegalDefense = async (data: PetitionFormData): Promise<string> => {
-  const prompt = `REDIJA UMA CONTESTAÇÃO TÉCNICA. DADOS: ${JSON.stringify(data)}`;
-  const response = await getModelResponse('gemini-3-pro-preview', prompt);
+  const ai = getAiClient();
+  const prompt = `REDIJA UMA CONTESTAÇÃO/DEFESA TÉCNICA SÊNIOR COM BASE NESTES DADOS: ${JSON.stringify(data)}`;
+  
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-pro-preview',
+    contents: prompt,
+    config: { systemInstruction: SHIELD_PROTOCOL }
+  });
+  
   return response.text || "";
 };
 
 export const suggestFilingMetadata = async (data: PetitionFormData): Promise<PetitionFilingMetadata> => {
+  const ai = getAiClient();
   const prompt = `Sugira Classe e Assunto CNJ para: ${data.area}, ${data.actionType}. Retorne JSON { "competence": string, "class": string, "subject": string }`;
-  const response = await getModelResponse('gemini-3-flash-preview', prompt, "Especialista em tabelas unificadas do CNJ.", true);
+  
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: prompt,
+    config: { responseMimeType: "application/json" }
+  });
+  
   return JSON.parse(response.text || "{}");
 };
 
 export const searchJurisprudence = async (query: string, scope: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+  const ai = getAiClient();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Busque jurisprudência sobre: "${query}". Formate ementas em HTML.`,
@@ -97,7 +126,7 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
   
   if (links.length > 0) {
     const uniqueLinks = Array.from(new Set(links));
-    text += `<div class='mt-4 p-4 bg-slate-100 rounded-xl border border-slate-200'><strong>Fontes Oficiais:</strong><ul class='list-disc ml-5 mt-2'>`;
+    text += `<div class='mt-4 p-4 bg-slate-100 rounded-xl border border-slate-200 text-sm font-sans'><strong>Fontes Oficiais:</strong><ul class='list-disc ml-5 mt-2'>`;
     uniqueLinks.forEach(link => { text += `<li><a href='${link}' target='_blank' class='text-blue-600 underline'>${link}</a></li>`; });
     text += `</ul></div>`;
   }
@@ -105,16 +134,25 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
 };
 
 export const refineLegalPetition = async (currentContent: string, instructions: string): Promise<string> => {
-  const prompt = `Refine este texto jurídico seguindo as instruções: "${instructions}". Texto atual: ${currentContent}`;
-  const response = await getModelResponse('gemini-3-flash-preview', prompt);
+  const ai = getAiClient();
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Aperfeiçoe este texto jurídico seguindo: "${instructions}". Texto atual: ${currentContent}`,
+    config: { systemInstruction: SHIELD_PROTOCOL }
+  });
   return response.text || currentContent;
 };
 
 export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
-  const parts = [
-    { inlineData: { mimeType, data: base64Data } },
-    { text: "Transcreva este relato jurídico mantendo o rigor técnico." }
-  ];
-  const response = await getModelResponse('gemini-3-flash-preview', { parts });
+  const ai = getAiClient();
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: { 
+      parts: [
+        { inlineData: { mimeType, data: base64Data } }, 
+        { text: "Transcreva este relato jurídico mantendo o rigor técnico." }
+      ] 
+    }
+  });
   return response.text || "";
 };
