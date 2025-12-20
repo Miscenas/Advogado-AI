@@ -30,7 +30,8 @@ import {
   MapPin,
   CreditCard,
   Briefcase,
-  FileAudio
+  FileAudio,
+  FileText as FileIcon
 } from 'lucide-react';
 import { 
   generateLegalPetition, 
@@ -114,7 +115,9 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
   useEffect(() => {
     if (isFullScreen && contentRef.current && generatedContent) {
-        contentRef.current.innerHTML = generatedContent;
+        if (!contentRef.current.innerHTML || contentRef.current.innerHTML === '<br>') {
+            contentRef.current.innerHTML = generatedContent;
+        }
     }
   }, [isFullScreen, generatedContent]);
 
@@ -365,13 +368,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                 {isExtracting ? (
                     <div className="flex flex-col items-center gap-6">
                         <Loader2 className="h-12 w-12 md:h-16 md:w-16 text-indigo-600 animate-spin" />
-                        <p className="font-black text-slate-900 dark:text-slate-100 text-sm md:text-xl uppercase tracking-widest">Analisando Arquivo...</p>
+                        <p className="font-black text-slate-900 dark:text-slate-100 text-sm md:text-xl uppercase tracking-widest">Analisando Arquivos...</p>
                     </div>
                 ) : uploadSuccess ? (
                     <div className="flex flex-col items-center gap-4 animate-in zoom-in">
                         <CheckCircle size={56} className="text-emerald-500" />
                         <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Extração Concluída</h3>
-                        <Button variant="outline" size="md" onClick={() => fileInputRef.current?.click()} className="rounded-xl border-2 mt-4 font-black uppercase text-[10px] dark:border-slate-700">Trocar Documento</Button>
+                        <Button variant="outline" size="md" onClick={() => fileInputRef.current?.click()} className="rounded-xl border-2 mt-4 font-black uppercase text-[10px] dark:border-slate-700">Trocar Arquivos</Button>
                     </div>
                 ) : (
                     <>
@@ -379,9 +382,18 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                             <FileUp className="h-10 w-10 md:h-14 md:w-14 text-indigo-400 dark:text-indigo-500" />
                             <ImageIcon className="h-10 w-10 md:h-14 md:w-14 text-emerald-400 dark:text-emerald-500" />
                         </div>
-                        <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 uppercase leading-none">PDF ou Foto do Processo</h3>
-                        <p className="text-slate-400 dark:text-slate-500 text-xs md:text-sm font-medium mb-10 max-w-sm mx-auto">Nossa IA Sênior preencherá os dados automaticamente através de documentos ou fotos.</p>
-                        <Button size="lg" className="rounded-2xl bg-indigo-600 font-black tracking-widest px-8 md:px-10 h-14 md:h-16 shadow-xl text-xs md:text-sm" onClick={() => fileInputRef.current?.click()}>SUBIR ARQUIVO / IMAGEM</Button>
+                        <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 uppercase leading-none">Arquivos ou Fotos do Processo</h3>
+                        <p className="text-slate-400 dark:text-slate-500 text-xs md:text-sm font-medium mb-4 max-w-sm mx-auto">Nossa IA Sênior preencherá os dados automaticamente através de documentos ou fotos.</p>
+                        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 mb-10 max-w-md mx-auto">
+                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Formatos Suportados:</p>
+                            <div className="flex flex-wrap justify-center gap-3">
+                                <span className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase"><FileIcon size={12}/> PDF</span>
+                                <span className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase"><FileIcon size={12}/> Word</span>
+                                <span className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase"><FileIcon size={12}/> TXT</span>
+                                <span className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase"><ImageIcon size={12}/> Imagem</span>
+                            </div>
+                        </div>
+                        <Button size="lg" className="rounded-2xl bg-indigo-600 font-black tracking-widest px-8 md:px-10 h-14 md:h-16 shadow-xl text-xs md:text-sm" onClick={() => fileInputRef.current?.click()}>SUBIR ARQUIVOS / IMAGENS</Button>
                     </>
                 )}
              </div>
@@ -595,6 +607,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                           color: '#000000',
                           backgroundColor: '#ffffff' 
                         }}
+                        dangerouslySetInnerHTML={{ __html: generatedContent }}
                     />
                 </div>
             </div>
@@ -683,8 +696,8 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           
           <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-8 md:p-12 rounded-[2.5rem] md:rounded-[4rem] hover:border-emerald-600 dark:hover:border-emerald-500 hover:shadow-2xl transition-all h-[340px] md:h-[420px] flex flex-col items-center justify-center text-center group active:scale-95 shadow-sm">
             <div className="bg-slate-50 dark:bg-slate-800 p-6 md:p-10 rounded-3xl md:rounded-[2.5rem] group-hover:bg-emerald-600 group-hover:text-white transition-all mb-6 md:mb-10 shadow-lg border border-slate-100 dark:border-slate-700"><FileUp size={48} className="md:w-16 md:h-16" /></div>
-            <h3 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">Importar PDF</h3>
-            <p className="text-slate-400 dark:text-slate-500 mt-4 md:mt-6 text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] max-w-[180px]">Extração automática via IA de arquivos ou fotos.</p>
+            <h3 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">Importar Arquivos</h3>
+            <p className="text-slate-400 dark:text-slate-500 mt-4 md:mt-6 text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] max-w-[180px]">Formatos: PDF, Word, TXT ou Imagens de processos.</p>
           </button>
         </div>
       ) : (
