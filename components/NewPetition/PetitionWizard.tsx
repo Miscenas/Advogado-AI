@@ -31,7 +31,8 @@ import {
   CreditCard,
   Briefcase,
   FileAudio,
-  FileText as FileIcon
+  FileText as FileIcon,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   generateLegalPetition, 
@@ -97,6 +98,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
   const [isExtracting, setIsExtracting] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -157,6 +159,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setIsExtracting(true);
+    setUploadError(null);
     try {
       const analysis = await extractDataFromDocument(files[0]);
       if (analysis) {
@@ -168,7 +171,11 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
           }));
           setUploadSuccess(true);
       }
-    } catch (e) { alert("Erro ao ler arquivo."); } finally { setIsExtracting(false); }
+    } catch (e: any) { 
+      setUploadError(e.message || "Erro inesperado ao processar arquivo.");
+    } finally { 
+      setIsExtracting(false); 
+    }
   };
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'facts' | 'requests') => {
@@ -363,7 +370,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
       case 'Upload':
         return (
           <div className="space-y-6 text-center py-4 w-full">
-             <div className={`border-4 border-dashed rounded-[2.5rem] md:rounded-[3rem] p-8 md:p-16 transition-all ${uploadSuccess ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800' : isExtracting ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-800' : 'bg-white dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600'}`}>
+             <div className={`border-4 border-dashed rounded-[2.5rem] md:rounded-[3rem] p-8 md:p-16 transition-all ${uploadSuccess ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800' : isExtracting ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-800' : uploadError ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-800' : 'bg-white dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600'}`}>
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf, .txt, .doc, .docx, image/*" />
                 {isExtracting ? (
                     <div className="flex flex-col items-center gap-6">
@@ -375,6 +382,13 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                         <CheckCircle size={56} className="text-emerald-500" />
                         <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Extração Concluída</h3>
                         <Button variant="outline" size="md" onClick={() => fileInputRef.current?.click()} className="rounded-xl border-2 mt-4 font-black uppercase text-[10px] dark:border-slate-700">Trocar Arquivos</Button>
+                    </div>
+                ) : uploadError ? (
+                    <div className="flex flex-col items-center gap-4 animate-in shake">
+                        <AlertTriangle size={56} className="text-rose-500" />
+                        <h3 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Falha na Leitura</h3>
+                        <p className="text-rose-600 dark:text-rose-400 text-xs font-bold max-w-xs">{uploadError}</p>
+                        <Button variant="outline" size="md" onClick={() => fileInputRef.current?.click()} className="rounded-xl border-2 mt-4 font-black uppercase text-[10px] dark:border-slate-700 border-rose-200 text-rose-600">Tentar Novamente</Button>
                     </div>
                 ) : (
                     <>
@@ -520,7 +534,7 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                      <div className="space-y-1">
                                         <label className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">CPF/CNPJ</label>
-                                        <input className="h-9 md:h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white" value={party.doc} onChange={e => updateParty('defendants', party.id!, 'doc', e.target.value)} placeholder="00.000.000/0000-00" />
+                                        <input className="h-9 md:h-10 w-full rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white" value={party.doc} onChange={e => updateParty('defendants', party.id!, 'doc', e.target.value)} placeholder="00.000.000/0000-00" />
                                      </div>
                                      <div className="space-y-1">
                                         <label className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">RG/Inscrição</label>

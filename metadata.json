@@ -1,7 +1,8 @@
 {
-  "name": "Advocacia IA",
+  "name": "JurisPet AI",
   "description": "Micro SaaS jurídico para geração de petições cíveis e trabalhistas com foco em produtividade para pequenos escritórios.",
   "requestFramePermissions": [
+    "camera",
     "microphone"
   ]
 }

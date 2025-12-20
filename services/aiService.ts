@@ -29,7 +29,7 @@ MAPA DE URLS OFICIAIS (USE APENAS ESTAS SE IDENTIFICAR O TRIBUNAL):
 const getAiClient = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
-    throw new Error("ERRO_CHAVE_API: Chave API_KEY não encontrada ou inválida.");
+    throw new Error("Chave de API não configurada. Verifique as variáveis de ambiente.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -38,24 +38,28 @@ const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error("Falha ao converter arquivo em Base64."));
     reader.readAsDataURL(file);
   });
 };
 
 const extractRawStringsFromBinary = async (file: File): Promise<string> => {
-  const arrayBuffer = await file.arrayBuffer();
-  const uint8 = new Uint8Array(arrayBuffer);
-  let rawText = "";
-  for (let i = 0; i < uint8.length; i++) {
-    const charCode = uint8[i];
-    if ((charCode >= 32 && charCode <= 126) || (charCode >= 160 && charCode <= 255) || charCode === 10 || charCode === 13) {
-      rawText += String.fromCharCode(charCode);
-    } else {
-      rawText += " ";
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8 = new Uint8Array(arrayBuffer);
+    let rawText = "";
+    for (let i = 0; i < Math.min(uint8.length, 50000); i++) { // Limite preventivo
+      const charCode = uint8[i];
+      if ((charCode >= 32 && charCode <= 126) || (charCode >= 160 && charCode <= 255) || charCode === 10 || charCode === 13) {
+        rawText += String.fromCharCode(charCode);
+      } else {
+        rawText += " ";
+      }
     }
+    return rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  } catch (e) {
+    return "Erro na leitura binária.";
   }
-  return rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').replace(/\s{2,}/g, ' ').trim();
 };
 
 const cleanAiHtmlResponse = (text: string): string => {
@@ -65,10 +69,11 @@ const cleanAiHtmlResponse = (text: string): string => {
 
 const handleAiError = (error: any) => {
   console.error("Erro na Chamada Gemini API:", error);
-  let message = error.message || "";
-  if (message.includes("429")) throw new Error("Limite de requisições atingido. Aguarde 60 segundos.");
-  if (message.includes("safety")) throw new Error("Conteúdo bloqueado pelos filtros de segurança.");
-  throw new Error("Falha na comunicação com a IA.");
+  let message = error.message || "Erro desconhecido";
+  if (message.includes("429")) throw new Error("Limite de requisições atingido. Aguarde um minuto.");
+  if (message.includes("safety")) throw new Error("O conteúdo do arquivo foi bloqueado pelos filtros de segurança da IA.");
+  if (message.includes("API_KEY")) throw new Error("Erro de autenticação na API.");
+  throw new Error(`Falha no processamento: ${message}`);
 };
 
 export const searchJurisprudence = async (query: string, scope: string): Promise<string> => {
@@ -201,23 +206,37 @@ export const extractDataFromDocument = async (file: File): Promise<any> => {
   try {
     const ai = getAiClient();
     const mimeType = file.type;
-    const supportedNativeTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    const supportedMultimodal = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    
     let contentPart: any;
-    if (supportedNativeTypes.includes(mimeType)) {
+
+    if (supportedMultimodal.includes(mimeType)) {
       const base64Data = await fileToBase64(file);
       contentPart = { inlineData: { mimeType, data: base64Data } };
     } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      if (!(window as any).mammoth) {
+        throw new Error("Biblioteca de leitura Word não carregada. Tente recarregar a página.");
+      }
       const arrayBuffer = await file.arrayBuffer();
       const result = await (window as any).mammoth.extractRawText({ arrayBuffer });
-      contentPart = { text: result.value };
+      contentPart = { text: result.value || "Documento Word vazio." };
     } else if (mimeType === 'text/plain') {
-      contentPart = { text: await file.text() };
+      const text = await file.text();
+      contentPart = { text: text || "Arquivo TXT vazio." };
     } else {
-      contentPart = { text: await extractRawStringsFromBinary(file) };
+      // Tenta ler binários desconhecidos como string crua como último recurso
+      const raw = await extractRawStringsFromBinary(file);
+      contentPart = { text: raw };
     }
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts: [contentPart, { text: "Extraia dados do documento em JSON: plaintiffs (array de nomes), defendants (array de nomes), actionType, facts (resumo), area." }] },
+      contents: { 
+        parts: [
+          contentPart, 
+          { text: "Analise este documento jurídico e extraia EXCLUSIVAMENTE em formato JSON: area (civel, trabalhista, familia, criminal, outros), actionType (nome da ação), plaintiffs (array de objetos com campo 'name'), defendants (array de objetos com campo 'name'), facts (resumo dos fatos para petição)." }
+        ] 
+      },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -228,10 +247,15 @@ export const extractDataFromDocument = async (file: File): Promise<any> => {
             actionType: { type: Type.STRING },
             facts: { type: Type.STRING },
             area: { type: Type.STRING }
-          }
+          },
+          required: ["area", "actionType"]
         }
       }
     });
-    return JSON.parse(response.text || "{}");
-  } catch (error) { return handleAiError(error); }
+
+    const parsed = JSON.parse(response.text || "{}");
+    return parsed;
+  } catch (error) { 
+    return handleAiError(error); 
+  }
 };
