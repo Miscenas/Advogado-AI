@@ -1,33 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { UserProfile, UsageLimit, Petition, Deadline } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { 
   FileText, 
-  Zap, 
-  CheckCircle2,
-  Crown,
-  Clock,
-  AlertTriangle,
-  Flame,
-  ShieldAlert,
-  ChevronRight,
   BookOpen,
-  Globe,
-  HardDrive,
-  ShieldCheck,
   Calendar,
-  Infinity,
-  Sparkles
+  Sparkles,
+  SearchCode,
+  ArrowUpRight,
+  Newspaper,
+  ShieldCheck,
+  Files,
+  Clock,
+  History,
+  Scale,
+  CheckCircle2,
+  GripHorizontal
 } from 'lucide-react';
-import { Button } from './ui/Button';
 
 interface DashboardHomeProps {
   profile: UserProfile | null;
   usage: UsageLimit | null;
   onNavigate: (route: string) => void;
 }
-
-type WidgetType = 'actions' | 'subscription' | 'deadlines' | 'recents' | 'jurisprudence' | 'portals';
 
 export const DashboardHome: React.FC<DashboardHomeProps> = ({ 
   profile, 
@@ -36,237 +32,210 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({
 }) => {
   const [recentPetitions, setRecentPetitions] = useState<Petition[]>([]);
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<Deadline[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  const isTrial = profile?.account_status === 'trial';
-  const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchData = async () => {
       if (!profile?.id) return;
-      try {
-        const { data: petData } = await supabase
-          .from('petitions')
-          .select('*')
-          .eq('user_id', profile.id)
-          .order('created_at', { ascending: false })
-          .limit(5);
+      const { data: petData } = await supabase
+        .from('petitions')
+        .select('*')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(4);
+      
+      const { data: deadData } = await supabase
+        .from('deadlines')
+        .select('*')
+        .eq('user_id', profile.id)
+        .eq('status', 'pending')
+        .order('due_date', { ascending: true })
+        .limit(10);
 
-        const { data: deadlineData } = await supabase
-          .from('deadlines')
-          .select('*')
-          .eq('user_id', profile.id)
-          .eq('status', 'pending')
-          .order('due_date', { ascending: true })
-          .limit(5);
-
-        setRecentPetitions((petData as Petition[]) || []);
-        setUpcomingDeadlines((deadlineData as Deadline[]) || []);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
+      setRecentPetitions(petData || []);
+      setUpcomingDeadlines(deadData || []);
     };
-
-    fetchDashboardData();
+    fetchData();
   }, [profile?.id]);
 
-  const getDeadlineStyle = (dateStr: string) => {
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const due = new Date(dateStr);
-    due.setHours(0,0,0,0);
-    const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) return { style: 'bg-rose-50 text-rose-600', label: 'Atrasado' };
-    if (diffDays <= 2) return { style: 'bg-rose-50 text-rose-600 font-bold', label: diffDays === 0 ? 'Hoje' : 'Amanhã' };
-    if (diffDays <= 5) return { style: 'bg-amber-50 text-amber-600', label: `${diffDays}d` };
-    return { style: 'bg-slate-50 text-slate-500', label: due.toLocaleDateString('pt-BR').slice(0, 5) };
-  };
-
-  const renderWidget = (type: WidgetType) => {
-    switch (type) {
-      case 'actions':
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-             <button 
-                onClick={() => onNavigate('new-petition')}
-                className="group relative bg-white rounded-[2.5rem] p-8 text-left transition-all hover:shadow-2xl hover:shadow-indigo-200/50 border border-slate-100 flex flex-col justify-between h-full overflow-hidden"
-             >
-                <div className="absolute -right-4 -top-4 w-32 h-32 bg-indigo-50 rounded-full opacity-50 blur-3xl transition-all group-hover:scale-150" />
-                <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-rose-400 p-4 rounded-2xl w-fit shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform relative z-10">
-                    <Sparkles size={28} className="text-white" />
-                </div>
-                <div className="mt-12 relative z-10">
-                    <h3 className="text-2xl font-bold text-slate-900 tracking-tight">Nova Petição</h3>
-                    <p className="text-slate-500 mt-2 text-sm font-medium">Criação assistida com IA (Fatos/Resumo)</p>
-                </div>
-             </button>
-
-             <button 
-                onClick={() => onNavigate('new-defense')}
-                className="group relative bg-white rounded-[2.5rem] p-8 text-left transition-all hover:shadow-2xl hover:shadow-rose-200/50 border border-slate-100 flex flex-col justify-between h-full overflow-hidden"
-             >
-                <div className="absolute -right-4 -top-4 w-32 h-32 bg-rose-50 rounded-full opacity-50 blur-3xl transition-all group-hover:scale-150" />
-                <div className="bg-slate-900 p-4 rounded-2xl w-fit shadow-lg shadow-slate-200 group-hover:scale-110 transition-transform relative z-10">
-                    <ShieldAlert size={28} className="text-white" />
-                </div>
-                <div className="mt-12 relative z-10">
-                    <h3 className="text-2xl font-bold text-slate-900 tracking-tight">Contestação</h3>
-                    <p className="text-slate-500 mt-2 text-sm font-medium">Defesa técnica a partir do Resumo da Inicial</p>
-                </div>
-             </button>
-          </div>
-        );
-
-      case 'subscription':
-        const count = usage?.petitions_this_month || 0;
-        const countLimit = isTrial ? (usage?.petitions_limit || 5) : 999;
-        const countPercent = (count / countLimit) * 100;
-
-        return (
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full flex flex-col">
-                <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Status da Conta</h3>
-                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${isTrial ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
-                        {isTrial ? 'Trial' : 'Pro'}
-                    </span>
-                </div>
-                
-                <div className="space-y-6 flex-1">
-                    <div>
-                        <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-tighter mb-2">
-                            <span>Uso Mensal</span>
-                            <span>{count}/{countLimit}</span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5">
-                            <div className="h-2 rounded-full bg-slate-900 transition-all duration-1000" style={{ width: `${countPercent}%` }} />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mt-auto pt-6">
-                    {isTrial ? (
-                        <Button className="w-full h-12 rounded-2xl bg-indigo-600 text-white font-bold" onClick={() => onNavigate('subscription')}>
-                            <Crown size={16} className="mr-2" /> Upgrade para Pro
-                        </Button>
-                    ) : (
-                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-                            <ShieldCheck className="text-green-500" size={20} />
-                            <span className="text-sm font-bold text-slate-700">Plano Ativo</span>
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-
-      case 'deadlines':
-        return (
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full flex flex-col">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Próximos Prazos</h3>
-                    <Calendar size={18} className="text-slate-400" />
-                </div>
-                <div className="space-y-3 flex-1 overflow-y-auto max-h-[300px]">
-                    {upcomingDeadlines.length > 0 ? (
-                        upcomingDeadlines.map(d => {
-                            const info = getDeadlineStyle(d.due_date);
-                            return (
-                                <div key={d.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-colors border border-slate-100">
-                                    <span className="text-sm font-bold text-slate-900 truncate mr-2">{d.title}</span>
-                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${info.style}`}>{info.label}</span>
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <div className="text-center py-10">
-                            <CheckCircle2 size={32} className="mx-auto text-slate-200 mb-2" />
-                            <p className="text-xs text-slate-400 font-medium">Nenhum prazo</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-
-      case 'recents':
-        return (
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full flex flex-col mt-6">
-                <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">Últimos Documentos</h3>
-                    <button onClick={() => onNavigate('my-petitions')} className="text-indigo-600 text-xs font-bold hover:underline uppercase tracking-widest">Ver Todos</button>
-                </div>
-                <div className="divide-y divide-slate-100">
-                    {recentPetitions.length > 0 ? (
-                        recentPetitions.map((pet) => (
-                            <div 
-                                key={pet.id} 
-                                className="py-5 flex items-center justify-between group cursor-pointer hover:px-2 transition-all"
-                                onClick={() => onNavigate('my-petitions')}
-                            >
-                                <div className="flex items-center gap-5">
-                                    <div className="p-3 rounded-2xl bg-slate-100 text-slate-600 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                                        <FileText size={22} />
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{pet.action_type || 'Petição Inicial'}</p>
-                                        <p className="text-xs text-slate-400 font-medium mt-0.5">{pet.plaintiff_name} vs {pet.defendant_name}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-xs font-bold text-slate-300">{new Date(pet.created_at).toLocaleDateString()}</span>
-                                    <ChevronRight size={16} className="text-slate-200 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                                </div>
-                            </div>
-                        ))
-                    ) : (
-                        <p className="py-10 text-center text-slate-400 text-sm">Nenhum documento gerado ainda.</p>
-                    )}
-                </div>
-            </div>
-        );
-      default: return null;
+  const formatName = (name: string | null | undefined) => {
+    if (!name) return 'Advogado';
+    const first = name.split(' ')[0];
+    if (first.toLowerCase().startsWith('dr')) {
+      return name;
     }
+    return `Dr(a). ${first}`;
   };
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/50 backdrop-blur-md p-8 rounded-[3rem] border border-white">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Olá, Dr(a). {profile?.full_name?.split(' ')[0]}</h1>
-          <p className="text-slate-500 font-medium mt-1">Sua advocacia inteligente está pronta para hoje.</p>
+    <div className="space-y-8 md:space-y-10 animate-in fade-in duration-1000 max-w-[1600px] mx-auto w-full pb-20 text-left px-2">
+      {/* Header Original */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-200/60 dark:border-slate-800 transition-colors">
+        <div className="space-y-1 text-left">
+          <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.5em]">Sistema JurisPet v2.6</p>
+          <h1 className="text-3xl md:text-4xl font-black text-slate-800 dark:text-white tracking-tighter leading-none">
+            {formatName(profile?.full_name)}
+          </h1>
         </div>
-        <div className="flex gap-4">
-            <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
-                <Clock size={16} className="text-indigo-500" />
-                <span className="text-xs font-bold text-slate-900 uppercase tracking-widest">{new Date().toLocaleDateString('pt-BR', { weekday: 'long' })}</span>
+        <div className="flex items-center gap-3">
+            <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-3 shadow-sm transition-colors shrink-0">
+                <ShieldCheck className="text-slate-400 dark:text-slate-500 w-4 h-4 md:w-5 md:h-5" />
+                <span className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Acesso Seguro</span>
             </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">{renderWidget('actions')}</div>
-        <div className="lg:col-span-1">{renderWidget('subscription')}</div>
-        <div className="lg:col-span-1">{renderWidget('deadlines')}</div>
-        <div className="lg:col-span-1">
-            <div className="bg-indigo-600 rounded-[2.5rem] p-8 h-full text-white relative overflow-hidden group cursor-pointer" onClick={() => onNavigate('jurisprudence')}>
-                <div className="absolute right-0 top-0 p-4 opacity-20 transform group-hover:scale-125 transition-transform"><BookOpen size={120} /></div>
-                <h3 className="text-xl font-bold mb-2 relative z-10">Pesquisa Jurídica</h3>
-                <p className="text-indigo-100 text-sm font-medium relative z-10">Busque julgados com auxílio da IA em todos os tribunais.</p>
-                <div className="mt-8 relative z-10 flex items-center gap-2 font-bold text-sm">Acessar agora <ChevronRight size={16} /></div>
-            </div>
-        </div>
-        <div className="lg:col-span-1">
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full flex flex-col group cursor-pointer" onClick={() => onNavigate('portals')}>
-                <div className="flex items-center gap-4 mb-4">
-                    <div className="bg-slate-100 p-3 rounded-2xl text-slate-900 group-hover:bg-slate-900 group-hover:text-white transition-colors"><Globe size={24} /></div>
-                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Sistemas Judiciais</h3>
+      {/* Grid Principal do Dashboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-10 items-start">
+        
+        {/* COLUNA ESQUERDA: Prazos */}
+        <div className="lg:col-span-4 xl:col-span-3">
+            <div className="bg-white dark:bg-slate-900 p-6 md:p-7 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col h-[380px] min-h-[320px] max-h-[700px] transition-colors">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 dark:bg-purple-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                
+                <div className="flex items-center gap-2 mb-4 shrink-0 px-1">
+                    <Calendar className="text-purple-600 dark:text-purple-400 w-4 h-4" />
+                    <h3 className="text-xs font-black text-slate-900 dark:text-white tracking-widest uppercase">Próximos Prazos</h3>
                 </div>
-                <p className="text-sm text-slate-500 font-medium">Links diretos para PJe, e-SAJ, E-proc e instaladores de token.</p>
-                <div className="mt-auto pt-6 text-xs font-bold text-slate-300 group-hover:text-slate-900 transition-colors uppercase tracking-widest flex items-center gap-1">Ver tribunais <ChevronRight size={14}/></div>
+
+                <div className="relative z-10 flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar text-left">
+                    {upcomingDeadlines.length > 0 ? upcomingDeadlines.map(d => (
+                        <div key={d.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between group hover:border-purple-500 transition-all shadow-sm min-h-[50px]">
+                            <div className="text-left min-w-0 flex-1 mr-2">
+                                <p className="text-[9px] font-black text-slate-800 dark:text-white uppercase tracking-tight truncate">{d.title}</p>
+                                <p className="text-[8px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest mt-0.5">Vence em {new Date(d.due_date).toLocaleDateString()}</p>
+                            </div>
+                            <ArrowUpRight className="w-3 h-3 text-slate-300 dark:text-slate-600 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors shrink-0" />
+                        </div>
+                    )) : (
+                        <div className="h-full flex flex-col items-center justify-center opacity-30 text-center py-10">
+                            <Calendar size={24} className="mb-3 text-slate-300 dark:text-slate-600" />
+                            <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Nenhum prazo para hoje</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="relative z-10 pt-4 mt-2 border-t border-slate-100 dark:border-slate-800 no-print">
+                    <button onClick={() => onNavigate('deadlines')} className="w-full py-3 bg-slate-50 dark:bg-slate-800 hover:bg-indigo-600 dark:hover:bg-indigo-500 text-slate-600 dark:text-slate-300 hover:text-white dark:hover:text-white rounded-2xl font-black uppercase text-[8px] tracking-[0.2em] transition-all border border-slate-200 dark:border-slate-700 shadow-sm">
+                        Ver Agenda de Prazos
+                    </button>
+                    <div className="flex justify-center mt-2 opacity-20 pointer-events-none shrink-0 text-slate-400">
+                        <GripHorizontal size={14} />
+                    </div>
+                </div>
             </div>
         </div>
-        <div className="lg:col-span-3">{renderWidget('recents')}</div>
+
+        {/* COLUNA DIREITA: Ferramentas */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-10">
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                <button onClick={() => onNavigate('new-petition')} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-start gap-4 hover:shadow-xl hover:border-indigo-600 dark:hover:border-indigo-500 transition-all group text-left min-h-[160px] h-full">
+                    <div className="p-3 md:p-4 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm shrink-0">
+                    <FileText className="w-6 h-6 md:w-7 md:h-7" />
+                    </div>
+                    <div className="flex-1">
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-tight">Nova Petição</h4>
+                    <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed mt-1 break-words">Crie petições do zero ou a partir de um PDF.</p>
+                    </div>
+                </button>
+
+                <button onClick={() => onNavigate('jurisprudence')} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-start gap-4 hover:shadow-xl hover:border-blue-600 dark:hover:border-blue-500 transition-all group text-left min-h-[160px] h-full">
+                    <div className="p-3 md:p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm shrink-0">
+                    <BookOpen className="w-6 h-6 md:w-7 md:h-7" />
+                    </div>
+                    <div className="flex-1">
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-tight">Jurisprudência</h4>
+                    <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed mt-1 break-words">Pesquisa avançada com análise de IA.</p>
+                    </div>
+                </button>
+
+                <button onClick={() => onNavigate('cnj-metadata')} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-start gap-4 hover:shadow-xl hover:border-slate-900 dark:hover:border-slate-500 transition-all group text-left min-h-[160px] h-full">
+                    <div className="p-3 md:p-4 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl group-hover:bg-slate-900 dark:group-hover:bg-slate-700 group-hover:text-white transition-all shadow-sm shrink-0">
+                    <SearchCode className="w-6 h-6 md:w-7 md:h-7" />
+                    </div>
+                    <div className="flex-1">
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-tight">Metadados CNJ</h4>
+                    <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed mt-1 break-words">Decomposição e árvore TPU oficial.</p>
+                    </div>
+                </button>
+
+                <button onClick={() => onNavigate('dje-search')} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-start gap-4 hover:shadow-xl hover:border-purple-600 dark:hover:border-purple-500 transition-all group text-left min-h-[160px] h-full">
+                    <div className="p-3 md:p-4 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-2xl group-hover:bg-purple-600 group-hover:text-white transition-all shadow-sm shrink-0">
+                    <Newspaper className="w-6 h-6 md:w-7 md:h-7" />
+                    </div>
+                    <div className="flex-1">
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-tight">Consulta DJE</h4>
+                    <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed mt-1 break-words">Monitoramento de intimações diárias.</p>
+                    </div>
+                </button>
+
+                <button onClick={() => onNavigate('labor-calculator')} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-start gap-4 hover:shadow-xl hover:border-emerald-600 dark:hover:border-emerald-500 transition-all group text-left min-h-[160px] h-full">
+                    <div className="p-3 md:p-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm shrink-0">
+                    <Scale className="w-6 h-6 md:w-7 md:h-7" />
+                    </div>
+                    <div className="flex-1">
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-tight">Calculadora Trabalhista</h4>
+                    <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed mt-1 break-words">Demonstrativo de rescisão auditado.</p>
+                    </div>
+                </button>
+
+                <button onClick={() => onNavigate('my-petitions')} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col items-start gap-4 hover:shadow-xl hover:border-amber-600 dark:hover:border-amber-500 transition-all group text-left min-h-[160px] h-full">
+                    <div className="p-3 md:p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-2xl group-hover:bg-amber-600 group-hover:text-white transition-all shadow-sm shrink-0">
+                    <Files className="w-6 h-6 md:w-7 md:h-7" />
+                    </div>
+                    <div className="flex-1">
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-tight">Minhas Petições</h4>
+                    <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed mt-1 break-words">Gerencie seu histórico de peças.</p>
+                    </div>
+                </button>
+            </div>
+
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-3">
+                        <History className="text-indigo-600 dark:text-indigo-400 w-5 h-5 md:w-6 md:h-6" /> Histórico Recente
+                    </h3>
+                    <button onClick={() => onNavigate('my-petitions')} className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest hover:underline shrink-0">Ver Tudo</button>
+                </div>
+                
+                <div className="space-y-4">
+                    {recentPetitions.length > 0 ? recentPetitions.map(pet => (
+                        <div 
+                        key={pet.id} 
+                        onClick={() => onNavigate('my-petitions')}
+                        className={`p-5 md:p-6 rounded-[2rem] border transition-all flex items-center justify-between group cursor-pointer shadow-sm min-h-[90px] ${pet.filed ? 'border-emerald-500 bg-emerald-50/20 dark:bg-emerald-900/10' : 'bg-white dark:bg-slate-900 border-slate-50 dark:border-slate-800 hover:border-indigo-600 dark:hover:border-indigo-500'}`}
+                        >
+                            <div className="flex items-center gap-4 md:gap-5 min-w-0 flex-1">
+                                <div className={`p-2.5 md:p-3 rounded-xl transition-all shrink-0 ${pet.filed ? 'bg-emerald-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 group-hover:bg-indigo-600 dark:group-hover:bg-indigo-500 group-hover:text-white'}`}>
+                                    <FileText className="w-5 h-5 md:w-6 md:h-6" />
+                                </div>
+                                <div className="text-left min-w-0 flex-1">
+                                    <h4 className="font-black text-slate-900 dark:text-white uppercase text-[10px] tracking-tight mb-0.5 truncate">{pet.action_type}</h4>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 font-bold truncate">
+                                        {pet.plaintiff_name || 'Autor'} <span className="text-slate-300 dark:text-slate-700 mx-1">vs</span> {pet.defendant_name || 'Réu'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-right shrink-0 flex flex-col items-end gap-1 ml-4">
+                                {pet.filed && (
+                                    <span className="flex items-center gap-1 text-[8px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full mb-1">
+                                        <CheckCircle2 size={10} /> Protocolado
+                                    </span>
+                                )}
+                                <p className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest flex items-center gap-2">
+                                    <Clock size={12}/> {new Date(pet.created_at).toLocaleDateString()}
+                                </p>
+                            </div>
+                        </div>
+                    )) : (
+                        <div className="py-12 bg-white dark:bg-slate-900 rounded-[2.5rem] border-2 border-dashed border-slate-50 dark:border-slate-800 flex flex-col items-center justify-center opacity-40 transition-colors w-full">
+                            <Files size={32} className="text-slate-300 dark:text-slate-700 mb-3" />
+                            <p className="text-[10px] font-black uppercase tracking-widest dark:text-slate-600 text-center">Nenhuma petição encontrada</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
       </div>
     </div>
   );

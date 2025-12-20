@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { CheckCircle2, Crown, ShieldCheck, Zap, HardDrive, AlertCircle, FileText, Infinity } from 'lucide-react';
 import { Button } from './ui/Button';
@@ -13,212 +14,85 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({ user, onNavi
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [loading, setLoading] = useState(false);
 
-  const features = [
-    "5 Petições por Mês",
-    "Geração de Contestações",
-    "Pesquisa Básica",
-    "Análise de Documentos",
-  ];
-
-  const proFeatures = [
-    "Petições Ilimitadas",
-    "50 MB de Armazenamento Dedicado",
-    "Pesquisa de Jurisprudência com IA",
-    "Análise de Documentos (PDF/Imagem)",
-    "Transcrição de Áudio para Texto",
-    "Suporte Prioritário",
-    "Acesso a novas funcionalidades Beta"
-  ];
+  const features = ["5 Petições / Mês", "Peticionamento Básico", "Jurisprudência Simples", "Suporte Comum"];
+  const proFeatures = ["Petições Ilimitadas", "Leitura de PDF ilimitada", "Pesquisa com IA", "Comandos por Voz", "Prioridade no Suporte", "Acesso Completo", "Novas funções primeiro"];
 
   const handleSubscribe = async () => {
-    if (!user) {
-        alert("Erro: Usuário não identificado.");
-        return;
-    }
+    if (!user) return alert("Por favor, faça login para assinar.");
     setLoading(true);
-
     try {
         await recordPaymentAttempt(user.id, billingCycle);
         const { initPoint } = await createCheckoutPreference(billingCycle, user.id, user.email || '');
-        
-        // Simulação de redirecionamento
-        const valor = billingCycle === 'monthly' ? '60,00' : '600,00';
-        const msg = `INTEGRAÇÃO MERCADO PAGO (Simulação):\n\nEm produção, você seria redirecionado para:\n${initPoint}\n\nPlano: ${billingCycle === 'monthly' ? 'Mensal' : 'Anual'}\nValor: R$ ${valor}`;
-        
-        // Timeout para simular processamento
-        setTimeout(() => {
-            alert(msg);
-            onNavigate('payment_success');
-        }, 1000);
-
-    } catch (error) {
-        console.error(error);
-        alert("Erro ao iniciar processo de pagamento.");
-        setLoading(false);
-    }
+        const msg = `MERCADO PAGO:\n\nPlano: ${billingCycle === 'monthly' ? 'Mensal' : 'Anual'}\nRedirecionando para o pagamento...`;
+        setTimeout(() => { alert(msg); onNavigate('dashboard'); }, 1000);
+    } catch (e) { alert("Erro ao conectar com o pagamento."); setLoading(false); }
   };
 
   return (
-    <div className="max-w-5xl mx-auto py-8 space-y-8 animate-in fade-in slide-in-from-bottom-4">
+    <div className="w-full py-10 space-y-10 animate-in fade-in slide-in-from-bottom-4 text-left max-w-6xl mx-auto pb-24">
       <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold text-gray-900">Escolha o plano ideal para seu escritório</h1>
-        <p className="text-xl text-gray-500 max-w-2xl mx-auto">
-          Comece gratuitamente ou assine o plano Pro para remover todos os limites de criação e armazenamento.
+        <h1 className="text-4xl font-black text-gray-900 dark:text-white tracking-tighter uppercase leading-none">Planos JurisPet</h1>
+        <p className="text-lg font-medium text-gray-500 dark:text-slate-400 max-w-2xl mx-auto">
+          Escolha o melhor plano para o seu escritório.
         </p>
       </div>
 
       <div className="flex justify-center">
-        <div className="bg-gray-100 p-1 rounded-lg flex items-center relative">
-          <button
-            onClick={() => setBillingCycle('monthly')}
-            className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${
-              billingCycle === 'monthly' 
-                ? 'bg-white text-gray-900 shadow-sm' 
-                : 'text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            Mensal
-          </button>
-          <button
-            onClick={() => setBillingCycle('yearly')}
-            className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${
-              billingCycle === 'yearly' 
-                ? 'bg-white text-gray-900 shadow-sm' 
-                : 'text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            Anual <span className="text-xs text-green-600 font-bold ml-1">-16%</span>
-          </button>
+        <div className="bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl flex items-center relative shadow-inner">
+          <button onClick={() => setBillingCycle('monthly')} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${billingCycle === 'monthly' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md' : 'text-slate-400 dark:text-slate-600 hover:text-slate-900 dark:hover:text-slate-300'}`}>Mensal</button>
+          <button onClick={() => setBillingCycle('yearly')} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${billingCycle === 'yearly' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md' : 'text-slate-400 dark:text-slate-600 hover:text-slate-900 dark:hover:text-slate-300'}`}>Anual <span className="text-[8px] text-emerald-500 font-black ml-1">-16% DESCONTO</span></button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
-         {/* Free Tier */}
-         <div className="bg-white rounded-2xl p-8 border border-gray-200 opacity-80 hover:opacity-100 transition-opacity">
-            <h3 className="text-lg font-semibold text-gray-900">Gratuito (Trial)</h3>
-            <div className="mt-4 flex items-baseline text-gray-900">
-               <span className="text-4xl font-bold tracking-tight">R$ 0</span>
-               <span className="ml-1 text-xl font-semibold text-gray-500">/mês</span>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-10 items-stretch">
+         <div className="bg-white dark:bg-slate-900 rounded-[3rem] p-10 border border-gray-200 dark:border-slate-800 flex flex-col justify-between text-left h-full shadow-sm">
+            <div>
+                <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">GRÁTIS</h3>
+                <div className="mt-6 flex items-baseline text-gray-900 dark:text-white">
+                   <span className="text-5xl font-black tracking-tighter">R$ 0</span>
+                </div>
+                <p className="mt-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Teste Grátis</p>
+                <ul className="mt-8 space-y-4">
+                   {features.map((f, i) => (
+                     <li key={i} className="flex items-center gap-3"><CheckCircle2 className="h-4 w-4 text-slate-300 dark:text-slate-700" /><span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight">{f}</span></li>
+                   ))}
+                </ul>
             </div>
-            <p className="mt-2 text-sm text-gray-500">Para testar a plataforma.</p>
-            <ul className="mt-6 space-y-4">
-               {features.map((feature, idx) => (
-                 <li key={idx} className="flex items-start">
-                   <div className="rounded-full bg-gray-100 p-1 mr-3">
-                     <CheckCircle2 className="h-4 w-4 text-gray-400" />
-                   </div>
-                   <span className="text-sm text-gray-600">{feature}</span>
-                 </li>
-               ))}
-            </ul>
+            <Button variant="outline" className="mt-10 rounded-2xl w-full border-2 h-12 text-[10px] font-black uppercase tracking-widest dark:border-slate-800 dark:text-slate-400">Plano Atual</Button>
          </div>
 
-         {/* PRO Tier */}
-         <div className="bg-juris-900 rounded-2xl p-8 border-2 border-sky-500 shadow-2xl relative transform scale-105 z-10">
-            <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4">
-               <span className="inline-flex items-center gap-1 rounded-full bg-sky-500 px-3 py-1 text-xs font-bold text-white shadow-md">
-                 <Crown size={12} /> MAIS POPULAR
-               </span>
+         <div className="bg-slate-900 dark:bg-slate-950 rounded-[3.5rem] p-10 border-2 border-indigo-500 shadow-2xl relative transform scale-105 z-10 flex flex-col justify-between h-full text-left">
+            <div className="absolute top-0 right-10 -translate-y-1/2">
+               <span className="inline-flex items-center gap-1 rounded-xl bg-indigo-500 px-4 py-1.5 text-[9px] font-black text-white shadow-xl uppercase tracking-widest"><Crown size={12} /> MAIS POPULAR</span>
             </div>
-            <h3 className="text-lg font-semibold text-white">Advogado PRO</h3>
-            <div className="mt-4 flex items-baseline text-white">
-               <span className="text-5xl font-bold tracking-tight">
-                 {billingCycle === 'monthly' ? 'R$ 60' : 'R$ 600'}
-               </span>
-               <span className="ml-1 text-xl font-semibold text-juris-200">
-                 /{billingCycle === 'monthly' ? 'mês' : 'ano'}
-               </span>
+            <div>
+                <h3 className="text-lg font-black text-white uppercase tracking-tight">PROFISSIONAL</h3>
+                <div className="mt-6 flex items-baseline text-white">
+                   <span className="text-6xl font-black tracking-tighter">{billingCycle === 'monthly' ? 'R$ 60' : 'R$ 600'}</span>
+                   <span className="ml-1 text-xl font-bold text-slate-500 uppercase tracking-tighter">/{billingCycle === 'monthly' ? 'mês' : 'ano'}</span>
+                </div>
+                <ul className="mt-10 space-y-4">
+                   {proFeatures.map((f, i) => (
+                     <li key={i} className="flex items-center gap-3"><Zap className="h-4 w-4 text-indigo-400" /><span className="text-[11px] font-bold text-white uppercase tracking-tight">{f}</span></li>
+                   ))}
+                </ul>
             </div>
-            <p className="mt-2 text-sm text-juris-200">
-              {billingCycle === 'monthly' ? 'Cobrado mensalmente.' : 'Cobrado anualmente (equivale a R$ 50,00/mês).'}
-            </p>
-
-            <div className="mt-8">
-               <Button 
-                 onClick={handleSubscribe} 
-                 isLoading={loading}
-                 className="w-full bg-sky-500 hover:bg-sky-400 text-white font-bold h-12 text-lg shadow-lg"
-               >
-                 Assinar Agora
-               </Button>
-               <p className="mt-3 text-xs text-center text-juris-300 flex items-center justify-center gap-1">
-                 <ShieldCheck size={12} /> Pagamento seguro via Mercado Pago
-               </p>
-            </div>
-
-            <ul className="mt-8 space-y-4">
-               {proFeatures.map((feature, idx) => (
-                 <li key={idx} className="flex items-start">
-                   <div className="rounded-full bg-sky-500/20 p-1 mr-3">
-                     <CheckCircle2 className="h-4 w-4 text-sky-400" />
-                   </div>
-                   <span className="text-sm text-white font-medium flex items-center gap-2">
-                       {feature.includes("Ilimitadas") ? <><Infinity size={14} className="text-sky-300"/> {feature}</> : feature}
-                   </span>
-                 </li>
-               ))}
-            </ul>
-         </div>
-
-         {/* Enterprise */}
-         <div className="bg-white rounded-2xl p-8 border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Escritórios</h3>
-            <div className="mt-4 flex items-baseline text-gray-900">
-               <span className="text-3xl font-bold tracking-tight">Sob Consulta</span>
-            </div>
-            <p className="mt-2 text-sm text-gray-500">Para equipes grandes.</p>
-            <div className="mt-8">
-               <Button variant="outline" className="w-full">Falar com Vendas</Button>
+            <div className="mt-12">
+               <Button onClick={handleSubscribe} isLoading={loading} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-black h-16 rounded-2xl text-xs uppercase tracking-widest shadow-2xl border-none">Assinar Agora</Button>
+               <div className="mt-4 flex items-center justify-center gap-2 opacity-40"><ShieldCheck size={12} className="text-white"/><span className="text-[8px] text-white font-black uppercase tracking-widest">Pagamento Seguro</span></div>
             </div>
          </div>
-      </div>
-      
-      <div className="bg-gray-50 rounded-xl p-6 mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="flex items-start gap-4 bg-white p-4 rounded-lg shadow-sm">
-             <div className="bg-gray-100 p-2 rounded-full"><FileText className="h-6 w-6 text-gray-600" /></div>
-             <div>
-                <h4 className="font-bold text-gray-900">Plano Gratuito</h4>
-                <p className="text-gray-600 text-sm mt-1">Limitado a 5 criações por mês. Ideal para experimentar a ferramenta.</p>
-             </div>
-          </div>
-          <div className="flex items-start gap-4 bg-white p-4 rounded-lg shadow-sm border border-sky-100">
-             <div className="bg-sky-100 p-2 rounded-full"><HardDrive className="h-6 w-6 text-sky-600" /></div>
-             <div>
-                <h4 className="font-bold text-gray-900">Plano Pro (R$ 60/mês)</h4>
-                <p className="text-gray-600 text-sm mt-1">Petições ilimitadas e 50MB de armazenamento para documentos e histórico.</p>
-             </div>
-          </div>
+
+         <div className="bg-white dark:bg-slate-900 rounded-[3rem] p-10 border border-gray-200 dark:border-slate-800 flex flex-col justify-between text-left h-full shadow-sm">
+            <div>
+                <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">ESCRITÓRIO</h3>
+                <div className="mt-6 flex items-baseline text-gray-900 dark:text-white"><span className="text-2xl font-black tracking-tighter uppercase">Sob Consulta</span></div>
+                <p className="mt-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Para Equipes</p>
+                <div className="mt-10 p-6 bg-slate-50 dark:bg-slate-950/50 rounded-2xl border border-gray-100 dark:border-slate-800"><p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">Para vários advogados usarem a mesma conta com histórico compartilhado.</p></div>
+            </div>
+            <Button variant="outline" className="mt-10 rounded-2xl w-full border-2 h-12 text-[10px] font-black uppercase tracking-widest dark:border-slate-800 dark:text-slate-400">Falar com Suporte</Button>
+         </div>
       </div>
     </div>
   );
 };
-
-export const PaymentSuccess: React.FC<{ onNavigate: (r: string) => void }> = ({ onNavigate }) => (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-8 animate-in zoom-in-95">
-        <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
-            <CheckCircle2 size={48} className="text-green-600" />
-        </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Pagamento Recebido!</h2>
-        <p className="text-gray-500 max-w-md mb-8">
-            Sua assinatura do Advogado IA PRO foi confirmada. Limites de uso removidos.
-        </p>
-        <Button size="lg" onClick={() => onNavigate('dashboard')}>
-            Voltar ao Dashboard
-        </Button>
-    </div>
-);
-
-export const PaymentFailure: React.FC<{ onNavigate: (r: string) => void }> = ({ onNavigate }) => (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-8">
-        <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-6">
-            <AlertCircle size={48} className="text-red-600" />
-        </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Pagamento Pendente</h2>
-        <p className="text-gray-500 max-w-md mb-8">
-            Houve um problema ao processar seu pagamento.
-        </p>
-        <Button onClick={() => onNavigate('subscription')}>
-            Tentar Novamente
-        </Button>
-    </div>
-);

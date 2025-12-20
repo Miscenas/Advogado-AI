@@ -1,43 +1,44 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { PetitionFormData, PetitionFilingMetadata, PetitionParty, UsageLimit } from '../../types';
 import { supabase } from '../../services/supabaseClient';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
 import saveAs from 'file-saver';
 import { 
-  ChevronRight, 
-  ChevronLeft, 
-  FileText, 
   User, 
   Scale, 
-  Gavel, 
   CheckCircle, 
   Sparkles,
   Save,
-  RefreshCw,
   Printer,
-  Upload,
-  FileCheck,
   Loader2,
-  Plus,
   PenTool,
   FileUp,
   X,
+  Download,
   Mic,
   MicOff,
-  Download,
-  Edit3,
-  Info,
+  Send,
+  MessageSquare,
+  History,
   Trash2,
-  Users,
-  FileAudio,
-  Lightbulb,
-  AlertTriangle,
-  ExternalLink,
-  Copy,
-  Check
+  ArrowRight,
+  ImageIcon,
+  Gavel,
+  ShieldCheck,
+  Info,
+  MapPin,
+  CreditCard,
+  Briefcase,
+  FileAudio
 } from 'lucide-react';
-import { generateLegalPetition, refineLegalPetition, extractDataFromDocument, suggestFilingMetadata, transcribeAudio } from '../../services/aiService';
+import { 
+  generateLegalPetition, 
+  extractDataFromDocument, 
+  suggestFilingMetadata, 
+  chatRefinePetition, 
+  transcribeAudio 
+} from '../../services/aiService';
 
 interface WizardProps {
   userId: string;
@@ -49,6 +50,11 @@ interface WizardProps {
 }
 
 type WizardMode = 'selection' | 'scratch' | 'upload';
+interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
+  timestamp: Date;
+}
 
 const INITIAL_PARTY: PetitionParty = { id: '', name: '', type: 'pf', doc: '', rg: '', address: '', qualification: '' };
 
@@ -72,14 +78,10 @@ const AREAS_DO_DIREITO = [
   { value: 'criminal', label: 'Criminal' },
   { value: 'previdenciario', label: 'Previdenciário' },
   { value: 'consumidor', label: 'Consumidor' },
-  { value: 'tributario', label: 'Tributário' },
-  { value: 'imobiliario', label: 'Imobiliário' },
-  { value: 'digital', label: 'Digital' },
-  { value: 'administrativo', label: 'Administrativo' },
   { value: 'outros', label: 'Outros' }
 ];
 
-export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSuccess, usage, accountStatus, isAdmin = false }) => {
+export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSuccess, usage, accountStatus }) => {
   const [mode, setMode] = useState<WizardMode>('selection');
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<PetitionFormData>(INITIAL_DATA);
@@ -89,18 +91,21 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
   const [generatedContent, setGeneratedContent] = useState<string | null>(null);
   
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const [isExtracting, setIsExtracting] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
-  const [refinementText, setRefinementText] = useState('');
+  // Estados do Chat de Refinamento
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [refinementInput, setRefinementInput] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceTarget, setVoiceTarget] = useState<'facts' | 'requests' | 'chat' | null>(null);
   const recognitionRef = useRef<any>(null);
 
   const STEPS = mode === 'upload' 
@@ -109,174 +114,274 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
   useEffect(() => {
     if (isFullScreen && contentRef.current && generatedContent) {
-        contentRef.current.innerHTML = generatedContent.replace(/<style([\s\S]*?)<\/style>/gi, '');
+        contentRef.current.innerHTML = generatedContent;
     }
   }, [isFullScreen, generatedContent]);
 
   useEffect(() => {
-    return () => { if (recognitionRef.current) recognitionRef.current.stop(); };
-  }, []);
+    if (chatScrollRef.current) {
+        chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, isRefining]);
 
   const handleInputChange = (field: keyof PetitionFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const updateParty = (type: 'plaintiffs' | 'defendants', id: string, field: keyof PetitionParty, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [type]: prev[type].map(p => p.id === id ? { ...p, [field]: value } : p)
+    }));
+  };
+
+  const addParty = (type: 'plaintiffs' | 'defendants') => {
+    setFormData(prev => ({
+      ...prev,
+      [type]: [...prev[type], { ...INITIAL_PARTY, id: Math.random().toString(36).substr(2, 9) }]
+    }));
+  };
+
+  const removeParty = (type: 'plaintiffs' | 'defendants', id: string) => {
+    if (formData[type].length <= 1) return;
+    setFormData(prev => ({
+      ...prev,
+      [type]: prev[type].filter(p => p.id !== id)
+    }));
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    
     setIsExtracting(true);
-    setUploadSuccess(false);
-    setGenError(null);
-    
-    const file = files[0];
-    const reader = new FileReader();
-
-    reader.onload = async (event) => {
-      try {
-        const base64Data = (event.target?.result as string).split(',')[1];
-        if (!base64Data) throw new Error("Falha ao ler o arquivo.");
-
-        const analysis = await extractDataFromDocument(base64Data, file.type);
-        
-        const aiPlaintiffs = (analysis.extractedData.plaintiffs || []).map((p: any) => ({...INITIAL_PARTY, ...p, id: 'pl-' + Math.random().toString(36).substr(2, 9)}));
-        const aiDefendants = (analysis.extractedData.defendants || []).map((p: any) => ({...INITIAL_PARTY, ...p, id: 'df-' + Math.random().toString(36).substr(2, 9)}));
-
-        setFormData(prev => ({
-          ...prev,
-          area: analysis.extractedData.area || prev.area,
-          actionType: analysis.extractedData.actionType || prev.actionType,
-          jurisdiction: analysis.extractedData.jurisdiction || prev.jurisdiction,
-          facts: analysis.extractedData.facts || prev.facts,
-          plaintiffs: aiPlaintiffs.length > 0 ? aiPlaintiffs : prev.plaintiffs,
-          defendants: aiDefendants.length > 0 ? aiDefendants : prev.defendants,
-          value: analysis.extractedData.value || prev.value,
-          analyzedDocuments: [{ id: Math.random().toString(), fileName: file.name, docType: analysis.docType }]
-        }));
-
-        setIsExtracting(false);
-        setUploadSuccess(true);
-      } catch (error: any) {
-        setIsExtracting(false);
-        if (error.message?.includes("API_KEY_NOT_FOUND") || error.message?.includes("process is not defined")) {
-           setGenError("API_KEY_MISSING");
-        } else {
-           alert("Erro na análise: " + (error.message || "Tente novamente."));
-        }
+    try {
+      const analysis = await extractDataFromDocument(files[0]);
+      if (analysis) {
+          setFormData(prev => ({
+            ...prev,
+            ...analysis,
+            plaintiffs: analysis.plaintiffs?.map((p: any) => ({...INITIAL_PARTY, ...p, id: Math.random().toString()})) || prev.plaintiffs,
+            defendants: analysis.defendants?.map((p: any) => ({...INITIAL_PARTY, ...p, id: Math.random().toString()})) || prev.defendants,
+          }));
+          setUploadSuccess(true);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (e) { alert("Erro ao ler arquivo."); } finally { setIsExtracting(false); }
   };
 
-  const toggleRecording = (targetField: 'facts' | 'requests') => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Seu navegador não suporta reconhecimento de voz.");
-    if (isListening) { recognitionRef.current?.stop(); return; }
-    
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'pt-BR';
-    recognition.continuous = true;
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[event.results.length - 1][0].transcript;
-      if (targetField === 'facts') {
-        setFormData(prev => ({ ...prev, facts: prev.facts + (prev.facts ? ' ' : '') + transcript }));
-      } else {
-        setFormData(prev => {
-          const current = prev.requests.join('\n');
-          return { ...prev, requests: (current + (current ? '\n' : '') + transcript).split('\n') };
-        });
-      }
-    };
-    recognitionRef.current = recognition;
-    recognition.start();
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'facts' | 'requests') => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsTranscribing(true);
+    try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const base64Data = (event.target?.result as string).split(',')[1];
+            const transcription = await transcribeAudio(base64Data, files[0].type);
+            if (target === 'facts') {
+                setFormData(prev => ({ ...prev, facts: prev.facts + (prev.facts ? '\n\n' : '') + transcription }));
+            } else {
+                setFormData(prev => {
+                    const current = prev.requests.join('\n');
+                    return { ...prev, requests: (current + (current ? '\n' : '') + transcription).split('\n') };
+                });
+            }
+            setIsTranscribing(false);
+        };
+        reader.readAsDataURL(files[0]);
+    } catch (error) {
+        setIsTranscribing(false);
+        alert("Erro ao transcrever áudio.");
+    }
   };
 
   const handleGenerate = async () => {
     setIsGenerating(true);
-    setGenError(null);
     try {
       const content = await generateLegalPetition(formData);
       setGeneratedContent(content);
       setIsFullScreen(true);
-    } catch (error: any) { 
-        if (error.message?.includes("API_KEY_NOT_FOUND") || error.message?.includes("process is not defined")) {
-          setGenError("API_KEY_MISSING");
-        } else {
-          setGenError(error.message || "Erro na geração.");
-        }
+      setChatMessages([{
+        role: 'model',
+        text: 'Olá! Redigi a petição inicial completa. O que gostaria de ajustar agora?',
+        timestamp: new Date()
+      }]);
+    } catch (error: any) { alert("Erro na geração."); } finally { setIsGenerating(false); }
+  };
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!refinementInput.trim() || !generatedContent || isRefining) return;
+
+    const userText = refinementInput;
+    setRefinementInput('');
+    setChatMessages(prev => [...prev, { role: 'user', text: userText, timestamp: new Date() }]);
+    setIsRefining(true);
+
+    try {
+        const currentHTML = contentRef.current?.innerHTML || generatedContent;
+        const refinedHTML = await chatRefinePetition(currentHTML, userText, chatMessages);
+        
+        setGeneratedContent(refinedHTML);
+        if (contentRef.current) contentRef.current.innerHTML = refinedHTML;
+        
+        setChatMessages(prev => [...prev, { 
+            role: 'model', 
+            text: 'Pronto! Apliquei as alterações solicitadas na minuta ao lado. Posso ajudar com algo mais?', 
+            timestamp: new Date() 
+        }]);
+    } catch (e) { 
+        setChatMessages(prev => [...prev, { 
+            role: 'model', 
+            text: 'Desculpe, tive um erro ao processar sua instrução. Pode tentar novamente?', 
+            timestamp: new Date() 
+        }]);
     } finally { 
-        setIsGenerating(false); 
+        setIsRefining(false); 
     }
   };
 
-  const ErrorDisplay = () => (
-    <div className="flex flex-col items-center gap-6 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-2xl max-w-lg mx-auto animate-in zoom-in-95 text-center">
-        <div className="bg-amber-100 p-4 rounded-full text-amber-600">
-            <AlertTriangle size={48} />
-        </div>
-        <div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2">Chave da IA não detectada</h3>
-            <p className="text-sm text-slate-500 leading-relaxed mb-6">
-                Você salvou como <strong className="text-slate-900">VITE_API_KEY</strong>, mas o sistema espera apenas <strong className="text-slate-900">API_KEY</strong>.
-            </p>
-            
-            <div className="space-y-4 text-left">
-                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100">
-                    <h4 className="text-xs font-bold text-indigo-900 uppercase mb-2">Ação necessária no Vercel:</h4>
-                    <ol className="text-xs text-indigo-800 space-y-3 list-decimal list-inside font-medium">
-                        <li>Vá no dashboard do seu projeto no <strong>Vercel</strong>.</li>
-                        <li>Em <strong>Settings &gt; Environment Variables</strong>, mude o nome da chave para <code className="bg-white px-1 rounded border">API_KEY</code>.</li>
-                        <li>Salve a alteração.</li>
-                        <li>Vá na aba <strong>Deployments</strong>, clique no último deploy e selecione <strong>REDEPLOY</strong>.</li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-        
-        <div className="flex gap-3 w-full mt-4">
-           <Button variant="outline" className="flex-1 rounded-xl" onClick={() => window.location.reload()}>Fiz o ajuste, Recarregar</Button>
-           <Button className="flex-1 rounded-xl bg-slate-900" onClick={onCancel}>Voltar</Button>
-        </div>
-    </div>
-  );
+  const toggleVoiceRecording = (target: 'facts' | 'requests' | 'chat') => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert("Navegador sem suporte a voz.");
+    if (isListening) { recognitionRef.current?.stop(); return; }
+    
+    setVoiceTarget(target);
+    const rec = new SpeechRecognition();
+    rec.lang = 'pt-BR';
+    rec.onresult = (e: any) => {
+        const transcript = e.results[e.results.length - 1][0].transcript;
+        if (target === 'chat') {
+            setRefinementInput(prev => prev + ' ' + transcript);
+        } else if (target === 'facts') {
+            setFormData(prev => ({ ...prev, facts: prev.facts + ' ' + transcript }));
+        } else if (target === 'requests') {
+            setFormData(prev => {
+                const current = prev.requests.join('\n');
+                return { ...prev, requests: (current + ' ' + transcript).split('\n') };
+            });
+        }
+    };
+    rec.onstart = () => setIsListening(true);
+    rec.onend = () => { setIsListening(false); setVoiceTarget(null); };
+    recognitionRef.current = rec;
+    rec.start();
+  };
+
+  const handlePrintEditor = () => {
+    const contentToPrint = contentRef.current?.innerHTML || generatedContent;
+    if (!contentToPrint) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Por favor, permita pop-ups para imprimir.");
+      return;
+    }
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title> </title>
+          <style>
+            @page { 
+              size: A4; 
+              margin: 0mm; 
+            }
+            body { 
+              font-family: "Times New Roman", serif; 
+              font-size: 12pt; 
+              line-height: 1.5; 
+              text-align: justify; 
+              margin: 0; 
+              padding: 30mm 20mm 20mm 30mm;
+              background-color: white !important;
+              color: black !important;
+            }
+            p { margin-bottom: 12pt; text-indent: 1.25cm; }
+            table { width: 100% !important; border-collapse: collapse; margin-bottom: 1rem; }
+            table th, table td { border: 1px solid #000; padding: 8px; }
+          </style>
+        </head>
+        <body>
+          ${contentToPrint}
+          <script>
+            window.onload = () => {
+              window.print();
+              setTimeout(() => window.close(), 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleDownloadDoc = () => {
+    const contentToSave = contentRef.current?.innerHTML || generatedContent;
+    if (!contentToSave) return;
+    const blobContent = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head><meta charset='utf-8'><style>
+          @page { size: 21cm 29.7cm; margin: 3cm 2cm 2cm 3cm; }
+          body { font-family: "Times New Roman", serif; font-size: 12pt; line-height: 1.5; text-align: justify; }
+          p { margin-bottom: 12pt; text-indent: 1.25cm; }
+      </style></head>
+      <body><div>${contentToSave}</div></body></html>
+    `;
+    const blob = new Blob(['\ufeff', blobContent], { type: 'application/msword' });
+    saveAs(blob, `Peticao_JurisPet.doc`);
+  };
+
+  const handleSaveToAcervo = async () => {
+    const finalContent = contentRef.current?.innerHTML || generatedContent;
+    if (!finalContent) return;
+    setIsSaving(true);
+    try {
+        const metadata = await suggestFilingMetadata(finalContent);
+        const { error } = await supabase.from('petitions').insert([{
+            user_id: userId, 
+            area: formData.area, 
+            action_type: formData.actionType,
+            content: finalContent, 
+            plaintiff_name: formData.plaintiffs[0]?.name || 'Polo Ativo',
+            defendant_name: formData.defendants[0]?.name || 'Polo Passivo', 
+            created_at: new Date().toISOString(),
+            competence: metadata.competence,
+            legal_class: metadata.class,
+            subject: metadata.subject,
+            filing_url: metadata.filingUrl || ''
+        }]);
+        if (error) throw error;
+        onSuccess();
+    } catch (e: any) { alert("Erro ao salvar."); } finally { setIsSaving(false); }
+  };
 
   const renderStep = () => {
     const step = STEPS[currentStep - 1];
-    if (genError === "API_KEY_MISSING") return <ErrorDisplay />;
-
     switch (step) {
       case 'Upload':
         return (
-          <div className="space-y-6 text-center py-10">
-             <div className={`border-2 border-dashed rounded-[2rem] p-16 transition-all duration-500 ${uploadSuccess ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30'}`}>
-                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf, .txt, image/*" />
+          <div className="space-y-6 text-center py-4 w-full">
+             <div className={`border-4 border-dashed rounded-[2.5rem] md:rounded-[3rem] p-8 md:p-16 transition-all ${uploadSuccess ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800' : isExtracting ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-800' : 'bg-white dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600'}`}>
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf, .txt, .doc, .docx, image/*" />
                 {isExtracting ? (
-                    <div className="flex flex-col items-center gap-5">
-                        <Loader2 className="h-16 w-16 text-indigo-600 animate-spin" />
-                        <div>
-                            <p className="font-bold text-slate-900 text-lg">Analisando Documento...</p>
-                            <p className="text-sm text-slate-500">Mapeando fatos e partes...</p>
-                        </div>
+                    <div className="flex flex-col items-center gap-6">
+                        <Loader2 className="h-12 w-12 md:h-16 md:w-16 text-indigo-600 animate-spin" />
+                        <p className="font-black text-slate-900 dark:text-slate-100 text-sm md:text-xl uppercase tracking-widest">Analisando Arquivo...</p>
                     </div>
                 ) : uploadSuccess ? (
-                    <div className="flex flex-col items-center gap-4">
-                        <div className="bg-emerald-100 p-4 rounded-full text-emerald-600 animate-in zoom-in">
-                            <CheckCircle size={48} />
-                        </div>
-                        <h3 className="text-2xl font-bold text-slate-900">Análise Concluída!</h3>
-                        <p className="text-slate-500">Documento processado. Prossiga para os próximos passos.</p>
-                        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-xl">Substituir Arquivo</Button>
+                    <div className="flex flex-col items-center gap-4 animate-in zoom-in">
+                        <CheckCircle size={56} className="text-emerald-500" />
+                        <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Extração Concluída</h3>
+                        <Button variant="outline" size="md" onClick={() => fileInputRef.current?.click()} className="rounded-xl border-2 mt-4 font-black uppercase text-[10px] dark:border-slate-700">Trocar Documento</Button>
                     </div>
                 ) : (
                     <>
-                        <div className="bg-white p-6 rounded-3xl shadow-sm inline-block mb-6 border border-slate-100">
-                            <FileUp className="h-12 w-12 text-indigo-500" />
+                        <div className="flex justify-center gap-4 mb-6">
+                            <FileUp className="h-10 w-10 md:h-14 md:w-14 text-indigo-400 dark:text-indigo-500" />
+                            <ImageIcon className="h-10 w-10 md:h-14 md:w-14 text-emerald-400 dark:text-emerald-500" />
                         </div>
-                        <h3 className="text-2xl font-bold text-slate-900 mb-2">Importação por Documento</h3>
-                        <p className="text-slate-500 max-w-sm mx-auto mb-10">Envie um arquivo para que a IA preencha os dados automaticamente.</p>
-                        <Button className="h-14 px-10 rounded-2xl bg-indigo-600 text-lg shadow-xl" onClick={() => fileInputRef.current?.click()}>Escolher PDF ou Imagem</Button>
+                        <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 uppercase leading-none">PDF ou Foto do Processo</h3>
+                        <p className="text-slate-400 dark:text-slate-500 text-xs md:text-sm font-medium mb-10 max-w-sm mx-auto">Nossa IA Sênior preencherá os dados automaticamente através de documentos ou fotos.</p>
+                        <Button size="lg" className="rounded-2xl bg-indigo-600 font-black tracking-widest px-8 md:px-10 h-14 md:h-16 shadow-xl text-xs md:text-sm" onClick={() => fileInputRef.current?.click()}>SUBIR ARQUIVO / IMAGEM</Button>
                     </>
                 )}
              </div>
@@ -284,19 +389,19 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         );
       case 'Gerar':
         return (
-            <div className="text-center py-20 animate-in zoom-in-95">
+            <div className="text-center py-10 md:py-12 animate-in zoom-in-95 w-full">
                 {isGenerating ? (
-                    <div className="flex flex-col items-center gap-6">
-                        <Sparkles className="h-20 w-20 text-indigo-500 animate-pulse" />
-                        <h3 className="text-2xl font-bold text-slate-900">Redigindo Peça Jurídica...</h3>
+                    <div className="flex flex-col items-center gap-6 md:gap-8">
+                        <Sparkles className="h-16 w-16 md:h-20 md:w-20 text-indigo-600 animate-pulse" />
+                        <h3 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Redigindo Peça Sênior...</h3>
                     </div>
                 ) : (
                     <>
-                        <Scale className="h-16 w-16 text-slate-900 mx-auto mb-8" />
-                        <h3 className="text-3xl font-bold text-slate-900 mb-4">Pronto para Revisão</h3>
-                        <p className="text-slate-500 mb-10 text-lg max-w-md mx-auto">Nossa IA Sênior irá gerar o texto completo para sua aprovação.</p>
-                        <Button size="lg" onClick={handleGenerate} className="px-14 h-16 text-xl rounded-2xl shadow-2xl bg-slate-900">
-                           <Sparkles className="mr-3 h-6 w-6"/> Gerar Minuta Completa
+                        <Scale className="h-16 w-16 md:h-20 md:w-20 text-slate-950 dark:text-slate-200 mx-auto mb-6 md:mb-8" />
+                        <h3 className="text-3xl md:text-5xl font-black text-slate-950 dark:text-white tracking-tighter mb-4 uppercase leading-none">Pronto para Gerar</h3>
+                        <p className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] md:text-[11px] tracking-[0.3em] mb-12 italic">Doutrina e jurisprudência completa serão aplicadas.</p>
+                        <Button size="lg" onClick={handleGenerate} className="w-full md:w-auto h-20 md:h-24 px-12 md:px-20 text-lg md:text-2xl rounded-[2rem] md:rounded-[2.5rem] bg-indigo-600 shadow-2xl hover:scale-105 hover:bg-indigo-700 transition-all text-white font-black border-none">
+                           <Sparkles size={24} className="mr-3 text-indigo-200"/> GERAR PEÇA COMPLETA
                         </Button>
                     </>
                 )}
@@ -304,40 +409,153 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
         );
       default:
         return (
-            <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="space-y-6 animate-in fade-in duration-500 w-full text-left">
                 {step === 'Dados' && (
-                  <div className="space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-6 md:space-y-8 pb-2 w-full">
+                    <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] flex items-start gap-3 md:gap-4">
+                        <div className="bg-amber-200 dark:bg-amber-900/40 p-2 rounded-xl text-amber-700 dark:text-amber-500 shrink-0">
+                            <Info size={18} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] md:text-xs font-black text-amber-900 dark:text-amber-400 uppercase tracking-tight">Preenchimento Opcional</p>
+                            <p className="text-[9px] md:text-[10px] font-bold text-amber-700 dark:text-amber-600 uppercase leading-relaxed mt-1">
+                                Dados detalhados podem ser adicionados agora ou editados livremente após a geração da minuta final.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                         <div className="w-full">
-                          <label className="mb-2 block text-sm font-bold text-slate-700 uppercase tracking-wider">Área de Atuação</label>
-                          <select className="flex h-12 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm" value={formData.area} onChange={e => handleInputChange('area', e.target.value)}>
+                          <label className="mb-1 block text-[9px] md:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Área Jurídica</label>
+                          <select className="flex h-11 md:h-12 w-full rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500 transition-all text-xs md:text-sm" value={formData.area} onChange={e => handleInputChange('area', e.target.value)}>
                             {AREAS_DO_DIREITO.map(area => (<option key={area.value} value={area.value}>{area.label}</option>))}
                           </select>
                         </div>
-                        <Input label="Ação" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Ex: Indenizatória" className="h-12 rounded-xl" />
+                        <div className="w-full">
+                          <label className="mb-1 block text-[9px] md:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Tipo de Ação</label>
+                          <input type="text" className="flex h-11 md:h-12 w-full rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500 transition-all text-xs md:text-sm" value={formData.actionType} onChange={e => handleInputChange('actionType', e.target.value)} placeholder="Ex: Divórcio Litigioso" />
+                        </div>
                     </div>
-                    <Input label="Jurisdição" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="Ex: AO JUÍZO DA VARA CÍVEL..." className="h-12 rounded-xl" />
+                    
+                    <div className="w-full text-left">
+                      <label className="mb-1 block text-[9px] md:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Endereçamento (Juízo)</label>
+                      <input type="text" className="flex h-11 md:h-12 w-full rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500 transition-all text-xs md:text-sm" value={formData.jurisdiction} onChange={e => handleInputChange('jurisdiction', e.target.value)} placeholder="EX: AO JUÍZO DA VARA CÍVEL..." />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 md:gap-10">
+                        <div className="space-y-4 md:space-y-6">
+                           <div className="flex items-center justify-between border-b-2 border-indigo-100 dark:border-indigo-900 pb-2 px-1">
+                              <label className="text-[9px] md:text-[10px] font-black text-indigo-900 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2"><User size={14}/> Polo Ativo (Autor)</label>
+                              <button onClick={() => addParty('plaintiffs')} className="text-[8px] md:text-[9px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all">+ Novo</button>
+                           </div>
+                           {formData.plaintiffs.map((party) => (
+                               <div key={party.id} className="bg-white dark:bg-slate-900/60 p-5 md:p-6 rounded-[1.5rem] md:rounded-[2.5rem] border border-indigo-100 dark:border-indigo-900/50 space-y-4 shadow-sm relative group">
+                                  {formData.plaintiffs.length > 1 && (
+                                      <button onClick={() => removeParty('plaintiffs', party.id!)} className="absolute -top-2 -right-2 bg-white dark:bg-slate-800 text-rose-500 border border-rose-100 dark:border-rose-900/50 p-1.5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-all"><X size={12}/></button>
+                                  )}
+                                  <div className="space-y-1">
+                                    <label className="text-[8px] font-black text-indigo-300 dark:text-indigo-500 uppercase tracking-widest ml-1">Nome Completo</label>
+                                    <input className="h-9 md:h-10 w-full rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none" value={party.name} onChange={e => updateParty('plaintiffs', party.id!, 'name', e.target.value)} placeholder="Nome" />
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                     <div className="space-y-1">
+                                        <label className="text-[8px] font-black text-indigo-300 dark:text-indigo-500 uppercase tracking-widest ml-1">CPF/CNPJ</label>
+                                        <input className="h-9 md:h-10 w-full rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white" value={party.doc} onChange={e => updateParty('plaintiffs', party.id!, 'doc', e.target.value)} placeholder="000.000.000-00" />
+                                     </div>
+                                     <div className="space-y-1">
+                                        <label className="text-[8px] font-black text-indigo-300 dark:text-indigo-500 uppercase tracking-widest ml-1">RG</label>
+                                        <input className="h-9 md:h-10 w-full rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white" value={party.rg} onChange={e => updateParty('plaintiffs', party.id!, 'rg', e.target.value)} placeholder="0.000.000" />
+                                     </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[8px] font-black text-indigo-300 dark:text-indigo-500 uppercase tracking-widest ml-1">Endereço Completo</label>
+                                    <input className="h-9 md:h-10 w-full rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white" value={party.address} onChange={e => updateParty('plaintiffs', party.id!, 'address', e.target.value)} placeholder="Logradouro, nº, Cidade - UF" />
+                                  </div>
+                               </div>
+                           ))}
+                        </div>
+
+                        <div className="space-y-4 md:space-y-6">
+                           <div className="flex items-center justify-between border-b-2 border-slate-200 dark:border-slate-800 pb-2 px-1">
+                              <label className="text-[9px] md:text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2"><Briefcase size={14}/> Polo Passivo (Réu)</label>
+                              <button onClick={() => addParty('defendants')} className="text-[8px] md:text-[9px] font-black text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">+ Novo</button>
+                           </div>
+                           {formData.defendants.map((party) => (
+                               <div key={party.id} className="bg-white dark:bg-slate-900/60 p-5 md:p-6 rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm relative group">
+                                  {formData.defendants.length > 1 && (
+                                      <button onClick={() => removeParty('defendants', party.id!)} className="absolute -top-2 -right-2 bg-white dark:bg-slate-800 text-rose-500 border border-rose-100 dark:border-rose-900/50 p-1.5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-all"><X size={12}/></button>
+                                  )}
+                                  <div className="space-y-1">
+                                    <label className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Nome ou Razão Social</label>
+                                    <input className="h-9 md:h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-800 outline-none" value={party.name} onChange={e => updateParty('defendants', party.id!, 'name', e.target.value)} placeholder="Nome" />
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                     <div className="space-y-1">
+                                        <label className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">CPF/CNPJ</label>
+                                        <input className="h-9 md:h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white" value={party.doc} onChange={e => updateParty('defendants', party.id!, 'doc', e.target.value)} placeholder="00.000.000/0000-00" />
+                                     </div>
+                                     <div className="space-y-1">
+                                        <label className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">RG/Inscrição</label>
+                                        <input className="h-9 md:h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white" value={party.rg} onChange={e => updateParty('defendants', party.id!, 'rg', e.target.value)} placeholder="Opcional" />
+                                     </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Endereço Completo</label>
+                                    <input className="h-9 md:h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 text-[11px] md:text-xs font-bold text-slate-900 dark:text-white" value={party.address} onChange={e => updateParty('defendants', party.id!, 'address', e.target.value)} placeholder="Logradouro, nº, Cidade - UF" />
+                                  </div>
+                               </div>
+                           ))}
+                        </div>
+                    </div>
                   </div>
                 )}
                 {step === 'Fatos' && (
-                  <div className="space-y-6">
-                     <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Histórico dos Fatos</label>
-                     <div className="relative group">
-                        <textarea className="w-full h-64 p-6 border border-slate-200 rounded-[2rem] focus:ring-2 focus:ring-indigo-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.facts} onChange={e => handleInputChange('facts', e.target.value)} placeholder="Narre os fatos..." />
+                  <div className="space-y-4 w-full text-left">
+                     <label className="text-[10px] md:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1 text-left">Exposição dos Fatos</label>
+                     <div className="relative">
+                        <textarea className="w-full h-80 md:h-96 p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-slate-200 dark:border-slate-800 text-xs md:text-sm font-medium bg-white dark:bg-slate-950/40 text-slate-900 dark:text-slate-100 outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500 transition-all shadow-inner leading-relaxed" value={formData.facts} onChange={e => handleInputChange('facts', e.target.value)} placeholder="Narre os fatos detalhadamente. A IA formatará o texto juridicamente." />
+                        {isTranscribing && voiceTarget === 'facts' && (
+                          <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm rounded-[1.5rem] md:rounded-[2.5rem] flex flex-col items-center justify-center animate-in fade-in">
+                            <Loader2 className="h-10 w-10 text-indigo-600 animate-spin mb-4" />
+                            <span className="text-xs font-black text-indigo-900 dark:text-indigo-400 uppercase tracking-widest">Processando áudio...</span>
+                          </div>
+                        )}
                      </div>
-                     <div className="flex gap-4 justify-center">
-                        <button onClick={() => toggleRecording('facts')} className={`flex items-center gap-2 px-8 py-4 rounded-2xl shadow-lg transition-all ${isListening ? 'bg-rose-500 text-white animate-pulse' : 'bg-white text-slate-700 border border-slate-200'}`}>
-                           {isListening ? <MicOff size={20} /> : <Mic size={20} className="text-rose-500" />}
-                           <span className="text-sm font-bold uppercase">{isListening ? 'Parar' : 'Ditar Fatos'}</span>
+                     <div className="flex items-center gap-3 px-1">
+                        <input type="file" ref={audioInputRef} onChange={e => handleAudioUpload(e, 'facts')} className="hidden" accept="audio/*" />
+                        <button onClick={() => audioInputRef.current?.click()} className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 px-4 py-2 rounded-xl transition-all border border-indigo-100 dark:border-indigo-900/50 bg-white dark:bg-slate-900 shadow-sm">
+                            <FileAudio size={16}/><span className="text-[9px] font-black uppercase tracking-widest">Importar Áudio</span>
+                        </button>
+                        <button onClick={() => toggleVoiceRecording('facts')} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border shadow-sm ${isListening && voiceTarget === 'facts' ? 'bg-indigo-600 text-white border-indigo-700 animate-pulse' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-indigo-600'}`}>
+                            {isListening && voiceTarget === 'facts' ? <MicOff size={16}/> : <Mic size={16}/>}<span className="text-[9px] font-black uppercase tracking-widest">{isListening && voiceTarget === 'facts' ? 'Ouvindo...' : 'Ditar Fatos'}</span>
                         </button>
                      </div>
                   </div>
                 )}
                 {step === 'Pedidos' && (
-                  <div className="space-y-6">
-                     <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Pedidos</label>
-                     <textarea className="w-full h-48 p-6 border border-slate-200 rounded-[2rem] focus:ring-2 focus:ring-indigo-500 text-sm shadow-inner transition-all resize-none bg-slate-50/50" value={formData.requests.join('\n')} onChange={e => handleInputChange('requests', e.target.value.split('\n'))} placeholder="Liste os pedidos..." />
-                     <Input label="Valor da Causa" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} placeholder="R$ 0,00" className="h-12 rounded-xl" />
+                  <div className="space-y-6 w-full text-left">
+                     <label className="text-[10px] md:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Pedidos e Requerimentos</label>
+                     <div className="relative">
+                        <textarea className="w-full h-56 md:h-64 p-6 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border-2 border-slate-200 dark:border-slate-800 text-xs md:text-sm font-bold bg-white dark:bg-slate-950/40 text-slate-900 dark:text-slate-100 outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500 transition-all" value={formData.requests.join('\n')} onChange={e => handleInputChange('requests', e.target.value.split('\n'))} placeholder="Ex: Danos Morais, Liminar, Justiça Gratuita..." />
+                        {isTranscribing && voiceTarget === 'requests' && (
+                          <div className="absolute inset-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm rounded-[1.5rem] md:rounded-[2rem] flex flex-col items-center justify-center animate-in fade-in">
+                            <Loader2 className="h-10 w-10 text-indigo-600 animate-spin mb-4" />
+                            <span className="text-xs font-black text-indigo-900 dark:text-indigo-400 uppercase tracking-widest">Processando áudio...</span>
+                          </div>
+                        )}
+                     </div>
+                     <div className="flex items-center gap-3 px-1">
+                        <button onClick={() => audioInputRef.current?.click()} className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 px-4 py-2 rounded-xl transition-all border border-indigo-100 dark:border-indigo-900/50 bg-white dark:bg-slate-900 shadow-sm">
+                            <FileAudio size={16}/><span className="text-[9px] font-black uppercase tracking-widest">Importar Áudio</span>
+                        </button>
+                        <button onClick={() => toggleVoiceRecording('requests')} className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border shadow-sm ${isListening && voiceTarget === 'requests' ? 'bg-indigo-600 text-white border-indigo-700 animate-pulse' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-indigo-600'}`}>
+                            {isListening && voiceTarget === 'requests' ? <MicOff size={16}/> : <Mic size={16}/>}<span className="text-[9px] font-black uppercase tracking-widest">{isListening && voiceTarget === 'requests' ? 'Ouvindo...' : 'Ditar Pedidos'}</span>
+                        </button>
+                     </div>
+                     <div className="max-w-md text-left">
+                        <label className="text-[9px] md:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Valor da Causa (R$)</label>
+                        <input className="h-12 md:h-14 w-full rounded-xl md:rounded-2xl border-2 border-slate-200 dark:border-slate-800 px-6 font-black text-lg md:text-xl bg-white dark:bg-slate-950 text-slate-900 dark:text-white outline-none focus:border-indigo-500 transition-all" value={formData.value} onChange={e => handleInputChange('value', e.target.value)} placeholder="R$ 0,00" />
+                     </div>
                   </div>
                 )}
             </div>
@@ -347,100 +565,146 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
 
   if (isFullScreen && generatedContent) {
     return (
-      <div className="fixed inset-0 z-[200] bg-slate-100 flex flex-col h-screen overflow-hidden">
-         <div className="bg-white border-b px-8 py-4 flex justify-between items-center shadow-sm shrink-0">
-             <div className="flex items-center gap-4">
-                <button onClick={() => setIsFullScreen(false)} className="p-2 text-slate-400 hover:text-slate-900 bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
-                <h2 className="text-lg font-bold text-slate-900 tracking-tight">Editor de Peça</h2>
-             </div>
-             <div className="flex gap-3">
-                <Button variant="outline" onClick={() => window.print()} className="rounded-xl"><Printer size={18} className="mr-2"/> Imprimir</Button>
-                <Button variant="outline" onClick={() => {
-                    const blob = new Blob(['\ufeff', generatedContent], { type: 'application/msword' });
-                    saveAs(blob, `Peticao.doc`);
-                }} className="rounded-xl"><Download size={18} className="mr-2"/> Word</Button>
-                <Button onClick={async () => {
-                    setIsSaving(true);
-                    try {
-                        await supabase.from('petitions').insert([{
-                            user_id: userId, area: formData.area, action_type: formData.actionType,
-                            content: generatedContent, plaintiff_name: formData.plaintiffs[0]?.name,
-                            defendant_name: formData.defendants[0]?.name, created_at: new Date().toISOString()
-                        }]);
-                        onSuccess();
-                    } catch (e) { alert("Erro ao salvar."); }
-                    finally { setIsSaving(false); }
-                }} isLoading={isSaving} className="rounded-xl bg-slate-900 px-6"><Save size={18} className="mr-2"/> Salvar Sistema</Button>
-             </div>
-         </div>
-         <div className="flex-1 overflow-hidden flex">
-             <div className="flex-1 overflow-y-auto p-12 flex flex-col items-center bg-slate-200/50">
-                 <div className="w-full max-w-[21cm] bg-white shadow-2xl rounded-sm p-[3cm_2cm_3cm_3cm] h-auto min-h-[29.7cm] border border-slate-200" contentEditable={true} suppressContentEditableWarning={true} onBlur={e => setGeneratedContent(e.currentTarget.innerHTML)} style={{ fontFamily: '"Times New Roman", serif', fontSize: '12pt', lineHeight: '1.5' }}>
-                    <div dangerouslySetInnerHTML={{ __html: generatedContent }} />
-                 </div>
-                 <style>{`[contenteditable] h1, [contenteditable] h2, [contenteditable] h3 { text-align: center; text-transform: uppercase; margin: 18pt 0 12pt 0; font-weight: bold; } [contenteditable] p { text-align: justify; text-indent: 1.25cm; margin-bottom: 12pt; }`}</style>
-             </div>
-             <div className="w-96 p-8 bg-white border-l overflow-y-auto shrink-0 flex flex-col gap-6">
-                <div className="bg-indigo-50/50 rounded-3xl border border-indigo-100 p-6">
-                   <h4 className="text-xs font-bold text-indigo-900 uppercase mb-4 flex items-center gap-2 tracking-widest"><RefreshCw size={14}/> Refinar Texto</h4>
-                   <textarea className="w-full h-40 rounded-2xl border border-indigo-200 p-4 text-sm mb-4 outline-none focus:ring-2 focus:ring-indigo-300 transition-all bg-white shadow-inner" placeholder="Instrua a IA sobre ajustes..." value={refinementText} onChange={(e) => setRefinementText(e.target.value)} />
-                   <Button onClick={async () => {
-                       if (!generatedContent || !refinementText) return;
-                       setIsRefining(true);
-                       try {
-                           const res = await refineLegalPetition(generatedContent, refinementText);
-                           setGeneratedContent(res);
-                           setRefinementText('');
-                       } catch (e) { alert("Erro no ajuste."); }
-                       finally { setIsRefining(false); }
-                   }} isLoading={isRefining} className="w-full h-12 bg-indigo-600 rounded-xl font-bold">Aplicar Ajuste</Button>
+      <div className="fixed inset-0 z-[200] bg-slate-100 dark:bg-slate-950 flex flex-col md:flex-row h-screen overflow-hidden">
+         <div className="flex-1 flex flex-col h-full bg-slate-200 dark:bg-slate-900 relative overflow-hidden transition-colors">
+            <div className="bg-white dark:bg-slate-950 border-b border-slate-300 dark:border-slate-800 px-4 md:px-10 py-3 md:py-5 flex justify-between items-center shadow-lg shrink-0 z-10 no-print transition-colors">
+                <div className="flex items-center gap-3 md:gap-6 text-left">
+                    <button onClick={() => setIsFullScreen(false)} className="p-2 md:p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-800 rounded-xl md:rounded-2xl transition-all"><X size={18}/></button>
+                    <div className="flex flex-col">
+                        <h2 className="text-sm md:text-xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">Editor de Petição</h2>
+                    </div>
                 </div>
-             </div>
+                <div className="flex gap-2 md:gap-3">
+                    <Button variant="outline" className="hidden sm:flex rounded-xl px-3 md:px-4 h-10 md:h-12 font-black uppercase text-[8px] md:text-[10px] border-2 dark:border-slate-700 dark:text-slate-300" onClick={handlePrintEditor}><Printer size={16} className="mr-1 md:mr-2"/> Imprimir</Button>
+                    <Button variant="outline" className="rounded-xl px-3 md:px-4 h-10 md:h-12 font-black uppercase text-[8px] md:text-[10px] border-2 dark:border-slate-700 dark:text-slate-300" onClick={handleDownloadDoc}><Download size={16} className="mr-1 md:mr-2"/> Word</Button>
+                    <Button size="md" onClick={handleSaveToAcervo} isLoading={isSaving} className="rounded-xl bg-slate-900 dark:bg-indigo-600 text-white px-4 md:px-8 h-10 md:h-12 font-black uppercase text-[8px] md:text-[10px] shadow-xl border-none"><Save size={16} className="mr-1 md:mr-2"/> SALVAR</Button>
+                </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4 md:p-12 flex flex-col items-center custom-scrollbar bg-slate-100 dark:bg-slate-900">
+                <div className="min-w-[21cm] w-fit sm:w-full sm:max-w-[21.2cm] bg-white shadow-2xl border border-slate-300 mb-20 transition-all origin-top">
+                    <div 
+                        ref={contentRef}
+                        className="w-full min-h-[29.7cm] p-[2cm] md:p-[3cm_2cm_3cm_3cm] box-border focus:ring-0 outline-none text-left"
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true} 
+                        style={{ 
+                          fontFamily: '"Times New Roman", serif', 
+                          fontSize: '12pt', 
+                          lineHeight: '1.5', 
+                          textAlign: 'justify',
+                          color: '#000000',
+                          backgroundColor: '#ffffff' 
+                        }}
+                    />
+                </div>
+            </div>
          </div>
+         
+         <aside className="hidden md:flex w-[400px] lg:w-[450px] h-full bg-slate-50 dark:bg-[#0F172A] flex-col border-l border-slate-200 dark:border-slate-800 shadow-2xl z-20 no-print overflow-hidden transition-colors">
+            <div className="p-6 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 shrink-0 text-left">
+                <div className="flex items-center gap-3">
+                    <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg">
+                        <MessageSquare size={18} />
+                    </div>
+                    <div>
+                        <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Ajustar com IA</h3>
+                        <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter leading-none">Minuta Inteligente Ativa</p>
+                    </div>
+                </div>
+            </div>
+
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-slate-50 dark:bg-slate-900/30">
+                {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2`}>
+                        <div className={`max-w-[90%] p-4 rounded-2xl text-[10px] md:text-[11px] font-bold leading-relaxed shadow-sm text-left ${
+                            msg.role === 'user' 
+                            ? 'bg-indigo-600 text-white rounded-tr-none' 
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-100 dark:border-slate-700 rounded-tl-none'
+                        }`}>
+                            {msg.text}
+                        </div>
+                        <span className="text-[8px] font-black text-slate-300 dark:text-slate-600 uppercase mt-2 px-1">
+                            {msg.role === 'user' ? 'Advogado' : 'JurisPet IA'} • {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                    </div>
+                ))}
+                {isRefining && (
+                    <div className="flex items-start gap-3">
+                        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl rounded-tl-none border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-3">
+                            <Loader2 size={16} className="animate-spin text-indigo-600" />
+                            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest animate-pulse">Reescrevendo...</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div className="p-6 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 shrink-0">
+                <form onSubmit={handleSendMessage} className="relative">
+                    <input 
+                        value={refinementInput} 
+                        onChange={e => setRefinementInput(e.target.value)} 
+                        disabled={isRefining}
+                        className="w-full h-14 pl-6 pr-24 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-[11px] font-bold text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all shadow-inner" 
+                        placeholder="Ex: 'Aumente o dano moral para 20k'..." 
+                    />
+                    <div className="absolute right-2 top-2 flex items-center gap-1">
+                        <button 
+                            type="button"
+                            onClick={() => toggleVoiceRecording('chat')} 
+                            disabled={isRefining}
+                            className={`p-3 rounded-xl transition-all ${isListening && voiceTarget === 'chat' ? 'bg-rose-500 text-white animate-pulse' : 'text-slate-400 dark:text-slate-500 hover:text-indigo-600 bg-transparent'}`}
+                        >
+                            <Mic size={18} />
+                        </button>
+                        <button 
+                            type="submit" 
+                            disabled={!refinementInput.trim() || isRefining}
+                            className="p-3 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-all disabled:opacity-30"
+                        >
+                            <Send size={20} />
+                        </button>
+                    </div>
+                </form>
+            </div>
+         </aside>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-12">
+    <div className="w-full h-full pb-10 md:pb-20 max-w-6xl mx-auto px-2 md:px-0 text-left">
       {mode === 'selection' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <button onClick={() => { setMode('scratch'); setCurrentStep(1); }} className="bg-white border-2 border-slate-100 p-12 rounded-[3rem] hover:border-indigo-500 hover:shadow-2xl transition-all h-[400px] flex flex-col items-center justify-center text-center group">
-            <div className="bg-indigo-50 p-8 rounded-[2.5rem] group-hover:bg-indigo-100 transition-all mb-8">
-                <PenTool size={64} className="text-indigo-600" />
-            </div>
-            <h3 className="text-2xl font-bold text-slate-900 tracking-tight">Nova Petição</h3>
-            <p className="text-slate-500 mt-3 max-w-xs leading-relaxed">Narre os fatos do zero com auxílio da nossa IA.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-10">
+          <button onClick={() => { setMode('scratch'); setCurrentStep(1); }} className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-8 md:p-12 rounded-[2.5rem] md:rounded-[4rem] hover:border-indigo-600 dark:hover:border-indigo-500 hover:shadow-2xl transition-all h-[340px] md:h-[420px] flex flex-col items-center justify-center text-center group active:scale-95 shadow-sm">
+            <div className="bg-slate-50 dark:bg-slate-800 p-6 md:p-10 rounded-3xl md:rounded-[2.5rem] group-hover:bg-indigo-600 group-hover:text-white transition-all mb-6 md:mb-10 shadow-lg border border-slate-100 dark:border-slate-700"><PenTool size={48} className="md:w-16 md:h-16" /></div>
+            <h3 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">Minuta do Zero</h3>
+            <p className="text-slate-400 dark:text-slate-500 mt-4 md:mt-6 text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] max-w-[180px]">Redação técnica baseada em narrativa livre.</p>
           </button>
           
-          <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white border-2 border-slate-100 p-12 rounded-[3rem] hover:border-emerald-500 hover:shadow-2xl transition-all h-[400px] flex flex-col items-center justify-center text-center group">
-            <div className="bg-emerald-50 p-8 rounded-[2.5rem] group-hover:bg-emerald-100 transition-all mb-8">
-                <FileUp size={64} className="text-emerald-600" />
-            </div>
-            <h3 className="text-2xl font-bold text-slate-900 tracking-tight">Extrair de Documento</h3>
-            <p className="text-slate-500 mt-3 max-w-xs leading-relaxed">Envie um PDF ou Imagem para extração automática.</p>
+          <button onClick={() => { setMode('upload'); setCurrentStep(1); }} className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-8 md:p-12 rounded-[2.5rem] md:rounded-[4rem] hover:border-emerald-600 dark:hover:border-emerald-500 hover:shadow-2xl transition-all h-[340px] md:h-[420px] flex flex-col items-center justify-center text-center group active:scale-95 shadow-sm">
+            <div className="bg-slate-50 dark:bg-slate-800 p-6 md:p-10 rounded-3xl md:rounded-[2.5rem] group-hover:bg-emerald-600 group-hover:text-white transition-all mb-6 md:mb-10 shadow-lg border border-slate-100 dark:border-slate-700"><FileUp size={48} className="md:w-16 md:h-16" /></div>
+            <h3 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">Importar PDF</h3>
+            <p className="text-slate-400 dark:text-slate-500 mt-4 md:mt-6 text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] max-w-[180px]">Extração automática via IA de arquivos ou fotos.</p>
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
-          <div className="bg-slate-50/80 backdrop-blur-md px-10 py-6 border-b flex justify-between items-center">
-            <div className="flex gap-6">
+        <div className="bg-white dark:bg-slate-900 rounded-[2rem] md:rounded-[4rem] shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden w-full transition-all">
+          <div className="bg-slate-50 dark:bg-slate-950/50 px-6 md:px-10 py-5 md:py-8 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex gap-4 md:gap-8 overflow-x-auto no-scrollbar py-1 w-full md:w-auto">
                 {STEPS.map((s, idx) => (
-                    <div key={s} className={`flex items-center gap-2 ${currentStep === idx + 1 ? 'text-slate-900' : 'text-slate-400 opacity-60'}`}>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${currentStep === idx + 1 ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-500'}`}>{idx+1}</div>
-                        <span className="hidden sm:inline text-[10px] uppercase font-black tracking-widest">{s}</span>
+                    <div key={s} className={`flex items-center gap-2 shrink-0 ${currentStep === idx + 1 ? 'text-slate-950 dark:text-white' : 'text-slate-300 dark:text-slate-700'}`}>
+                        <div className={`w-6 h-6 md:w-8 md:h-8 rounded-lg flex items-center justify-center text-[9px] md:text-[10px] font-black transition-all ${currentStep === idx + 1 ? 'bg-slate-950 dark:bg-indigo-600 text-white shadow-xl' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-500'}`}>{idx+1}</div>
+                        <span className="text-[9px] md:text-[10px] uppercase font-black tracking-widest">{s}</span>
                     </div>
                 ))}
             </div>
-            <button onClick={onCancel} className="text-slate-400 hover:text-slate-900 transition-colors bg-white p-2 rounded-full border border-slate-100"><X size={18}/></button>
+            <button onClick={onCancel} className="hidden md:flex text-slate-400 hover:text-slate-950 dark:hover:text-white p-2 transition-colors"><X size={24}/></button>
           </div>
-          
-          <div className="p-12 min-h-[500px]">{renderStep()}</div>
-          
-          <div className="bg-slate-50/50 px-10 py-6 border-t flex justify-between">
-              <Button variant="outline" className="rounded-xl px-8" onClick={() => { if(currentStep===1) setMode('selection'); else setCurrentStep(prev=>prev-1); }}>Voltar</Button>
+          <div className="p-6 md:p-12 min-h-[50vh] md:min-h-[60vh] flex flex-col items-start w-full transition-all text-left">{renderStep()}</div>
+          <div className="bg-slate-50 dark:bg-slate-950/50 px-6 md:px-12 py-6 md:py-8 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center gap-4">
+              <Button variant="outline" className="rounded-2xl px-6 md:px-10 h-12 md:h-14 font-black uppercase text-[10px] md:text-[11px] tracking-widest border-2 dark:border-slate-700 dark:text-slate-400 flex-1 md:flex-none" onClick={() => { if(currentStep===1) setMode('selection'); else setCurrentStep(prev=>prev-1); }}>Voltar</Button>
               {currentStep < STEPS.length && (
-                  <Button className="rounded-xl px-10 bg-slate-900" onClick={() => setCurrentStep(prev=>prev+1)} disabled={mode === 'upload' && currentStep === 1 && !uploadSuccess && !isExtracting}>Próximo <ChevronRight size={18} className="ml-1"/></Button>
+                  <Button className="rounded-2xl px-8 md:px-16 h-12 md:h-14 font-black uppercase text-[10px] md:text-[11px] tracking-widest shadow-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all flex-1 md:flex-none border-none" onClick={() => setCurrentStep(prev=>prev+1)} disabled={mode === 'upload' && currentStep === 1 && !uploadSuccess}>Próximo</Button>
               )}
           </div>
         </div>

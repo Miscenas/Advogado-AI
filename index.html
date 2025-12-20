@@ -1,57 +1,129 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Advogado IA - Assistente Jurídico Inteligente</title>
-    <!-- Mercado Pago SDK -->
+    <title>JurisPet AI - Advocacia de Elite</title>
     <script src="https://sdk.mercadopago.com/js/v2"></script>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Mammoth.js para leitura de Word no navegador -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
               juris: {
-                50: '#f0f9ff',
-                100: '#e0f2fe',
-                500: '#0ea5e9', // Sky blue for accents
-                800: '#075985',
-                900: '#0c4a6e', // Deep legal blue
-                950: '#082f49',
+                50: '#f8fafc',
+                100: '#f1f5f9',
+                200: '#e2e8f0',
+                800: '#1e293b',
+                900: '#0f172a',
+                950: '#020617',
               }
             },
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
+              serif: ['Times New Roman', 'serif'],
             }
           }
         }
       }
     </script>
-    <!-- Inter Font -->
+    <script>
+      // Script para evitar flash de cor no carregamento inicial
+      if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+      
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }
+
+      body { 
+        background-color: #f8fafc; 
+        color: #0f172a;
+        transition: background-color 0.3s ease, color 0.3s ease;
+      }
+      .dark body {
+        background-color: #020617;
+        color: #f1f5f9;
+      }
+
+      /* Fix para seletores de data no Dark Mode */
+      .dark input[type="date"],
+      .dark input[type="datetime-local"],
+      .dark input[type="month"],
+      .dark input[type="time"] {
+        color-scheme: dark;
+      }
+
+      /* Estilo Global para Tabelas Modernas */
+      .modern-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin: 1.5rem 0 !important;
+        font-family: inherit;
+        font-size: 0.9em;
+      }
+      .modern-table th {
+        background-color: #0f172a !important;
+        color: #ffffff !important;
+        text-align: left !important;
+        padding: 12px 15px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border: 1px solid #1e293b !important;
+      }
+      .dark .modern-table th {
+        background-color: #1e293b !important;
+        border-color: #334155 !important;
+      }
+      .modern-table td {
+        padding: 12px 15px !important;
+        border: 1px solid #e2e8f0 !important;
+        color: #334155 !important;
+      }
+      .dark .modern-table td {
+        border-color: #334155 !important;
+        color: #cbd5e1 !important;
+      }
+      .modern-table tr:nth-child(even) {
+        background-color: #f8fafc !important;
+      }
+      .dark .modern-table tr:nth-child(even) {
+        background-color: #0f172a !important;
+      }
+    </style>
   <script type="importmap">
 {
   "imports": {
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.87.1",
-    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
     "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
     "html2pdf.js": "https://esm.sh/html2pdf.js@0.10.1",
-    "file-saver": "https://esm.sh/file-saver@2.0.5"
+    "file-saver": "https://esm.sh/file-saver@2.0.5",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
   }
 }
 </script>
 </head>
-  <body class="bg-gray-50 text-slate-900 font-sans antialiased">
+  <body class="antialiased">
     <div id="root"></div>
-    <!-- Entry point script added below -->
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

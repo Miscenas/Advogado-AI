@@ -47,7 +47,12 @@ export interface Petition {
   plaintiff_name?: string;
   defendant_name?: string;
   filed?: boolean; 
-  analyzed_documents?: AnalyzedDocument[]; 
+  analyzed_documents?: AnalyzedDocument[];
+  // Novos campos de Metadados
+  competence?: string;
+  legal_class?: string;
+  subject?: string;
+  filing_url?: string;
 }
 
 export interface Deadline {

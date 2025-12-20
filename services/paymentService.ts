@@ -1,3 +1,4 @@
+
 import { supabase } from './supabaseClient';
 
 // Helper para obter variáveis de ambiente de forma segura
@@ -39,13 +40,8 @@ export const initMercadoPago = () => {
 export const createCheckoutPreference = async (planId: 'monthly' | 'yearly', userId: string, email: string) => {
   // ATENÇÃO:
   // O correto é chamar sua API/Edge Function aqui para não expor seu ACCESS_TOKEN no frontend.
-  // Exemplo:
-  // const response = await fetch('https://sua-url-supabase.com/functions/v1/create-preference', { ... })
   
-  // Como estamos num ambiente sem backend configurado neste momento, 
-  // vou simular o retorno de um link de pagamento ou instruir como fazer.
-  
-  const title = planId === 'monthly' ? 'Advogado IA - Plano Mensal' : 'Advogado IA - Plano Anual';
+  const title = planId === 'monthly' ? 'Advocacia IA - Plano Mensal' : 'Advocacia IA - Plano Anual';
   const price = planId === 'monthly' ? 60.00 : 600.00;
 
   console.log(`Criando preferência para ${email} - ${title} (R$ ${price})`);
@@ -53,10 +49,6 @@ export const createCheckoutPreference = async (planId: 'monthly' | 'yearly', use
   // Simulação de delay de rede
   await new Promise(resolve => setTimeout(resolve, 1500));
 
-  // Em um cenário real, você retornaria a URL do Mercado Pago (init_point)
-  // vinda do seu backend.
-  // Para este MVP funcionar sem backend, retornaremos um link "dummy" ou instrução.
-  
   // Se você tiver o link de pagamento pronto (criado no painel do MP), pode usar aqui:
   const paymentLink = planId === 'monthly' 
     ? 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=SEU_ID_MENSAL' 
@@ -70,8 +62,6 @@ export const createCheckoutPreference = async (planId: 'monthly' | 'yearly', use
 
 export const recordPaymentAttempt = async (userId: string, plan: string) => {
   try {
-     // Verifica se a tabela existe antes de tentar inserir para evitar erros no console
-     // (Isso é uma verificação otimista, o erro real será pego no catch)
      await supabase.from('payment_attempts').insert({
          user_id: userId,
          plan: plan,
