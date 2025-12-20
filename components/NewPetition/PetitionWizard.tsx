@@ -382,18 +382,34 @@ export const PetitionWizard: React.FC<WizardProps> = ({ userId, onCancel, onSucc
                             <FileUp className="h-10 w-10 md:h-14 md:w-14 text-indigo-400 dark:text-indigo-500" />
                             <ImageIcon className="h-10 w-10 md:h-14 md:w-14 text-emerald-400 dark:text-emerald-500" />
                         </div>
-                        <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 uppercase leading-none">Arquivos ou Fotos do Processo</h3>
+                        <h3 className="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter mb-4 uppercase leading-none">Importar Arquivos / Fotos</h3>
                         <p className="text-slate-400 dark:text-slate-500 text-xs md:text-sm font-medium mb-4 max-w-sm mx-auto">Nossa IA Sênior preencherá os dados automaticamente através de documentos ou fotos.</p>
-                        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 mb-10 max-w-md mx-auto">
-                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Formatos Suportados:</p>
-                            <div className="flex flex-wrap justify-center gap-3">
-                                <span className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase"><FileIcon size={12}/> PDF</span>
-                                <span className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase"><FileIcon size={12}/> Word</span>
-                                <span className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase"><FileIcon size={12}/> TXT</span>
-                                <span className="flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase"><ImageIcon size={12}/> Imagem</span>
+                        
+                        <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 mb-8 max-w-lg mx-auto text-left">
+                            <h4 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <Info size={14} className="text-indigo-500"/> Tipos de Arquivos Suportados:
+                            </h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                    <FileIcon size={14} className="text-rose-500" />
+                                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">PDF Digitalizado</span>
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                    <FileIcon size={14} className="text-blue-500" />
+                                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">Word (.doc, .docx)</span>
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                    <FileIcon size={14} className="text-slate-500" />
+                                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">Texto Puro (.txt)</span>
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                    <ImageIcon size={14} className="text-emerald-500" />
+                                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">Fotos do Processo</span>
+                                </div>
                             </div>
                         </div>
-                        <Button size="lg" className="rounded-2xl bg-indigo-600 font-black tracking-widest px-8 md:px-10 h-14 md:h-16 shadow-xl text-xs md:text-sm" onClick={() => fileInputRef.current?.click()}>SUBIR ARQUIVOS / IMAGENS</Button>
+
+                        <Button size="lg" className="rounded-2xl bg-indigo-600 font-black tracking-widest px-8 md:px-10 h-14 md:h-16 shadow-xl text-xs md:text-sm border-none" onClick={() => fileInputRef.current?.click()}>SUBIR ARQUIVOS / IMAGENS</Button>
                     </>
                 )}
              </div>

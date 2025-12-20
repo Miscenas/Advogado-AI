@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 // --- CONFIGURAÇÃO FIXA ---
+// Insira suas credenciais aqui ou via variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
 const FIXED_SUPABASE_URL = ""; 
 const FIXED_SUPABASE_KEY = ""; 
 
@@ -41,14 +42,18 @@ let client;
 if (isConfigured) {
   client = createClient(supabaseUrl, supabaseAnonKey);
 } else {
-  console.warn('JurisPet AI: Backend não configurado. Usando persistência local (LocalStorage).');
+  console.warn('JurisPet AI: Backend real não detectado. Iniciando em MODO DEMO (LocalStorage).');
   
   const MOCK_USER_ID = 'user-demo-123';
-  const mockSessionKey = 'jurispet_mock_session';
-  const mockPetitionsKey = 'jurispet_mock_petitions';
-  const mockDeadlinesKey = 'jurispet_mock_deadlines';
+  const mockKeys = {
+    session: 'jurispet_mock_session',
+    petitions: 'jurispet_mock_petitions',
+    deadlines: 'jurispet_mock_deadlines',
+    jurisprudence: 'jurispet_mock_jurisprudence',
+    profiles: 'jurispet_mock_profiles',
+    usage: 'jurispet_mock_usage'
+  };
   
-  // Sistema de Listeners para o Mock Auth
   const authListeners: any[] = [];
 
   const getStoredData = (key: string) => {
@@ -62,19 +67,29 @@ if (isConfigured) {
     localStorage.setItem(key, JSON.stringify(data));
   };
 
+  // Garante que o perfil demo exista no mock
+  if (!localStorage.getItem(mockKeys.profiles)) {
+    saveStoredData(mockKeys.profiles, [{ 
+      id: MOCK_USER_ID, 
+      full_name: 'Dr. Advogado (Demo)', 
+      email: 'demo@jurispet.com',
+      account_status: 'trial', 
+      role: 'admin', 
+      created_at: new Date().toISOString() 
+    }]);
+  }
+
   client = {
     auth: {
       getSession: async () => {
-        const stored = localStorage.getItem(mockSessionKey);
+        const stored = localStorage.getItem(mockKeys.session);
         return { data: { session: stored ? JSON.parse(stored) : null }, error: null };
       },
       onAuthStateChange: (callback: any) => {
         authListeners.push(callback);
-        const stored = localStorage.getItem(mockSessionKey);
+        const stored = localStorage.getItem(mockKeys.session);
         const session = stored ? JSON.parse(stored) : null;
-        // Notifica o estado inicial
         setTimeout(() => callback(session ? 'SIGNED_IN' : 'SIGNED_OUT', session), 0);
-        
         return { data: { subscription: { unsubscribe: () => {
           const index = authListeners.indexOf(callback);
           if (index > -1) authListeners.splice(index, 1);
@@ -82,36 +97,32 @@ if (isConfigured) {
       },
       signInWithPassword: async ({ email }: any) => {
         const session = { user: { id: MOCK_USER_ID, email }, access_token: 'mock', expires_in: 3600 };
-        localStorage.setItem(mockSessionKey, JSON.stringify(session));
-        
-        // Notifica todos os ouvintes
+        localStorage.setItem(mockKeys.session, JSON.stringify(session));
         authListeners.forEach(cb => cb('SIGNED_IN', session));
-        
         return { data: { session }, error: null };
       },
-      signUp: async ({ email, password, options }: any) => {
+      signUp: async ({ email, options }: any) => {
         const session = { user: { id: MOCK_USER_ID, email, user_metadata: options?.data }, access_token: 'mock', expires_in: 3600 };
-        localStorage.setItem(mockSessionKey, JSON.stringify(session));
+        localStorage.setItem(mockKeys.session, JSON.stringify(session));
         authListeners.forEach(cb => cb('SIGNED_IN', session));
         return { data: { session }, error: null };
       },
       signOut: async () => {
-        localStorage.removeItem(mockSessionKey);
+        localStorage.removeItem(mockKeys.session);
         authListeners.forEach(cb => cb('SIGNED_OUT', null));
         return { error: null };
       },
-      updateUser: async (updates: any) => {
-          return { data: { user: { id: MOCK_USER_ID } }, error: null };
-      }
+      updateUser: async () => ({ data: { user: { id: MOCK_USER_ID } }, error: null })
     },
     from: (table: string) => {
       return {
-        select: (columns = '*') => {
+        select: () => {
           let data = [];
-          if (table === 'petitions') data = getStoredData(mockPetitionsKey);
-          else if (table === 'deadlines') data = getStoredData(mockDeadlinesKey);
-          else if (table === 'profiles') data = [{ id: MOCK_USER_ID, full_name: 'Dr. Advogado (Demo)', account_status: 'trial', role: 'admin', created_at: new Date().toISOString() }];
-          else if (table === 'usage_limits') data = [{ user_id: MOCK_USER_ID, petitions_limit: 5, petitions_this_month: getStoredData(mockPetitionsKey).length }];
+          if (table === 'petitions') data = getStoredData(mockKeys.petitions);
+          else if (table === 'deadlines') data = getStoredData(mockKeys.deadlines);
+          else if (table === 'profiles') data = getStoredData(mockKeys.profiles);
+          else if (table === 'usage_limits') data = getStoredData(mockKeys.usage).length ? getStoredData(mockKeys.usage) : [{ user_id: MOCK_USER_ID, petitions_limit: 5, petitions_this_month: getStoredData(mockKeys.petitions).length }];
+          else if (table === 'saved_jurisprudence') data = getStoredData(mockKeys.jurisprudence);
 
           const chain = (currentData: any[]) => ({
              eq: (col: string, val: any) => chain(currentData.filter(x => x[col] === val)),
@@ -123,50 +134,38 @@ if (isConfigured) {
           return chain(data);
         },
         insert: (data: any) => {
-            const tableKey = table === 'petitions' ? mockPetitionsKey : mockDeadlinesKey;
-            const current = getStoredData(tableKey);
-            const items = Array.isArray(data) ? data : [data];
-            const newItems = items.map(item => ({ 
-              ...item, 
-              id: Math.random().toString(36).substr(2, 9), 
-              created_at: item.created_at || new Date().toISOString() 
-            }));
-            
-            const updated = [...current, ...newItems];
-            saveStoredData(tableKey, updated);
-
-            return {
-              select: () => ({
-                single: async () => ({ data: newItems[0], error: null }),
-                then: (resolve: any) => resolve({ data: newItems, error: null })
-              }),
-              then: (resolve: any) => resolve({ data: newItems, error: null })
-            };
+            const map: Record<string, string> = { 'petitions': mockKeys.petitions, 'deadlines': mockKeys.deadlines, 'saved_jurisprudence': mockKeys.jurisprudence };
+            const key = map[table];
+            if (key) {
+              const current = getStoredData(key);
+              const items = Array.isArray(data) ? data : [data];
+              const newItems = items.map(item => ({ ...item, id: Math.random().toString(36).substr(2, 9), created_at: item.created_at || new Date().toISOString() }));
+              saveStoredData(key, [...current, ...newItems]);
+              return { select: () => ({ single: async () => ({ data: newItems[0], error: null }), then: (r: any) => r({ data: newItems, error: null }) }), then: (r: any) => r({ data: newItems, error: null }) };
+            }
+            return { then: (r: any) => r({ data: [], error: null }) };
         },
         update: (updates: any) => ({
             eq: (col: string, val: any) => {
-              const key = table === 'petitions' ? mockPetitionsKey : table === 'deadlines' ? mockDeadlinesKey : null;
+              const map: Record<string, string> = { 'petitions': mockKeys.petitions, 'deadlines': mockKeys.deadlines, 'profiles': mockKeys.profiles };
+              const key = map[table];
               if (key) {
                 const current = getStoredData(key);
                 const updated = current.map((item: any) => item[col] === val ? { ...item, ...updates } : item);
                 saveStoredData(key, updated);
               }
-              return {
-                then: (resolve: any) => resolve({ error: null })
-              };
+              return { then: (r: any) => r({ error: null }) };
             }
         }),
         delete: () => ({
             eq: (col: string, val: any) => {
-              const key = table === 'petitions' ? mockPetitionsKey : table === 'deadlines' ? mockDeadlinesKey : null;
+              const map: Record<string, string> = { 'petitions': mockKeys.petitions, 'deadlines': mockKeys.deadlines, 'saved_jurisprudence': mockKeys.jurisprudence };
+              const key = map[table];
               if (key) {
                 const current = getStoredData(key);
-                const updated = current.filter((item: any) => item[col] !== val);
-                saveStoredData(key, updated);
+                saveStoredData(key, current.filter((item: any) => item[col] !== val));
               }
-              return {
-                then: (resolve: any) => resolve({ error: null })
-              };
+              return { then: (r: any) => r({ error: null }) };
             }
         })
       };
