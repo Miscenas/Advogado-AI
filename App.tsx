@@ -17,7 +17,7 @@ import { CourtPortals } from './components/CourtPortals';
 import { SubscriptionPage } from './components/SubscriptionPage';
 import { LaborCalculator } from './components/LaborCalculator';
 import { TokenCounter } from './components/TokenCounter';
-import { AlertCircle, Key, RefreshCw, Settings, HelpCircle } from 'lucide-react';
+import { AlertCircle, HelpCircle, RefreshCw, Terminal, ExternalLink } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
 function App() {
@@ -31,16 +31,16 @@ function App() {
   const [currentRoute, setCurrentRoute] = useState('dashboard');
   const [dbError, setDbError] = useState<{isError: boolean, code?: string, message?: string}>({ isError: false });
   const [showKeyWarning, setShowKeyWarning] = useState(false);
+  const [showVercelGuide, setShowVercelGuide] = useState(false);
 
   useEffect(() => {
     const verifySystemStatus = async () => {
-      // Verifica se a chave foi injetada pelo bootstrap do index.tsx
-      const apiKey = (window as any).process?.env?.API_KEY;
+      const win = window as any;
+      const apiKey = win.process?.env?.API_KEY;
       const hasKey = apiKey && apiKey !== 'undefined' && apiKey.length > 10;
       
       if (!hasKey) {
-        // Se não tem master, checa se o usuário conectou a dele via Google AI Studio
-        const aistudio = (window as any).aistudio;
+        const aistudio = win.aistudio;
         if (aistudio && typeof aistudio.hasSelectedApiKey === 'function') {
           try {
             const hasSelected = await aistudio.hasSelectedApiKey();
@@ -67,21 +67,6 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  const handleManualAction = async () => {
-    const aistudio = (window as any).aistudio;
-    if (aistudio && typeof aistudio.openSelectKey === 'function') {
-      try {
-        await aistudio.openSelectKey();
-        window.location.reload();
-      } catch (e) {
-        alert("Erro ao abrir seletor de chaves.");
-      }
-    } else {
-      // Se não está em ambiente de preview, damos a instrução direta de redeploy
-      alert("⚠️ CHAVE NÃO DETECTADA NO BUNDLE\n\n1. Clique no botão de 3 pontinhos no Vercel (onde você tirou o print).\n2. Clique em 'Redeploy'.\n3. Uma janela abrirá. Clique no botão azul 'Redeploy' dessa janela.\n\nIsso fará o site ler a chave VITE_API_KEY que você configurou.");
-    }
-  };
 
   const fetchData = async (userId: string, userObject: any, session: any) => {
     try {
@@ -110,26 +95,6 @@ function App() {
 
   if (!authState.session) return <AuthPage />;
 
-  const renderContent = () => {
-    const isAdmin = authState.profile?.role === 'admin';
-    switch (currentRoute) {
-      case 'dashboard': return <DashboardHome profile={authState.profile} usage={authState.usage} onNavigate={setCurrentRoute} />;
-      case 'new-petition': return <PetitionWizard userId={authState.user?.id} onCancel={() => setCurrentRoute('dashboard')} onSuccess={() => setCurrentRoute('my-petitions')} usage={authState.usage} accountStatus={authState.profile?.account_status || 'trial'} isAdmin={isAdmin} />;
-      case 'my-petitions': return <PetitionList userId={authState.user?.id} />;
-      case 'jurisprudence': return <JurisprudenceSearch userId={authState.user?.id} />;
-      case 'dje-search': return <DJESearch />;
-      case 'cnj-metadata': return <CNJMetadataSearch />;
-      case 'token-counter': return <TokenCounter />;
-      case 'labor-calculator': return <LaborCalculator />;
-      case 'deadlines': return <DeadlineManager userId={authState.user?.id} />;
-      case 'portals': return <CourtPortals />;
-      case 'subscription': return <SubscriptionPage user={authState.profile} onNavigate={setCurrentRoute} />;
-      case 'profile': return <UserProfileView profile={authState.profile} />;
-      case 'admin': return <AdminPanel />;
-      default: return <DashboardHome profile={authState.profile} usage={authState.usage} onNavigate={setCurrentRoute} />;
-    }
-  };
-
   return (
     <Layout activeRoute={currentRoute} onNavigate={setCurrentRoute} userEmail={authState.user?.email} isAdmin={authState.profile?.role === 'admin'}>
       {showKeyWarning && (
@@ -140,22 +105,79 @@ function App() {
                 <AlertCircle size={24} />
               </div>
               <div>
-                <h4 className="font-black text-amber-950 dark:text-amber-100 uppercase text-xs tracking-widest">Aguardando Redeploy</h4>
+                <h4 className="font-black text-amber-950 dark:text-amber-100 uppercase text-xs tracking-widest">Sincronização Necessária</h4>
                 <p className="text-[10px] font-bold text-amber-800 dark:text-amber-500 uppercase leading-relaxed mt-2">
-                  Você configurou a chave no painel do Vercel, mas o site atual foi construído antes disso. 
-                  Clique em <b>REDEPLOAR AGORA</b> para atualizar o sistema com sua chave.
+                  Você configurou a <b>VITE_API_KEY</b> no Vercel. Agora o site precisa ser "reconstruído" para ler essa chave.
                 </p>
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
-              <Button onClick={handleManualAction} className="bg-amber-600 hover:bg-amber-700 text-white border-none rounded-xl h-14 px-8 font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95">
-                <HelpCircle size={16} className="mr-2" /> Redeploar Agora
+              <Button onClick={() => setShowVercelGuide(true)} className="bg-amber-600 hover:bg-amber-700 text-white border-none rounded-xl h-14 px-8 font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95">
+                <HelpCircle size={16} className="mr-2" /> Como Atualizar?
               </Button>
             </div>
           </div>
         </div>
       )}
-      {renderContent()}
+
+      {showVercelGuide && (
+        <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
+            <div className="p-8 md:p-12 space-y-8">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Guia de Atualização Vercel</h3>
+                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Siga os passos abaixo para ativar sua chave</p>
+                </div>
+                <button onClick={() => setShowVercelGuide(false)} className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white"><RefreshCw size={24}/></button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex gap-4 items-start">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 font-black">1</div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No painel que você tirou o print, clique no botão <b>"Redeploy"</b>.</p>
+                </div>
+                <div className="flex gap-4 items-start">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 font-black">2</div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Uma janela flutuante branca irá aparecer no meio da tela.</p>
+                </div>
+                <div className="flex gap-4 items-start">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 font-black">3</div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Nesta nova janela, clique no botão azul <b>"Redeploy"</b> (não precisa marcar nada se não aparecer a opção de cache).</p>
+                </div>
+                <div className="flex gap-4 items-start">
+                  <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 font-black">4</div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Aguarde 2 minutos até o status mudar para <b>Ready</b>. O site então estará com a IA ativa!</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-950 p-6 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3 text-indigo-600 dark:text-indigo-400 mb-2">
+                   <Terminal size={18} />
+                   <span className="text-[10px] font-black uppercase tracking-widest">Dica Técnica</span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-500 leading-relaxed italic">O Vercel gera um site estático. Para ele "enxergar" variáveis novas, ele precisa gerar um novo build (Redeploy).</p>
+              </div>
+
+              <Button onClick={() => setShowVercelGuide(false)} className="w-full h-16 rounded-2xl bg-slate-900 dark:bg-indigo-600 text-white font-black uppercase text-xs tracking-widest shadow-xl border-none">Entendi, vou fazer o Redeploy</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {currentRoute === 'dashboard' && <DashboardHome profile={authState.profile} usage={authState.usage} onNavigate={setCurrentRoute} />}
+      {currentRoute === 'new-petition' && <PetitionWizard userId={authState.user?.id} onCancel={() => setCurrentRoute('dashboard')} onSuccess={() => setCurrentRoute('my-petitions')} usage={authState.usage} accountStatus={authState.profile?.account_status || 'trial'} isAdmin={authState.profile?.role === 'admin'} />}
+      {currentRoute === 'my-petitions' && <PetitionList userId={authState.user?.id} />}
+      {currentRoute === 'jurisprudence' && <JurisprudenceSearch userId={authState.user?.id} />}
+      {currentRoute === 'dje-search' && <DJESearch />}
+      {currentRoute === 'cnj-metadata' && <CNJMetadataSearch />}
+      {currentRoute === 'token-counter' && <TokenCounter />}
+      {currentRoute === 'labor-calculator' && <LaborCalculator />}
+      {currentRoute === 'deadlines' && <DeadlineManager userId={authState.user?.id} />}
+      {currentRoute === 'portals' && <CourtPortals />}
+      {currentRoute === 'subscription' && <SubscriptionPage user={authState.profile} onNavigate={setCurrentRoute} />}
+      {currentRoute === 'profile' && <UserProfileView profile={authState.profile} />}
+      {currentRoute === 'admin' && <AdminPanel />}
     </Layout>
   );
 }

@@ -2,32 +2,32 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * JurisPet AI - Robust Environment Resolver
- * Tenta encontrar as chaves do Supabase em todas as fontes possíveis
- * para evitar erros de "undefined" em produção.
+ * JurisPet AI - Multi-Source Environment Resolver
  */
-const getEnv = (key: string): string | undefined => {
+const resolveEnv = (key: string): string | undefined => {
   if (typeof window === 'undefined') return undefined;
 
   const win = window as any;
   
-  // Ordem de prioridade para resolução de chaves:
-  return (
-    // @ts-ignore - Vite/Vercel standard
-    import.meta.env?.[key] || 
-    // Polyfill do process.env injetado no index.tsx
-    win.process?.env?.[key] ||
-    // Variáveis injetadas diretamente no window por scripts de terceiros
-    win[key] ||
-    // Objeto de configuração comum em alguns provedores de nuvem
-    win._env_?.[key]
-  );
+  // 1. Tenta buscar no objeto global process.env (populado no index.tsx)
+  if (win.process?.env?.[key]) return win.process.env[key];
+
+  // 2. Tenta buscar no import.meta de forma resiliente
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      // @ts-ignore
+      return import.meta.env[key];
+    }
+  } catch (e) {}
+
+  // 3. Tenta buscar no window direto (Vercel Edge/Scripts)
+  return win[key] || win._env_?.[key];
 };
 
-const supabaseUrl = getEnv('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
+const supabaseUrl = resolveEnv('VITE_SUPABASE_URL');
+const supabaseAnonKey = resolveEnv('VITE_SUPABASE_ANON_KEY');
 
-// Verifica se as chaves mínimas existem e são strings válidas
 const isConfigured = 
   !!supabaseUrl && 
   !!supabaseAnonKey && 
@@ -40,7 +40,7 @@ let client;
 if (isConfigured) {
   client = createClient(supabaseUrl!, supabaseAnonKey!);
 } else {
-  console.warn('JurisPet AI: Backend real não detectado no ambiente atual. Iniciando em MODO DEMO.');
+  console.warn('JurisPet AI: Backend real não configurado. Ativando MODO DEMO local.');
   
   const MOCK_USER_ID = 'user-demo-123';
   const mockKeys = {

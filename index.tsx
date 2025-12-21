@@ -4,37 +4,38 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 /**
- * JURISPET AI - UNIVERSAL ENV BOOTSTRAP
- * Garante que o ambiente tenha acesso às variáveis VITE_ configuradas no Vercel.
+ * JURISPET AI - SAFE BOOTSTRAP
+ * Garante que o objeto process.env e as chaves VITE_ existam globalmente.
  */
-(function initializeEnvironment() {
+(function safeInit() {
   if (typeof window !== 'undefined') {
     const win = window as any;
     
-    // 1. Cria o polyfill do process.env se não existir
+    // Polyfill básico para o SDK da Google
     win.process = win.process || {};
     win.process.env = win.process.env || {};
     
-    // 2. Mapeia variáveis do Vite (import.meta.env) para o process.env global
+    // Tenta capturar do Vite de forma segura
+    let viteEnv: any = {};
     try {
       // @ts-ignore
-      const metaEnv = import.meta.env || {};
-      Object.keys(metaEnv).forEach(key => {
-        if (key.startsWith('VITE_') || key === 'API_KEY') {
-          win.process.env[key] = metaEnv[key];
-        }
-      });
-    } catch (e) {
-      console.debug("Ambiente sem suporte nativo a import.meta.env");
+      if (typeof import.meta !== 'undefined' && import.meta.env) {
+        // @ts-ignore
+        viteEnv = import.meta.env;
+      }
+    } catch (e) {}
+
+    // Injeta variáveis no process.env global
+    Object.keys(viteEnv).forEach(key => {
+      win.process.env[key] = viteEnv[key];
+    });
+
+    // Se a chave master estiver no VITE_API_KEY, move para API_KEY (exigido pelo SDK)
+    if (win.process.env.VITE_API_KEY && !win.process.env.API_KEY) {
+      win.process.env.API_KEY = win.process.env.VITE_API_KEY;
     }
 
-    // 3. Mapeia chaves específicas configuradas no painel do Vercel
-    const MASTER_KEY = win.process.env.VITE_API_KEY || win.VITE_API_KEY;
-    if (MASTER_KEY && !win.process.env.API_KEY) {
-      win.process.env.API_KEY = MASTER_KEY;
-    }
-
-    console.log("JurisPet AI: Ambiente de execução inicializado.");
+    console.log("JurisPet AI: Ambiente de execução protegido inicializado.");
   }
 })();
 
