@@ -3,15 +3,37 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// Ponte de compatibilidade para o SDK do Google Gemini em ambientes Vite/Browser
-// Isso garante que process.env.API_KEY esteja disponível globalmente
+/**
+ * PONTE DE AMBIENTE JURISPET AI
+ * O SDK do Google Gemini exige process.env.API_KEY.
+ * Em ambientes Vite/Browser, injetamos isso manualmente de forma segura.
+ */
 if (typeof window !== 'undefined') {
+  // Acesso ultra-seguro para evitar: "Cannot read properties of undefined (reading 'VITE_API_KEY')"
+  const meta = (import.meta as any);
+  const metaEnv = meta.env || {};
+  
+  const VITE_KEY = metaEnv.VITE_API_KEY;
+  const RAW_KEY = metaEnv.API_KEY;
+  const ENV_KEY = VITE_KEY || RAW_KEY || "";
+  
+  // Inicializa o objeto process global se não existir
   (window as any).process = (window as any).process || { env: {} };
+  const currentProcessEnv = (window as any).process.env || {};
+
+  // Injeta a chave garantindo que não sobrescreva se já existir uma válida
   (window as any).process.env = {
-    ...((window as any).process.env || {}),
-    // Tenta capturar de todas as formas que o Vite/Vercel podem injetar
-    API_KEY: (import.meta as any).env?.VITE_API_KEY || (import.meta as any).env?.API_KEY || (window as any).process.env?.API_KEY
+    ...currentProcessEnv,
+    API_KEY: currentProcessEnv.API_KEY || ENV_KEY
   };
+
+  // Log de diagnóstico técnico (útil para debug no F12)
+  const finalKey = (window as any).process.env.API_KEY;
+  if (!finalKey || finalKey === 'undefined') {
+    console.error("JurisPet AI: [ERRO CRÍTICO] Variável VITE_API_KEY não detectada no ambiente.");
+  } else {
+    console.log("JurisPet AI: [OK] Ponte de ambiente estabelecida com sucesso.");
+  }
 }
 
 const rootElement = document.getElementById('root');
