@@ -6,35 +6,39 @@ import App from './App';
 /**
  * PONTE DE AMBIENTE JURISPET AI
  * O SDK do Google Gemini exige process.env.API_KEY.
- * Em ambientes Vite/Browser, injetamos isso manualmente de forma segura.
+ * Em ambientes Vite/Browser, injetamos isso de forma ultra-segura.
  */
-if (typeof window !== 'undefined') {
-  // Acesso ultra-seguro para evitar: "Cannot read properties of undefined (reading 'VITE_API_KEY')"
-  const meta = (import.meta as any);
-  const metaEnv = meta.env || {};
-  
-  const VITE_KEY = metaEnv.VITE_API_KEY;
-  const RAW_KEY = metaEnv.API_KEY;
-  const ENV_KEY = VITE_KEY || RAW_KEY || "";
-  
-  // Inicializa o objeto process global se não existir
-  (window as any).process = (window as any).process || { env: {} };
-  const currentProcessEnv = (window as any).process.env || {};
+(function polyfillEnv() {
+  if (typeof window !== 'undefined') {
+    let envKey = "";
+    
+    // Tentativa de leitura segura em cascata
+    try {
+      // @ts-ignore
+      if (import.meta && import.meta.env) {
+        // @ts-ignore
+        envKey = import.meta.env.VITE_API_KEY || import.meta.env.API_KEY || "";
+      }
+    } catch (e) {
+      console.warn("JurisPet AI: Não foi possível acessar import.meta.env diretamente.");
+    }
 
-  // Injeta a chave garantindo que não sobrescreva se já existir uma válida
-  (window as any).process.env = {
-    ...currentProcessEnv,
-    API_KEY: currentProcessEnv.API_KEY || ENV_KEY
-  };
+    // Inicializa o objeto process global
+    (window as any).process = (window as any).process || { env: {} };
+    (window as any).process.env = (window as any).process.env || {};
+    
+    // Injeta a chave (prioriza o que já estiver no process.env se houver)
+    const finalKey = (window as any).process.env.API_KEY || envKey;
+    (window as any).process.env.API_KEY = finalKey;
 
-  // Log de diagnóstico técnico (útil para debug no F12)
-  const finalKey = (window as any).process.env.API_KEY;
-  if (!finalKey || finalKey === 'undefined') {
-    console.error("JurisPet AI: [ERRO CRÍTICO] Variável VITE_API_KEY não detectada no ambiente.");
-  } else {
-    console.log("JurisPet AI: [OK] Ponte de ambiente estabelecida com sucesso.");
+    // Diagnóstico no console
+    if (!finalKey || finalKey === 'undefined' || finalKey === "") {
+      console.error("JurisPet AI: [ERRO DE CONFIGURAÇÃO] VITE_API_KEY não encontrada. O sistema de IA não funcionará até que a variável seja configurada no Vercel/Hospedagem.");
+    } else {
+      console.log("JurisPet AI: [SUCESSO] Chave de API detectada e injetada.");
+    }
   }
-}
+})();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
