@@ -28,10 +28,9 @@ MAPA DE URLS OFICIAIS (USE APENAS ESTAS SE IDENTIFICAR O TRIBUNAL):
 
 const getAiClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
-    throw new Error("Chave de API não configurada. Verifique as variáveis de ambiente.");
-  }
-  return new GoogleGenAI({ apiKey });
+  // Tratamento para garantir que "undefined" em string (comum em alguns builds) não quebre a inicialização
+  const cleanKey = (apiKey === 'undefined' || !apiKey) ? '' : apiKey;
+  return new GoogleGenAI({ apiKey: cleanKey });
 };
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -48,7 +47,7 @@ const extractRawStringsFromBinary = async (file: File): Promise<string> => {
     const arrayBuffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
     let rawText = "";
-    for (let i = 0; i < Math.min(uint8.length, 50000); i++) { // Limite preventivo
+    for (let i = 0; i < Math.min(uint8.length, 50000); i++) {
       const charCode = uint8[i];
       if ((charCode >= 32 && charCode <= 126) || (charCode >= 160 && charCode <= 255) || charCode === 10 || charCode === 13) {
         rawText += String.fromCharCode(charCode);
@@ -72,7 +71,9 @@ const handleAiError = (error: any) => {
   let message = error.message || "Erro desconhecido";
   if (message.includes("429")) throw new Error("Limite de requisições atingido. Aguarde um minuto.");
   if (message.includes("safety")) throw new Error("O conteúdo do arquivo foi bloqueado pelos filtros de segurança da IA.");
-  if (message.includes("API_KEY")) throw new Error("Erro de autenticação na API.");
+  if (message.includes("API_KEY") || message.includes("invalid") || message.includes("key")) {
+    throw new Error("Chave de API inválida ou não configurada corretamente no ambiente de produção.");
+  }
   throw new Error(`Falha no processamento: ${message}`);
 };
 
@@ -224,7 +225,6 @@ export const extractDataFromDocument = async (file: File): Promise<any> => {
       const text = await file.text();
       contentPart = { text: text || "Arquivo TXT vazio." };
     } else {
-      // Tenta ler binários desconhecidos como string crua como último recurso
       const raw = await extractRawStringsFromBinary(file);
       contentPart = { text: raw };
     }

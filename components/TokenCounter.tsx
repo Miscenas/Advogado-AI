@@ -28,10 +28,11 @@ export const TokenCounter: React.FC = () => {
     
     setLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const model = 'gemini-3-flash-preview'; // Modelo base para contagem
+      const apiKey = process.env.API_KEY;
+      const cleanKey = (apiKey === 'undefined' || !apiKey) ? '' : apiKey;
+      const ai = new GoogleGenAI({ apiKey: cleanKey });
+      const model = 'gemini-3-flash-preview'; 
       
-      // Chamada oficial do SDK para contagem de tokens
       const result = await ai.models.countTokens({
         model: model,
         contents: [{ role: 'user', parts: [{ text }] }],
@@ -45,7 +46,6 @@ export const TokenCounter: React.FC = () => {
     }
   };
 
-  // Debounce para não sobrecarregar a API enquanto digita
   useEffect(() => {
     const timer = setTimeout(() => {
       if (text) countTokens();
@@ -81,7 +81,6 @@ export const TokenCounter: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Área de Texto */}
         <div className="lg:col-span-8 space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border-2 border-slate-50 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
                 <div className="p-6 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/30">
@@ -115,7 +114,6 @@ export const TokenCounter: React.FC = () => {
             </div>
         </div>
 
-        {/* Painel de Métricas */}
         <div className="lg:col-span-4 space-y-6">
             <div className="bg-[#0F172A] dark:bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden flex flex-col gap-8 group">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-all duration-1000"></div>
@@ -159,38 +157,6 @@ export const TokenCounter: React.FC = () => {
                         No Gemini, 1 token equivale a aproximadamente 4 caracteres em português. Textos jurídicos densos tendem a gerar mais tokens por palavra.
                     </p>
                 </div>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
-                <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
-                        <Brain size={20} />
-                    </div>
-                    <h3 className="font-black text-slate-900 dark:text-white uppercase text-xs tracking-tight">Capacidade do Modelo</h3>
-                </div>
-                
-                <div className="space-y-4">
-                    <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        <span>Uso da Janela</span>
-                        <span>{((tokens || 0) / 1048576 * 100).toFixed(4)}%</span>
-                    </div>
-                    <div className="h-3 bg-slate-50 dark:bg-slate-950 rounded-full border border-slate-100 dark:border-slate-800 overflow-hidden p-0.5">
-                        <div 
-                            className="h-full bg-indigo-600 rounded-full shadow-inner transition-all duration-1000"
-                            style={{ width: `${Math.max(1, Math.min(100, (tokens || 0) / 10000))}%` }}
-                        ></div>
-                    </div>
-                    <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight text-center">
-                        Limite Gemini 1.5/2.0: 1.048.576 Tokens
-                    </p>
-                </div>
-            </div>
-
-            <div className="bg-amber-50 dark:bg-amber-950/20 p-6 rounded-[2rem] border border-amber-100 dark:border-amber-900/40 flex items-start gap-3">
-                <Info size={18} className="text-amber-600 shrink-0" />
-                <p className="text-[9px] font-bold text-amber-800/80 dark:text-amber-600 uppercase leading-relaxed tracking-tight">
-                    Textos acima de 100.000 tokens podem apresentar maior latência de processamento e necessitam de planos avançados.
-                </p>
             </div>
         </div>
       </div>
