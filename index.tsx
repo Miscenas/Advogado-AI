@@ -4,38 +4,28 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 /**
- * PONTE DE AMBIENTE JURISPET AI
- * O SDK do Google Gemini exige process.env.API_KEY.
- * Em ambientes Vite/Browser, injetamos isso de forma ultra-segura.
+ * JURISPET AI - BOOTSTRAP DE AMBIENTE
+ * Esta função garante que o objeto process.env.API_KEY exigido pelo SDK do Google
+ * esteja presente no navegador, mapeando-o a partir das variáveis do Vite.
  */
-(function polyfillEnv() {
+(function initializeJurisPetEnvironment() {
   if (typeof window !== 'undefined') {
-    let envKey = "";
+    // 1. Tenta obter a chave do Vite (Build Time)
+    const viteKey = (import.meta as any).env?.VITE_API_KEY || (import.meta as any).env?.API_KEY;
     
-    // Tentativa de leitura segura em cascata
-    try {
-      // @ts-ignore
-      if (import.meta && import.meta.env) {
-        // @ts-ignore
-        envKey = import.meta.env.VITE_API_KEY || import.meta.env.API_KEY || "";
-      }
-    } catch (e) {
-      console.warn("JurisPet AI: Não foi possível acessar import.meta.env diretamente.");
-    }
-
-    // Inicializa o objeto process global
-    (window as any).process = (window as any).process || { env: {} };
+    // 2. Garante a existência do objeto process.env para o SDK
+    (window as any).process = (window as any).process || {};
     (window as any).process.env = (window as any).process.env || {};
     
-    // Injeta a chave (prioriza o que já estiver no process.env se houver)
-    const finalKey = (window as any).process.env.API_KEY || envKey;
-    (window as any).process.env.API_KEY = finalKey;
+    // 3. Injeta a chave apenas se ela ainda não existir (preservando injeções externas)
+    if (!(window as any).process.env.API_KEY || (window as any).process.env.API_KEY === 'undefined') {
+      (window as any).process.env.API_KEY = viteKey || "";
+    }
 
-    // Diagnóstico no console
-    if (!finalKey || finalKey === 'undefined' || finalKey === "") {
-      console.error("JurisPet AI: [ERRO DE CONFIGURAÇÃO] VITE_API_KEY não encontrada. O sistema de IA não funcionará até que a variável seja configurada no Vercel/Hospedagem.");
-    } else {
-      console.log("JurisPet AI: [SUCESSO] Chave de API detectada e injetada.");
+    // Diagnóstico silencioso para o desenvolvedor
+    const finalKey = (window as any).process.env.API_KEY;
+    if (!finalKey) {
+      console.warn("JurisPet AI: Chave de ambiente não detectada. O sistema poderá solicitar seleção manual.");
     }
   }
 })();

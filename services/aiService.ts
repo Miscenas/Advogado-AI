@@ -9,17 +9,20 @@ Retorne APENAS o conteúdo HTML, sem blocos de código markdown.
 `;
 
 /**
- * Inicializa o cliente garantindo que a chave injetada pelo index.tsx seja usada.
+ * Helper interno para verificar a presença da chave antes de instanciar o SDK.
+ * O SDK exige que a chave venha de process.env.API_KEY.
  */
-const getAiClient = () => {
-  // O process.env.API_KEY é garantido pelo polyfill no index.tsx
-  const apiKey = (window as any).process?.env?.API_KEY || process.env.API_KEY;
-  
-  if (!apiKey || apiKey === "undefined" || apiKey === "" || apiKey.length < 10) {
-    throw new Error("CHAVE_AUSENTE: A variável de ambiente VITE_API_KEY não foi detectada. Verifique as configurações do seu projeto no Vercel e faça um novo deploy.");
+const checkApiKey = () => {
+  const key = process.env.API_KEY;
+  if (!key || key === "undefined" || key === "") {
+    throw new Error("CHAVE_AUSENTE: A variável VITE_API_KEY não foi encontrada ou não foi propagada para o navegador.");
   }
-  
-  return new GoogleGenAI({ apiKey });
+  return key;
+};
+
+const cleanAiHtmlResponse = (text: string | undefined): string => {
+  if (!text) return "";
+  return text.replace(/^[ \t]*[`']{3}(?:html|)\s*/i, '').replace(/\s*[`']{3}[ \t]*$/i, '').trim();
 };
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -31,11 +34,6 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-const cleanAiHtmlResponse = (text: string | undefined): string => {
-  if (!text) return "";
-  return text.replace(/^[ \t]*[`']{3}(?:html|)\s*/i, '').replace(/\s*[`']{3}[ \t]*$/i, '').trim();
-};
-
 const handleAiError = (error: any) => {
   console.error("JurisPet AI Service Error:", error);
   const message = error.message || "";
@@ -45,7 +43,7 @@ const handleAiError = (error: any) => {
   }
   
   if (message.includes("401") || message.includes("API key not valid")) {
-    throw new Error("ERRO DE AUTENTICAÇÃO: A chave de API fornecida é inválida. Gere uma nova no Google AI Studio.");
+    throw new Error("ERRO DE AUTENTICAÇÃO: A chave configurada é inválida ou expirou.");
   }
 
   if (message.includes("429")) {
@@ -57,7 +55,8 @@ const handleAiError = (error: any) => {
 
 export const searchJurisprudence = async (query: string, scope: string): Promise<string> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Pesquise jurisprudência recente: "${query}". Escopo: ${scope}. Retorne HTML técnico.`,
@@ -69,7 +68,8 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
 
 export const suggestFilingMetadata = async (content: string): Promise<PetitionFilingMetadata> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Analise a petição e sugira metadados (Competência, Classe, Assunto). Petição:\n${content}`,
@@ -95,7 +95,8 @@ export const suggestFilingMetadata = async (content: string): Promise<PetitionFi
 
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `Redija Petição Inicial Sênior: ${JSON.stringify(data)}`,
@@ -107,7 +108,8 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
 
 export const generateLegalDefense = async (data: PetitionFormData): Promise<string> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `Redija Contestação Sênior: ${JSON.stringify(data)}`,
@@ -119,7 +121,8 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
 
 export const chatRefinePetition = async (currentContent: string, userMessage: string, history: any[]): Promise<string> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const chat = ai.chats.create({ 
       model: 'gemini-3-flash-preview', 
       config: { systemInstruction: SHIELD_PROTOCOL } 
@@ -133,7 +136,8 @@ export const chatRefinePetition = async (currentContent: string, userMessage: st
 
 export const interpretCNJMetadata = async (processNumber: string): Promise<string> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Explique o número CNJ: ${processNumber}.`,
@@ -145,7 +149,8 @@ export const interpretCNJMetadata = async (processNumber: string): Promise<strin
 
 export const searchCNJTabelasUnificadas = async (query: string): Promise<string> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Busque na TPU do CNJ: ${query}.`,
@@ -157,7 +162,8 @@ export const searchCNJTabelasUnificadas = async (query: string): Promise<string>
 
 export const searchDJE = async (name: string, oab: string, tribunal: string, dateRange: string): Promise<string> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Busque intimações para ${name}, OAB ${oab}, tribunal ${tribunal}.`,
@@ -169,7 +175,8 @@ export const searchDJE = async (name: string, oab: string, tribunal: string, dat
 
 export const extractDataFromDocument = async (file: File): Promise<any> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const base64 = await fileToBase64(file);
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -187,7 +194,8 @@ export const extractDataFromDocument = async (file: File): Promise<any> => {
 
 export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
   try {
-    const ai = getAiClient();
+    checkApiKey();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {

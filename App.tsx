@@ -17,6 +17,10 @@ import { CourtPortals } from './components/CourtPortals';
 import { SubscriptionPage } from './components/SubscriptionPage';
 import { LaborCalculator } from './components/LaborCalculator';
 import { TokenCounter } from './components/TokenCounter';
+import { AlertCircle, Key } from 'lucide-react';
+import { Button } from './components/ui/Button';
+
+// Removed conflicting manual declaration for window.aistudio as the property is provided by the execution context.
 
 function App() {
   const [authState, setAuthState] = useState<AuthState>({
@@ -28,6 +32,7 @@ function App() {
   });
   const [currentRoute, setCurrentRoute] = useState('dashboard');
   const [dbError, setDbError] = useState<{isError: boolean, code?: string, message?: string}>({ isError: false });
+  const [showKeyWarning, setShowKeyWarning] = useState(false);
 
   useEffect(() => {
     // Carregar sessão inicial
@@ -54,8 +59,32 @@ function App() {
       }
     });
 
+    // Verifica se a chave de API está presente ou se o usuário precisa selecionar uma
+    const checkKey = async () => {
+      const hasEnvKey = process.env.API_KEY && process.env.API_KEY !== 'undefined' && process.env.API_KEY.length > 5;
+      if (!hasEnvKey) {
+        // Casting window to any for robustness across varying environment typings
+        const hasSelected = await (window as any).aistudio?.hasSelectedApiKey();
+        if (!hasSelected) {
+          setShowKeyWarning(true);
+        }
+      }
+    };
+    checkKey();
+
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleKeySelection = async () => {
+    try {
+      // Casting window to any to safely access the injected aistudio property
+      await (window as any).aistudio.openSelectKey();
+      setShowKeyWarning(false);
+      window.location.reload(); // Recarrega para garantir injeção
+    } catch (e) {
+      console.error("Falha ao abrir seletor de chave.");
+    }
+  };
 
   const fetchData = async (userId: string, userObject: any, session: any) => {
     try {
@@ -137,6 +166,24 @@ function App() {
 
   return (
     <Layout activeRoute={currentRoute} onNavigate={setCurrentRoute} userEmail={authState.user?.email} isAdmin={authState.profile?.role === 'admin'}>
+      {showKeyWarning && (
+        <div className="mb-6 mx-auto max-w-5xl animate-in slide-in-from-top-4">
+          <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+            <div className="flex items-start gap-4 text-left">
+              <div className="bg-amber-200 dark:bg-amber-900/40 p-3 rounded-2xl text-amber-700 dark:text-amber-500">
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <h4 className="font-black text-amber-950 dark:text-amber-200 uppercase text-xs tracking-widest">Atenção: Sistema Offline</h4>
+                <p className="text-[10px] font-bold text-amber-800 dark:text-amber-500 uppercase leading-relaxed mt-1">A chave de acesso à IA não foi detectada. Conecte sua chave do Google AI Studio para ativar as funções jurídicas.</p>
+              </div>
+            </div>
+            <Button onClick={handleKeySelection} className="bg-amber-600 hover:bg-amber-700 text-white border-none rounded-xl h-12 px-6 font-black uppercase text-[10px] tracking-widest shadow-lg shrink-0">
+              <Key size={16} className="mr-2" /> Conectar Chave do Google
+            </Button>
+          </div>
+        </div>
+      )}
       {renderContent()}
     </Layout>
   );
