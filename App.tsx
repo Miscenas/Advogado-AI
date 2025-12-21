@@ -17,7 +17,7 @@ import { CourtPortals } from './components/CourtPortals';
 import { SubscriptionPage } from './components/SubscriptionPage';
 import { LaborCalculator } from './components/LaborCalculator';
 import { TokenCounter } from './components/TokenCounter';
-import { AlertCircle, Key, RefreshCw } from 'lucide-react';
+import { AlertCircle, Key, Settings, RefreshCw } from 'lucide-react';
 import { Button } from './components/ui/Button';
 
 function App() {
@@ -33,15 +33,16 @@ function App() {
   const [showKeyWarning, setShowKeyWarning] = useState(false);
 
   useEffect(() => {
-    // 1. Verificação de Saúde do Sistema de IA
-    const verifyAISystem = async () => {
+    // 1. Verificação de Chave de API
+    const verifyAI = async () => {
+      // Verifica process.env.API_KEY (injetado no index.tsx)
       const apiKey = process.env.API_KEY;
-      const hasSystemKey = apiKey && apiKey !== 'undefined' && apiKey.length > 5;
+      const hasSystemKey = apiKey && apiKey !== 'undefined' && apiKey.length > 10;
       
       if (!hasSystemKey) {
-        // Se não tem chave master, tenta ver se o usuário já conectou a dele via Google
+        // Se não tem master, tenta ver se o usuário selecionou uma chave pessoal
         const aistudio = (window as any).aistudio;
-        if (aistudio) {
+        if (aistudio && typeof aistudio.hasSelectedApiKey === 'function') {
           try {
             const hasSelected = await aistudio.hasSelectedApiKey();
             setShowKeyWarning(!hasSelected);
@@ -55,7 +56,7 @@ function App() {
         setShowKeyWarning(false);
       }
     };
-    verifyAISystem();
+    verifyAI();
 
     // 2. Auth Flow
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -72,18 +73,17 @@ function App() {
   }, []);
 
   const handleManualKeyConnect = async () => {
-    try {
-      const aistudio = (window as any).aistudio;
-      if (aistudio) {
+    const aistudio = (window as any).aistudio;
+    if (aistudio && typeof aistudio.openSelectKey === 'function') {
+      try {
         await aistudio.openSelectKey();
-        // Após a seleção, tentamos forçar o sistema a reconhecer a nova chave
-        setTimeout(() => window.location.reload(), 500);
-      } else {
-        alert("Recurso indisponível: O seletor do Google AI Studio não foi carregado neste ambiente.");
+        setShowKeyWarning(false);
+        window.location.reload();
+      } catch (e) {
+        alert("Erro ao abrir seletor de chaves.");
       }
-    } catch (e) {
-      console.error("Falha ao abrir seletor:", e);
-      alert("Erro ao abrir o seletor. Verifique se seu navegador permite pop-ups.");
+    } else {
+      alert("Configuração Master Necessária:\n\n1. Vá ao painel do Vercel.\n2. Em 'Environment Variables', adicione VITE_API_KEY.\n3. Faça um novo deploy com 'Clean Build Cache'.");
     }
   };
 
@@ -107,7 +107,7 @@ function App() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-10 text-center">
       <div className="space-y-4">
         <p className="text-slate-500 font-black uppercase text-xs tracking-widest">Erro de Conexão com o Banco</p>
-        <Button onClick={() => window.location.reload()} variant="outline" className="rounded-xl"><RefreshCw size={14} className="mr-2"/> Recarregar Sistema</Button>
+        <Button onClick={() => window.location.reload()} variant="outline" className="rounded-xl"><RefreshCw size={14} className="mr-2"/> Tentar Novamente</Button>
       </div>
     </div>
   );
@@ -138,22 +138,21 @@ function App() {
     <Layout activeRoute={currentRoute} onNavigate={setCurrentRoute} userEmail={authState.user?.email} isAdmin={authState.profile?.role === 'admin'}>
       {showKeyWarning && (
         <div className="mb-8 mx-auto max-w-5xl animate-in slide-in-from-top-4 duration-500">
-          <div className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800/50 p-6 md:p-8 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+          <div className="bg-rose-50 dark:bg-rose-900/10 border-2 border-rose-200 dark:border-rose-800/50 p-6 md:p-8 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
             <div className="flex items-start gap-5 text-left">
-              <div className="bg-amber-200 dark:bg-amber-900/40 p-4 rounded-2xl text-amber-700 dark:text-amber-400 shrink-0">
+              <div className="bg-rose-200 dark:bg-rose-900/40 p-4 rounded-2xl text-rose-700 dark:text-rose-400 shrink-0">
                 <AlertCircle size={24} />
               </div>
               <div>
-                <h4 className="font-black text-amber-950 dark:text-amber-100 uppercase text-xs tracking-widest">Sistema em Modo de Espera</h4>
-                <p className="text-[10px] font-bold text-amber-800 dark:text-amber-500 uppercase leading-relaxed mt-2">
-                  Não detectamos a chave de serviço (VITE_API_KEY). Como desenvolvedor, adicione a chave no Vercel e faça um <span className="underline">Redeploy with Clean Cache</span>. 
-                  Como usuário, você pode conectar sua própria chave do Google clicando ao lado.
+                <h4 className="font-black text-rose-950 dark:text-rose-100 uppercase text-xs tracking-widest">Configuração Pendente (Vercel)</h4>
+                <p className="text-[10px] font-bold text-rose-800 dark:text-rose-500 uppercase leading-relaxed mt-2">
+                  A chave master não foi injetada. Como administrador do SaaS, você deve configurar <b>VITE_API_KEY</b> nas variáveis de ambiente do Vercel para que a IA funcione para todos os seus clientes.
                 </p>
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
-              <Button onClick={handleManualKeyConnect} className="bg-amber-600 hover:bg-amber-700 text-white border-none rounded-xl h-14 px-8 font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95">
-                <Key size={16} className="mr-2" /> Conectar Chave do Google
+              <Button onClick={handleManualKeyConnect} className="bg-slate-900 dark:bg-slate-800 text-white border-none rounded-xl h-14 px-8 font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95">
+                <Settings size={16} className="mr-2" /> Ver Instruções
               </Button>
             </div>
           </div>

@@ -4,30 +4,31 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 /**
- * JURISPET AI - INITIALIZATION ENGINE
- * Este bloco garante que o SDK do Google encontre a chave de API 
- * em process.env.API_KEY, independentemente de como o Vercel/Vite a injete.
+ * JURISPET AI - CORE ENVIRONMENT BOOTSTRAP
+ * Garante que a chave de API esteja disponível para o SDK da Google.
  */
-(function initializeJurisPetCore() {
+(function bootstrap() {
   if (typeof window !== 'undefined') {
-    // 1. Tenta capturar a chave de todas as fontes possíveis do Vite/Browser
-    // @ts-ignore
-    const masterKey = import.meta.env?.VITE_API_KEY || 
-                     // @ts-ignore
-                     import.meta.env?.API_KEY || 
-                     (window as any)._env_?.VITE_API_KEY;
-    
-    // 2. Cria o polyfill do objeto process.env exigido pelo SDK @google/genai
+    // 1. Tenta capturar de todas as fontes possíveis (Vite, Vercel, Window)
+    const rawKey = 
+      // @ts-ignore
+      import.meta.env?.VITE_API_KEY || 
+      // @ts-ignore
+      import.meta.env?.API_KEY || 
+      (window as any)._env_?.API_KEY ||
+      (window as any).VITE_API_KEY;
+
+    // 2. Cria o objeto process.env no navegador (necessário para o SDK @google/genai)
     const win = window as any;
     win.process = win.process || {};
     win.process.env = win.process.env || {};
     
-    // 3. Injeta a chave Master no local global
-    if (masterKey && masterKey !== 'undefined') {
-      win.process.env.API_KEY = masterKey;
-      console.log("JurisPet: Chave Master injetada com sucesso.");
+    // 3. Normaliza a chave para process.env.API_KEY
+    if (rawKey && rawKey !== 'undefined' && rawKey.length > 5) {
+      win.process.env.API_KEY = rawKey;
+      console.log("JurisPet: Motor de IA alimentado com sucesso.");
     } else {
-      console.warn("JurisPet: Chave Master não encontrada no ambiente de build.");
+      console.warn("JurisPet: Chave Master não detectada. O sistema operará em modo de configuração.");
     }
   }
 })();
