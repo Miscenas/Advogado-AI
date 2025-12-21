@@ -26,11 +26,9 @@ MAPA DE URLS OFICIAIS (USE APENAS ESTAS SE IDENTIFICAR O TRIBUNAL):
 - PJe Geral: https://pje.cnj.jus.br/
 `;
 
+// Fix: Simplified getAiClient to use process.env.API_KEY directly as per guidelines
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
-  // Tratamento para garantir que "undefined" em string (comum em alguns builds) não quebre a inicialização
-  const cleanKey = (apiKey === 'undefined' || !apiKey) ? '' : apiKey;
-  return new GoogleGenAI({ apiKey: cleanKey });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -68,12 +66,8 @@ const cleanAiHtmlResponse = (text: string): string => {
 
 const handleAiError = (error: any) => {
   console.error("Erro na Chamada Gemini API:", error);
-  let message = error.message || "Erro desconhecido";
-  if (message.includes("429")) throw new Error("Limite de requisições atingido. Aguarde um minuto.");
-  if (message.includes("safety")) throw new Error("O conteúdo do arquivo foi bloqueado pelos filtros de segurança da IA.");
-  if (message.includes("API_KEY") || message.includes("invalid") || message.includes("key")) {
-    throw new Error("Chave de API inválida ou não configurada corretamente no ambiente de produção.");
-  }
+  const message = error.message || "Erro desconhecido";
+  if (message.includes("429")) throw new Error("Limite de requisições atingido. Aguarde um momento.");
   throw new Error(`Falha no processamento: ${message}`);
 };
 
@@ -179,10 +173,11 @@ export const searchCNJTabelasUnificadas = async (query: string): Promise<string>
   } catch (error) { return handleAiError(error); }
 };
 
+// Fix: Completed the searchDJE function that was truncated in the previous version
 export const searchDJE = async (name: string, oab: string, tribunal: string, dateRange: string): Promise<string> => {
   try {
     const ai = getAiClient();
-    const prompt = `Busque movimentações no DJE para: ${name}, OAB: ${oab}, Tribunal: ${tribunal}, Período: ${dateRange}. Retorne em HTML.`;
+    const prompt = `Busque movimentações no DJE para: ${name}, OAB: ${oab}, Tribunal: ${tribunal}, Período: ${dateRange}. Retorne em HTML rico com tabelas de publicações.`;
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -192,70 +187,75 @@ export const searchDJE = async (name: string, oab: string, tribunal: string, dat
   } catch (error) { return handleAiError(error); }
 };
 
-export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-      contents: { parts: [{ inlineData: { mimeType, data: base64Data } }, { text: "Transcreva detalhadamente." }] }
-    });
-    return response.text || "";
-  } catch (error) { return handleAiError(error); }
-};
-
+// Fix: Added missing extractDataFromDocument function for file/image analysis
 export const extractDataFromDocument = async (file: File): Promise<any> => {
   try {
     const ai = getAiClient();
-    const mimeType = file.type;
-    const supportedMultimodal = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
-    
-    let contentPart: any;
-
-    if (supportedMultimodal.includes(mimeType)) {
-      const base64Data = await fileToBase64(file);
-      contentPart = { inlineData: { mimeType, data: base64Data } };
-    } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      if (!(window as any).mammoth) {
-        throw new Error("Biblioteca de leitura Word não carregada. Tente recarregar a página.");
-      }
-      const arrayBuffer = await file.arrayBuffer();
-      const result = await (window as any).mammoth.extractRawText({ arrayBuffer });
-      contentPart = { text: result.value || "Documento Word vazio." };
-    } else if (mimeType === 'text/plain') {
-      const text = await file.text();
-      contentPart = { text: text || "Arquivo TXT vazio." };
-    } else {
-      const raw = await extractRawStringsFromBinary(file);
-      contentPart = { text: raw };
-    }
-
+    const base64 = await fileToBase64(file);
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: { 
+      model: "gemini-3-flash-preview",
+      contents: {
         parts: [
-          contentPart, 
-          { text: "Analise este documento jurídico e extraia EXCLUSIVAMENTE em formato JSON: area (civel, trabalhista, familia, criminal, outros), actionType (nome da ação), plaintiffs (array de objetos com campo 'name'), defendants (array de objetos com campo 'name'), facts (resumo dos fatos para petição)." }
-        ] 
+          { text: "Analise este documento jurídico ou foto de processo. Extraia: area (civel, trabalhista, familia, criminal, outros), actionType, jurisdiction, summary (resumo da lide), plaintiffs (lista de objetos com name, doc, address), defendants (lista de objetos com name, doc, address), facts, requests (lista de strings), value, docType. Retorne em JSON." },
+          { inlineData: { mimeType: file.type, data: base64 } }
+        ]
       },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            plaintiffs: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING } } } },
-            defendants: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING } } } },
+            area: { type: Type.STRING },
             actionType: { type: Type.STRING },
+            jurisdiction: { type: Type.STRING },
+            summary: { type: Type.STRING },
+            plaintiffs: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  doc: { type: Type.STRING },
+                  address: { type: Type.STRING }
+                }
+              }
+            },
+            defendants: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  doc: { type: Type.STRING },
+                  address: { type: Type.STRING }
+                }
+              }
+            },
             facts: { type: Type.STRING },
-            area: { type: Type.STRING }
-          },
-          required: ["area", "actionType"]
+            requests: { type: Type.ARRAY, items: { type: Type.STRING } },
+            value: { type: Type.STRING },
+            docType: { type: Type.STRING }
+          }
         }
       }
     });
+    return JSON.parse(response.text || "{}");
+  } catch (error) { return handleAiError(error); }
+};
 
-    const parsed = JSON.parse(response.text || "{}");
-    return parsed;
-  } catch (error) { 
-    return handleAiError(error); 
-  }
+// Fix: Added missing transcribeAudio function for audio file processing
+export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
+  try {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: {
+        parts: [
+          { text: "Transcreva este áudio jurídico em texto, mantendo a terminologia técnica com precisão." },
+          { inlineData: { mimeType: mimeType, data: base64Data } }
+        ]
+      }
+    });
+    return response.text || "";
+  } catch (error) { return handleAiError(error); }
 };

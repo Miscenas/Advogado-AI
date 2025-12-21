@@ -1,35 +1,16 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONFIGURAÇÃO FIXA ---
-// Insira suas credenciais aqui ou via variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
-const FIXED_SUPABASE_URL = ""; 
-const FIXED_SUPABASE_KEY = ""; 
-
 const getEnv = (key: string) => {
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
-    return (import.meta as any).env[key];
-  }
+  // Padrão universal para acessar variáveis em produção (Vite/Browser)
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     return process.env[key];
   }
   return undefined;
 };
 
-const getStored = (key: string) => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    return window.localStorage.getItem(key);
-  }
-  return null;
-};
-
-const envUrl = getEnv('VITE_SUPABASE_URL');
-const envKey = getEnv('VITE_SUPABASE_ANON_KEY');
-const storedUrl = getStored('custom_supabase_url');
-const storedKey = getStored('custom_supabase_key');
-
-const supabaseUrl = FIXED_SUPABASE_URL || envUrl || storedUrl;
-const supabaseAnonKey = FIXED_SUPABASE_KEY || envKey || storedKey;
+const supabaseUrl = getEnv('VITE_SUPABASE_URL');
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
 const isConfigured = 
   supabaseUrl && 
@@ -40,9 +21,9 @@ const isConfigured =
 let client;
 
 if (isConfigured) {
-  client = createClient(supabaseUrl, supabaseAnonKey);
+  client = createClient(supabaseUrl!, supabaseAnonKey!);
 } else {
-  console.warn('JurisPet AI: Backend real não detectado. Iniciando em MODO DEMO (LocalStorage).');
+  console.warn('JurisPet AI: Backend real não detectado no ambiente de produção. Iniciando em MODO DEMO.');
   
   const MOCK_USER_ID = 'user-demo-123';
   const mockKeys = {
@@ -67,7 +48,6 @@ if (isConfigured) {
     localStorage.setItem(key, JSON.stringify(data));
   };
 
-  // Garante que o perfil demo exista no mock
   if (!localStorage.getItem(mockKeys.profiles)) {
     saveStoredData(mockKeys.profiles, [{ 
       id: MOCK_USER_ID, 
