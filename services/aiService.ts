@@ -26,8 +26,9 @@ MAPA DE URLS OFICIAIS (USE APENAS ESTAS SE IDENTIFICAR O TRIBUNAL):
 - PJe Geral: https://pje.cnj.jus.br/
 `;
 
-// Fix: Simplified getAiClient to use process.env.API_KEY directly as per guidelines
 const getAiClient = () => {
+  // O SDK exige o uso de process.env.API_KEY. 
+  // O polyfill no index.tsx garante que este valor exista em produção.
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
@@ -40,26 +41,7 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-const extractRawStringsFromBinary = async (file: File): Promise<string> => {
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
-    let rawText = "";
-    for (let i = 0; i < Math.min(uint8.length, 50000); i++) {
-      const charCode = uint8[i];
-      if ((charCode >= 32 && charCode <= 126) || (charCode >= 160 && charCode <= 255) || charCode === 10 || charCode === 13) {
-        rawText += String.fromCharCode(charCode);
-      } else {
-        rawText += " ";
-      }
-    }
-    return rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-  } catch (e) {
-    return "Erro na leitura binária.";
-  }
-};
-
-const cleanAiHtmlResponse = (text: string): string => {
+const cleanAiHtmlResponse = (text: string | undefined): string => {
   if (!text) return "";
   return text.replace(/^[ \t]*[`']{3}(?:html|)\s*/i, '').replace(/\s*[`']{3}[ \t]*$/i, '').trim();
 };
@@ -68,6 +50,9 @@ const handleAiError = (error: any) => {
   console.error("Erro na Chamada Gemini API:", error);
   const message = error.message || "Erro desconhecido";
   if (message.includes("429")) throw new Error("Limite de requisições atingido. Aguarde um momento.");
+  if (message.includes("API Key") || message.includes("apiKey")) {
+    throw new Error("Erro de Autenticação: A chave de API não foi reconhecida pelo Google ou não foi injetada no ambiente.");
+  }
   throw new Error(`Falha no processamento: ${message}`);
 };
 
@@ -80,7 +65,7 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
       contents: prompt,
       config: { tools: [{ googleSearch: {} }], systemInstruction: SHIELD_PROTOCOL }
     });
-    return cleanAiHtmlResponse(response.text || "");
+    return cleanAiHtmlResponse(response.text);
   } catch (error) { return handleAiError(error); }
 };
 
@@ -99,7 +84,7 @@ export const suggestFilingMetadata = async (content: string): Promise<PetitionFi
             competence: { type: Type.STRING },
             class: { type: Type.STRING },
             subject: { type: Type.STRING },
-            filingUrl: { type: Type.STRING, description: "URL literal da lista oficial de portais fornecida no prompt." },
+            filingUrl: { type: Type.STRING },
           },
           required: ["competence", "class", "subject"],
         },
@@ -120,7 +105,7 @@ export const generateLegalPetition = async (data: PetitionFormData): Promise<str
       contents: prompt,
       config: { systemInstruction: SHIELD_PROTOCOL, thinkingConfig: { thinkingBudget: 16000 } }
     });
-    return cleanAiHtmlResponse(response.text || "");
+    return cleanAiHtmlResponse(response.text);
   } catch (error) { return handleAiError(error); }
 };
 
@@ -133,17 +118,20 @@ export const generateLegalDefense = async (data: PetitionFormData): Promise<stri
       contents: prompt,
       config: { systemInstruction: SHIELD_PROTOCOL, thinkingConfig: { thinkingBudget: 16000 } }
     });
-    return cleanAiHtmlResponse(response.text || "");
+    return cleanAiHtmlResponse(response.text);
   } catch (error) { return handleAiError(error); }
 };
 
 export const chatRefinePetition = async (currentContent: string, userMessage: string, history: any[]): Promise<string> => {
   try {
     const ai = getAiClient();
-    const chat = ai.chats.create({ model: 'gemini-3-flash-preview', config: { systemInstruction: SHIELD_PROTOCOL } });
+    const chat = ai.chats.create({ 
+      model: 'gemini-3-flash-preview', 
+      config: { systemInstruction: SHIELD_PROTOCOL } 
+    });
     const contextPrompt = `CONTEÚDO ATUAL:\n${currentContent}\n\nINSTRUÇÃO: ${userMessage}\n\nResponda APENAS com o código HTML completo.`;
     const response = await chat.sendMessage({ message: contextPrompt });
-    return cleanAiHtmlResponse(response.text || currentContent);
+    return cleanAiHtmlResponse(response.text);
   } catch (error) { return handleAiError(error); }
 };
 
@@ -156,7 +144,7 @@ export const interpretCNJMetadata = async (processNumber: string): Promise<strin
       contents: prompt,
       config: { tools: [{ googleSearch: {} }] }
     });
-    return cleanAiHtmlResponse(response.text || "");
+    return cleanAiHtmlResponse(response.text);
   } catch (error) { return handleAiError(error); }
 };
 
@@ -169,25 +157,23 @@ export const searchCNJTabelasUnificadas = async (query: string): Promise<string>
       contents: prompt,
       config: { tools: [{ googleSearch: {} }] }
     });
-    return cleanAiHtmlResponse(response.text || "");
+    return cleanAiHtmlResponse(response.text);
   } catch (error) { return handleAiError(error); }
 };
 
-// Fix: Completed the searchDJE function that was truncated in the previous version
 export const searchDJE = async (name: string, oab: string, tribunal: string, dateRange: string): Promise<string> => {
   try {
     const ai = getAiClient();
-    const prompt = `Busque movimentações no DJE para: ${name}, OAB: ${oab}, Tribunal: ${tribunal}, Período: ${dateRange}. Retorne em HTML rico com tabelas de publicações.`;
+    const prompt = `Busque movimentações no DJE para: ${name}, OAB: ${oab}, Tribunal: ${tribunal}, Período: ${dateRange}. Retorne em HTML rico.`;
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
       config: { tools: [{ googleSearch: {} }] }
     });
-    return cleanAiHtmlResponse(response.text || "");
+    return cleanAiHtmlResponse(response.text);
   } catch (error) { return handleAiError(error); }
 };
 
-// Fix: Added missing extractDataFromDocument function for file/image analysis
 export const extractDataFromDocument = async (file: File): Promise<any> => {
   try {
     const ai = getAiClient();
@@ -196,7 +182,7 @@ export const extractDataFromDocument = async (file: File): Promise<any> => {
       model: "gemini-3-flash-preview",
       contents: {
         parts: [
-          { text: "Analise este documento jurídico ou foto de processo. Extraia: area (civel, trabalhista, familia, criminal, outros), actionType, jurisdiction, summary (resumo da lide), plaintiffs (lista de objetos com name, doc, address), defendants (lista de objetos com name, doc, address), facts, requests (lista de strings), value, docType. Retorne em JSON." },
+          { text: "Analise este documento jurídico. Extraia: area, actionType, jurisdiction, summary, plaintiffs (nome, doc, endereço), defendants (nome, doc, endereço), fatos, pedidos, valor da causa. Retorne em JSON." },
           { inlineData: { mimeType: file.type, data: base64 } }
         ]
       },
@@ -209,32 +195,11 @@ export const extractDataFromDocument = async (file: File): Promise<any> => {
             actionType: { type: Type.STRING },
             jurisdiction: { type: Type.STRING },
             summary: { type: Type.STRING },
-            plaintiffs: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  doc: { type: Type.STRING },
-                  address: { type: Type.STRING }
-                }
-              }
-            },
-            defendants: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  doc: { type: Type.STRING },
-                  address: { type: Type.STRING }
-                }
-              }
-            },
+            plaintiffs: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, doc: { type: Type.STRING }, address: { type: Type.STRING } } } },
+            defendants: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, doc: { type: Type.STRING }, address: { type: Type.STRING } } } },
             facts: { type: Type.STRING },
             requests: { type: Type.ARRAY, items: { type: Type.STRING } },
-            value: { type: Type.STRING },
-            docType: { type: Type.STRING }
+            value: { type: Type.STRING }
           }
         }
       }
@@ -243,7 +208,6 @@ export const extractDataFromDocument = async (file: File): Promise<any> => {
   } catch (error) { return handleAiError(error); }
 };
 
-// Fix: Added missing transcribeAudio function for audio file processing
 export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
   try {
     const ai = getAiClient();
@@ -251,8 +215,8 @@ export const transcribeAudio = async (base64Data: string, mimeType: string): Pro
       model: "gemini-3-flash-preview",
       contents: {
         parts: [
-          { text: "Transcreva este áudio jurídico em texto, mantendo a terminologia técnica com precisão." },
-          { inlineData: { mimeType: mimeType, data: base64Data } }
+          { text: "Transcreva este áudio jurídico detalhadamente." },
+          { inlineData: { mimeType, data: base64Data } }
         ]
       }
     });
