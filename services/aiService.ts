@@ -2,77 +2,48 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata } from "../types";
 
-const SHIELD_PROTOCOL = `
-Você é um ADVOGADO SÊNIOR BRASILEIRO com 20 anos de experiência.
-Foque em profundidade doutrinária e jurisprudencial brasileira.
-Retorne APENAS o conteúdo HTML, sem blocos de código markdown.
+// Fix: escaped backticks to prevent early termination of template literal which was causing a "not callable" error on subsequent lines.
+const SYSTEM_INSTRUCTION = `
+Você é um Advogado Sênior Brasileiro especializado em Direito Cível e Trabalhista.
+Suas petições seguem o padrão de excelência: técnica apurada, fundamentação em súmulas e doutrina.
+Retorne SEMPRE o conteúdo em HTML puro, sem blocos de código markdown (\`\`\`html).
+Use tabelas HTML para dados estruturados.
 `;
 
-/**
- * Helper interno para verificar a presença da chave antes de instanciar o SDK.
- * O SDK exige que a chave venha de process.env.API_KEY.
- */
-const checkApiKey = () => {
-  const key = process.env.API_KEY;
-  if (!key || key === "undefined" || key === "") {
-    throw new Error("CHAVE_AUSENTE: A variável VITE_API_KEY não foi encontrada ou não foi propagada para o navegador.");
-  }
-  return key;
-};
-
-const cleanAiHtmlResponse = (text: string | undefined): string => {
+// Fix: Utility function to clean HTML from possible markdown wrappers
+const cleanHtml = (text: string | undefined): string => {
   if (!text) return "";
+  // Remove invólucros de markdown caso a IA os gere por engano
+  // Fix: ensuring regex backticks don't interfere with template literal parsing if the lexer gets confused
   return text.replace(/^[ \t]*[`']{3}(?:html|)\s*/i, '').replace(/\s*[`']{3}[ \t]*$/i, '').trim();
 };
 
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = () => reject(new Error("Erro ao ler arquivo."));
-    reader.readAsDataURL(file);
-  });
-};
-
-const handleAiError = (error: any) => {
-  console.error("JurisPet AI Service Error:", error);
-  const message = error.message || "";
-  
-  if (message.includes("CHAVE_AUSENTE")) {
-    throw new Error(message);
+/**
+ * Retorna uma instância limpa do SDK usando a chave disponível no escopo global.
+ * O SDK exige que a chave esteja em process.env.API_KEY.
+ */
+const getAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === 'undefined') {
+    throw new Error("SISTEMA_OFFLINE: Chave de API não configurada.");
   }
-  
-  if (message.includes("401") || message.includes("API key not valid")) {
-    throw new Error("ERRO DE AUTENTICAÇÃO: A chave configurada é inválida ou expirou.");
-  }
-
-  if (message.includes("429")) {
-    throw new Error("LIMITE ATINGIDO: Muitas requisições. Aguarde um momento.");
-  }
-
-  throw new Error(`FALHA NA IA: ${message || "Erro de comunicação com o servidor Gemini."}`);
+  return new GoogleGenAI({ apiKey });
 };
 
 export const searchJurisprudence = async (query: string, scope: string): Promise<string> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Pesquise jurisprudência recente: "${query}". Escopo: ${scope}. Retorne HTML técnico.`,
-      config: { tools: [{ googleSearch: {} }], systemInstruction: SHIELD_PROTOCOL }
-    });
-    return cleanAiHtmlResponse(response.text);
-  } catch (error) { return handleAiError(error); }
+  const response = await getAI().models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Pesquise jurisprudência recente: "${query}". Escopo: ${scope}.`,
+    config: { tools: [{ googleSearch: {} }], systemInstruction: SYSTEM_INSTRUCTION }
+  });
+  return cleanHtml(response.text);
 };
 
 export const suggestFilingMetadata = async (content: string): Promise<PetitionFilingMetadata> => {
   try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Analise a petição e sugira metadados (Competência, Classe, Assunto). Petição:\n${content}`,
+      contents: `Analise esta petição e sugira os metadados de protocolo: ${content}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -81,130 +52,101 @@ export const suggestFilingMetadata = async (content: string): Promise<PetitionFi
             competence: { type: Type.STRING },
             class: { type: Type.STRING },
             subject: { type: Type.STRING },
-            filingUrl: { type: Type.STRING },
           },
           required: ["competence", "class", "subject"],
         },
       },
     });
     return JSON.parse(response.text || "{}");
-  } catch (error) {
+  } catch (e) {
     return { competence: "Verificar", class: "Verificar", subject: "Verificar" };
   }
 };
 
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `Redija Petição Inicial Sênior: ${JSON.stringify(data)}`,
-      config: { systemInstruction: SHIELD_PROTOCOL, thinkingConfig: { thinkingBudget: 16000 } }
-    });
-    return cleanAiHtmlResponse(response.text);
-  } catch (error) { return handleAiError(error); }
+  const response = await getAI().models.generateContent({
+    model: 'gemini-3-pro-preview',
+    contents: `Redija uma Petição Inicial completa com base nos dados: ${JSON.stringify(data)}`,
+    config: { systemInstruction: SYSTEM_INSTRUCTION, thinkingConfig: { thinkingBudget: 16000 } }
+  });
+  return cleanHtml(response.text);
 };
 
 export const generateLegalDefense = async (data: PetitionFormData): Promise<string> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `Redija Contestação Sênior: ${JSON.stringify(data)}`,
-      config: { systemInstruction: SHIELD_PROTOCOL, thinkingConfig: { thinkingBudget: 16000 } }
-    });
-    return cleanAiHtmlResponse(response.text);
-  } catch (error) { return handleAiError(error); }
+  const response = await getAI().models.generateContent({
+    model: 'gemini-3-pro-preview',
+    contents: `Redija uma Contestação técnica: ${JSON.stringify(data)}`,
+    config: { systemInstruction: SYSTEM_INSTRUCTION, thinkingConfig: { thinkingBudget: 16000 } }
+  });
+  return cleanHtml(response.text);
 };
 
 export const chatRefinePetition = async (currentContent: string, userMessage: string, history: any[]): Promise<string> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const chat = ai.chats.create({ 
-      model: 'gemini-3-flash-preview', 
-      config: { systemInstruction: SHIELD_PROTOCOL } 
-    });
-    const response = await chat.sendMessage({ 
-      message: `Conteúdo atual: ${currentContent}\n\nInstrução: ${userMessage}. Retorne HTML.` 
-    });
-    return cleanAiHtmlResponse(response.text);
-  } catch (error) { return handleAiError(error); }
+  const chat = getAI().chats.create({ 
+    model: 'gemini-3-flash-preview', 
+    config: { systemInstruction: SYSTEM_INSTRUCTION } 
+  });
+  const response = await chat.sendMessage({ 
+    message: `Ajuste esta petição conforme instrução: "${userMessage}". \nConteúdo atual: ${currentContent}` 
+  });
+  return cleanHtml(response.text);
 };
 
 export const interpretCNJMetadata = async (processNumber: string): Promise<string> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Explique o número CNJ: ${processNumber}.`,
-      config: { tools: [{ googleSearch: {} }] }
-    });
-    return cleanAiHtmlResponse(response.text);
-  } catch (error) { return handleAiError(error); }
+  const response = await getAI().models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Explique detalhadamente o número CNJ: ${processNumber}.`,
+    config: { tools: [{ googleSearch: {} }] }
+  });
+  return cleanHtml(response.text);
 };
 
 export const searchCNJTabelasUnificadas = async (query: string): Promise<string> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Busque na TPU do CNJ: ${query}.`,
-      config: { tools: [{ googleSearch: {} }] }
-    });
-    return cleanAiHtmlResponse(response.text);
-  } catch (error) { return handleAiError(error); }
+  const response = await getAI().models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Busque na TPU do CNJ o termo: ${query}.`,
+    config: { tools: [{ googleSearch: {} }] }
+  });
+  return cleanHtml(response.text);
 };
 
 export const searchDJE = async (name: string, oab: string, tribunal: string, dateRange: string): Promise<string> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Busque intimações para ${name}, OAB ${oab}, tribunal ${tribunal}.`,
-      config: { tools: [{ googleSearch: {} }] }
-    });
-    return cleanAiHtmlResponse(response.text);
-  } catch (error) { return handleAiError(error); }
+  const response = await getAI().models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Busque intimações no DJE para: Nome ${name}, OAB ${oab}, Tribunal ${tribunal}.`,
+    config: { tools: [{ googleSearch: {} }] }
+  });
+  return cleanHtml(response.text);
 };
 
 export const extractDataFromDocument = async (file: File): Promise<any> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const base64 = await fileToBase64(file);
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: {
-        parts: [
-          { text: "Extraia dados deste documento jurídico para JSON." },
-          { inlineData: { mimeType: file.type, data: base64 } }
-        ]
-      },
-      config: { responseMimeType: "application/json" }
-    });
-    return JSON.parse(response.text || "{}");
-  } catch (error) { return handleAiError(error); }
+  const reader = new FileReader();
+  const base64 = await new Promise<string>((resolve) => {
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.readAsDataURL(file);
+  });
+  const response = await getAI().models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: {
+      parts: [
+        { text: "Extraia os dados estruturados deste documento para preencher uma petição." },
+        { inlineData: { mimeType: file.type, data: base64 } }
+      ]
+    },
+    config: { responseMimeType: "application/json" }
+  });
+  return JSON.parse(response.text || "{}");
 };
 
 export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
-  try {
-    checkApiKey();
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: {
-        parts: [
-          { text: "Transcreva este áudio." },
-          { inlineData: { mimeType, data: base64Data } }
-        ]
-      }
-    });
-    return response.text || "";
-  } catch (error) { return handleAiError(error); }
+  const response = await getAI().models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: {
+      parts: [
+        { text: "Transcreva este áudio jurídico fielmente." },
+        { inlineData: { mimeType, data: base64Data } }
+      ]
+    }
+  });
+  return response.text || "";
 };

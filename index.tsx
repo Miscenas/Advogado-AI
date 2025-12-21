@@ -4,39 +4,38 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 /**
- * JURISPET AI - BOOTSTRAP DE AMBIENTE
- * Esta função garante que o objeto process.env.API_KEY exigido pelo SDK do Google
- * esteja presente no navegador, mapeando-o a partir das variáveis do Vite.
+ * JURISPET AI - INITIALIZATION ENGINE
+ * Este bloco garante que o SDK do Google encontre a chave de API 
+ * em process.env.API_KEY, independentemente de como o Vercel/Vite a injete.
  */
-(function initializeJurisPetEnvironment() {
+(function initializeJurisPetCore() {
   if (typeof window !== 'undefined') {
-    // 1. Tenta obter a chave do Vite (Build Time)
-    const viteKey = (import.meta as any).env?.VITE_API_KEY || (import.meta as any).env?.API_KEY;
+    // 1. Tenta capturar a chave de todas as fontes possíveis do Vite/Browser
+    // @ts-ignore
+    const masterKey = import.meta.env?.VITE_API_KEY || 
+                     // @ts-ignore
+                     import.meta.env?.API_KEY || 
+                     (window as any)._env_?.VITE_API_KEY;
     
-    // 2. Garante a existência do objeto process.env para o SDK
-    (window as any).process = (window as any).process || {};
-    (window as any).process.env = (window as any).process.env || {};
+    // 2. Cria o polyfill do objeto process.env exigido pelo SDK @google/genai
+    const win = window as any;
+    win.process = win.process || {};
+    win.process.env = win.process.env || {};
     
-    // 3. Injeta a chave apenas se ela ainda não existir (preservando injeções externas)
-    if (!(window as any).process.env.API_KEY || (window as any).process.env.API_KEY === 'undefined') {
-      (window as any).process.env.API_KEY = viteKey || "";
-    }
-
-    // Diagnóstico silencioso para o desenvolvedor
-    const finalKey = (window as any).process.env.API_KEY;
-    if (!finalKey) {
-      console.warn("JurisPet AI: Chave de ambiente não detectada. O sistema poderá solicitar seleção manual.");
+    // 3. Injeta a chave Master no local global
+    if (masterKey && masterKey !== 'undefined') {
+      win.process.env.API_KEY = masterKey;
+      console.log("JurisPet: Chave Master injetada com sucesso.");
+    } else {
+      console.warn("JurisPet: Chave Master não encontrada no ambiente de build.");
     }
   }
 })();
 
 const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
+if (!rootElement) throw new Error("Root element not found");
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
