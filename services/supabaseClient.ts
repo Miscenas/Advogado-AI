@@ -1,29 +1,46 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const getEnv = (key: string) => {
-  // Padrão universal para acessar variáveis em produção (Vite/Browser)
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key];
-  }
-  return undefined;
+/**
+ * JurisPet AI - Robust Environment Resolver
+ * Tenta encontrar as chaves do Supabase em todas as fontes possíveis
+ * para evitar erros de "undefined" em produção.
+ */
+const getEnv = (key: string): string | undefined => {
+  if (typeof window === 'undefined') return undefined;
+
+  const win = window as any;
+  
+  // Ordem de prioridade para resolução de chaves:
+  return (
+    // @ts-ignore - Vite/Vercel standard
+    import.meta.env?.[key] || 
+    // Polyfill do process.env injetado no index.tsx
+    win.process?.env?.[key] ||
+    // Variáveis injetadas diretamente no window por scripts de terceiros
+    win[key] ||
+    // Objeto de configuração comum em alguns provedores de nuvem
+    win._env_?.[key]
+  );
 };
 
 const supabaseUrl = getEnv('VITE_SUPABASE_URL');
 const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
+// Verifica se as chaves mínimas existem e são strings válidas
 const isConfigured = 
-  supabaseUrl && 
-  supabaseAnonKey && 
+  !!supabaseUrl && 
+  !!supabaseAnonKey && 
   supabaseUrl !== 'undefined' && 
-  supabaseAnonKey !== 'undefined';
+  supabaseAnonKey !== 'undefined' &&
+  supabaseUrl.length > 10;
 
 let client;
 
 if (isConfigured) {
   client = createClient(supabaseUrl!, supabaseAnonKey!);
 } else {
-  console.warn('JurisPet AI: Backend real não detectado no ambiente de produção. Iniciando em MODO DEMO.');
+  console.warn('JurisPet AI: Backend real não detectado no ambiente atual. Iniciando em MODO DEMO.');
   
   const MOCK_USER_ID = 'user-demo-123';
   const mockKeys = {
