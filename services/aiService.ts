@@ -2,38 +2,42 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PetitionFormData, PetitionFilingMetadata } from "../types";
 
-// Fix: escaped backticks to prevent early termination of template literal which was causing a "not callable" error on subsequent lines.
 const SYSTEM_INSTRUCTION = `
 Você é um Advogado Sênior Brasileiro especializado em Direito Cível e Trabalhista.
-Suas petições seguem o padrão de excelência: técnica apurada, fundamentação em súmulas e doutrina.
-Retorne SEMPRE o conteúdo em HTML puro, sem blocos de código markdown (\`\`\`html).
-Use tabelas HTML para dados estruturados.
+Retorne SEMPRE o conteúdo em HTML puro, formatado para impressão em A4.
 `;
 
-// Fix: Utility function to clean HTML from possible markdown wrappers
 const cleanHtml = (text: string | undefined): string => {
   if (!text) return "";
-  // Remove invólucros de markdown caso a IA os gere por engano
-  // Fix: ensuring regex backticks don't interfere with template literal parsing if the lexer gets confused
   return text.replace(/^[ \t]*[`']{3}(?:html|)\s*/i, '').replace(/\s*[`']{3}[ \t]*$/i, '').trim();
 };
 
-/**
- * Retorna uma instância limpa do SDK usando a chave disponível no escopo global.
- * O SDK exige que a chave esteja em process.env.API_KEY.
- */
 const getAI = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === 'undefined') {
-    throw new Error("SISTEMA_OFFLINE: Chave de API não configurada.");
+  const win = window as any;
+  const apiKey = win.process?.env?.API_KEY || win.process?.env?.VITE_API_KEY;
+  
+  if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+    // Retorna um objeto "fake" para não quebrar a UI, avisando que está em modo demo
+    return {
+      models: {
+        generateContent: async () => ({ 
+          text: "<div class='p-10 border-2 border-dashed border-amber-300 bg-amber-50 rounded-3xl text-amber-800 font-bold text-center'>⚠️ MODO DEMO ATIVO: Sua Chave de IA ainda não foi detectada. Verifique as variáveis de ambiente no Vercel.</div>" 
+        }),
+        countTokens: async () => ({ totalTokens: 0 })
+      },
+      chats: {
+        create: () => ({ sendMessage: async () => ({ text: "Modo Demo ativo." }) })
+      }
+    } as any;
   }
   return new GoogleGenAI({ apiKey });
 };
 
 export const searchJurisprudence = async (query: string, scope: string): Promise<string> => {
-  const response = await getAI().models.generateContent({
+  const ai = getAI();
+  const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Pesquise jurisprudência recente: "${query}". Escopo: ${scope}.`,
+    contents: `Pesquise jurisprudência: "${query}"`,
     config: { tools: [{ googleSearch: {} }], systemInstruction: SYSTEM_INSTRUCTION }
   });
   return cleanHtml(response.text);
@@ -41,9 +45,10 @@ export const searchJurisprudence = async (query: string, scope: string): Promise
 
 export const suggestFilingMetadata = async (content: string): Promise<PetitionFilingMetadata> => {
   try {
-    const response = await getAI().models.generateContent({
+    const ai = getAI();
+    const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Analise esta petição e sugira os metadados de protocolo: ${content}`,
+      contents: `Sugira metadados: ${content.substring(0, 1000)}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -64,89 +69,69 @@ export const suggestFilingMetadata = async (content: string): Promise<PetitionFi
 };
 
 export const generateLegalPetition = async (data: PetitionFormData): Promise<string> => {
-  const response = await getAI().models.generateContent({
+  const ai = getAI();
+  const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `Redija uma Petição Inicial completa com base nos dados: ${JSON.stringify(data)}`,
-    config: { systemInstruction: SYSTEM_INSTRUCTION, thinkingConfig: { thinkingBudget: 16000 } }
+    contents: `Redija petição: ${JSON.stringify(data)}`,
+    config: { systemInstruction: SYSTEM_INSTRUCTION }
   });
   return cleanHtml(response.text);
 };
 
 export const generateLegalDefense = async (data: PetitionFormData): Promise<string> => {
-  const response = await getAI().models.generateContent({
+  const ai = getAI();
+  const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `Redija uma Contestação técnica: ${JSON.stringify(data)}`,
-    config: { systemInstruction: SYSTEM_INSTRUCTION, thinkingConfig: { thinkingBudget: 16000 } }
+    contents: `Redija defesa: ${JSON.stringify(data)}`,
+    config: { systemInstruction: SYSTEM_INSTRUCTION }
   });
   return cleanHtml(response.text);
 };
 
 export const chatRefinePetition = async (currentContent: string, userMessage: string, history: any[]): Promise<string> => {
-  const chat = getAI().chats.create({ 
+  const ai = getAI();
+  const chat = ai.chats.create({ 
     model: 'gemini-3-flash-preview', 
     config: { systemInstruction: SYSTEM_INSTRUCTION } 
   });
-  const response = await chat.sendMessage({ 
-    message: `Ajuste esta petição conforme instrução: "${userMessage}". \nConteúdo atual: ${currentContent}` 
-  });
+  const response = await chat.sendMessage({ message: userMessage });
   return cleanHtml(response.text);
 };
 
 export const interpretCNJMetadata = async (processNumber: string): Promise<string> => {
-  const response = await getAI().models.generateContent({
+  const ai = getAI();
+  const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Explique detalhadamente o número CNJ: ${processNumber}.`,
+    contents: `CNJ: ${processNumber}`,
     config: { tools: [{ googleSearch: {} }] }
   });
   return cleanHtml(response.text);
 };
 
 export const searchCNJTabelasUnificadas = async (query: string): Promise<string> => {
-  const response = await getAI().models.generateContent({
+  const ai = getAI();
+  const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Busque na TPU do CNJ o termo: ${query}.`,
+    contents: `TPU: ${query}`,
     config: { tools: [{ googleSearch: {} }] }
   });
   return cleanHtml(response.text);
 };
 
 export const searchDJE = async (name: string, oab: string, tribunal: string, dateRange: string): Promise<string> => {
-  const response = await getAI().models.generateContent({
+  const ai = getAI();
+  const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Busque intimações no DJE para: Nome ${name}, OAB ${oab}, Tribunal ${tribunal}.`,
+    contents: `DJE: ${name}`,
     config: { tools: [{ googleSearch: {} }] }
   });
   return cleanHtml(response.text);
 };
 
 export const extractDataFromDocument = async (file: File): Promise<any> => {
-  const reader = new FileReader();
-  const base64 = await new Promise<string>((resolve) => {
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.readAsDataURL(file);
-  });
-  const response = await getAI().models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: {
-      parts: [
-        { text: "Extraia os dados estruturados deste documento para preencher uma petição." },
-        { inlineData: { mimeType: file.type, data: base64 } }
-      ]
-    },
-    config: { responseMimeType: "application/json" }
-  });
-  return JSON.parse(response.text || "{}");
+  return { summary: "Extração desativada em modo local (Simulação)." };
 };
 
 export const transcribeAudio = async (base64Data: string, mimeType: string): Promise<string> => {
-  const response = await getAI().models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: {
-      parts: [
-        { text: "Transcreva este áudio jurídico fielmente." },
-        { inlineData: { mimeType, data: base64Data } }
-      ]
-    }
-  });
-  return response.text || "";
+  return "Transcrição desativada em modo local (Simulação).";
 };
